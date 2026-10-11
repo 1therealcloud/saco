@@ -163,6 +163,7 @@ public:
     void SetDrunkLevel(int level);
     // END TODO
 
+    std::uint8_t GetCurrentWeapon() const;
     void ClearWeapons();
     void GiveWeapon(int weapon, int ammo);
     void SetWeaponAmmo(int weapon, int ammo);

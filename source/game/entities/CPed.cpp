@@ -1176,3 +1176,14 @@ void CPed::SetArmedWeapon(int weapon)
     constexpr scm::OpcodeInfo armed{0x01B9, "ii"};
     scm::ProcessCommand(&armed, m_handle, weapon);
 }
+
+std::uint8_t CPed::GetCurrentWeapon() const
+{
+    if (!IsValid())
+        return 0;
+    const auto slot = Read<std::uint8_t>(m_pGamePed, 0x718);
+    if (slot >= 13)
+        return 0;
+    const auto weapon = Read<std::uint32_t>(m_pGamePed, 0x5A0 + slot * 0x1C);
+    return weapon <= 63 ? static_cast<std::uint8_t>(weapon) : 0;
+}

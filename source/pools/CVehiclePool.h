@@ -2,7 +2,7 @@
 
 #include <Windows.h>
 
-#include <cstddef>
+#include <array>
 #include <cstdint>
 
 #include "game/entities/CVehicle.h"
@@ -27,41 +27,41 @@ public:
 
     struct VehicleInfo
     {
-        ID m_nId;                  // 0x00
-        int m_nType;               // 0x02
-        CVector m_position;        // 0x06
-        float m_fRotation;         // 0x12
-        NUMBER m_nPrimaryColor;    // 0x16
-        NUMBER m_nSecondaryColor;  // 0x17
-        float m_fHealth;           // 0x18
-        char m_nInterior;          // 0x1C
-        int m_nDoorDamageStatus;   // 0x1D
-        int m_nPanelDamageStatus;  // 0x21
-        char m_nLightDamageStatus; // 0x25
-        bool m_bDoorsLocked;       // 0x26
-        bool m_bHasSiren;          // 0x27
+        ID m_nId;
+        int m_nType;
+        CVector m_position;
+        float m_fRotation;
+        NUMBER m_nPrimaryColor;
+        NUMBER m_nSecondaryColor;
+        float m_fHealth;
+        char m_nInterior;
+        int m_nDoorDamageStatus;
+        int m_nPanelDamageStatus;
+        char m_nLightDamageStatus;
+        NUMBER m_nTireDamageStatus;
+        bool m_bHasSiren;
     };
 
     struct WaitingList
     {
-        VehicleInfo m_entry[WAITING_LIST_SIZE]; // 0x000
-        BOOL m_bNotEmpty[WAITING_LIST_SIZE];    // 0xFA0
+        VehicleInfo m_entry[WAITING_LIST_SIZE];
+        BOOL m_bNotEmpty[WAITING_LIST_SIZE];
     };
 
 public:
-    int m_nCount;                                 // 0x00000
-    WaitingList m_waitingList;                    // 0x00004
-    CVehicle* m_pObject[MAX_VEHICLES];            // 0x01134
-    BOOL m_bNotEmpty[MAX_VEHICLES];               // 0x03074
-    void* m_pGameObject[MAX_VEHICLES];            // 0x04FB4, GTA CVehicle*
-    unsigned int pad_6ef4[MAX_VEHICLES];          // 0x06EF4
-    ID m_nLastUndrivenId[MAX_VEHICLES];           // 0x08E34
-    TICK m_lastUndrivenProcessTick[MAX_VEHICLES]; // 0x09DD4
-    BOOL m_bIsActive[MAX_VEHICLES];               // 0x0BD14
-    BOOL m_bIsDestroyed[MAX_VEHICLES];            // 0x0DC54
-    TICK m_tickWhenDestroyed[MAX_VEHICLES];       // 0x0FB94
-    CVector m_spawnedAt[MAX_VEHICLES];            // 0x11AD4
-    BOOL m_bNeedsToInitializeLicensePlates;       // 0x17894
+    int m_nCount;
+    WaitingList m_waitingList;
+    CVehicle* m_pObject[MAX_VEHICLES];
+    BOOL m_bNotEmpty[MAX_VEHICLES];
+    void* m_pGameObject[MAX_VEHICLES];            // GTA CVehicle*
+    unsigned int pad_6ef4[MAX_VEHICLES];
+    ID m_nLastUndrivenId[MAX_VEHICLES];
+    TICK m_lastUndrivenProcessTick[MAX_VEHICLES];
+    BOOL m_bIsActive[MAX_VEHICLES];
+    BOOL m_bIsDestroyed[MAX_VEHICLES];
+    TICK m_tickWhenDestroyed[MAX_VEHICLES];
+    CVector m_spawnedAt[MAX_VEHICLES];
+    BOOL m_bNeedsToInitializeLicensePlates;
 
 public:
     CVehiclePool();
@@ -79,10 +79,28 @@ public:
     GTAREF GetRef(void* gameObject);
     ID GetNearest();
     ID GetNearest(CVector point);
+    void SetSpawnAppearance(ID id, const std::array<std::uint8_t, 14>& mods, unsigned char paintjob);
+    void SetSpawnLicensePlate(ID id, const char* text);
+    void SetSpawnBodyColors(ID id, std::uint32_t primary, std::uint32_t secondary);
+    bool IsPending(ID id) const;
+    void QueueHealth(ID id, float health);
+    void QueuePosition(ID id, CVector position);
+    void QueueRotation(ID id, float angle);
+    void QueueInterior(ID id, int interior);
+    void QueueDamage(ID id, int panels, int doors, char lights, char tires);
+    void QueueTires(ID id, char tires);
+    void QueueParams(ID id, const std::array<std::uint8_t, 16>& params);
+    void QueueSimpleParams(ID id, bool objective, bool doorsLocked);
+    void QueuePaintjob(ID id, unsigned char paintjob);
+    void QueueColors(ID id, unsigned char primary, unsigned char secondary);
+    void QueueComponent(ID id, std::uint16_t component, bool install);
+    void QueueTrailer(ID tractor, ID trailer);
+    void ClearQueuedTrailer(ID tractor);
     void AddToWaitingList(const VehicleInfo* info);
     void ConstructLicensePlates();
     void ShutdownLicensePlates();
     BOOL Create(VehicleInfo* info);
+    BOOL CreateWithTrainConsist(VehicleInfo info);
     void SendDestroyNotification(ID id);
     void ProcessWaitingList();
     void Process();

@@ -10,21 +10,15 @@
 class CVehicle : public CEntity
 {
 public:
-    bool HasNativeVehicle() const
-    {
-        return m_pGameVehicle != nullptr;
-    }
-    void* GetNativeVehicleHandle() const
-    {
-        return m_pGameVehicle;
-    }
+    bool HasNativeVehicle() const;
+    void* GetNativeVehicleHandle() const;
     unsigned char GetPrimaryColor() const
     {
-        return GetNativePrimaryColor(m_pGameVehicle);
+        return HasNativeVehicle() ? static_cast<const unsigned char*>(m_pGameVehicle)[0x434] : 0;
     }
     unsigned char GetSecondaryColor() const
     {
-        return GetNativeSecondaryColor(m_pGameVehicle);
+        return HasNativeVehicle() ? static_cast<const unsigned char*>(m_pGameVehicle)[0x435] : 0;
     }
 
     static unsigned char GetNativePrimaryColor(const void* vehicle)
@@ -35,98 +29,112 @@ public:
     {
         return vehicle ? static_cast<const unsigned char*>(vehicle)[0x435] : 0;
     }
+    static std::uint32_t GetNativeRef(void* vehicle);
+    static CVehicle* FindNative(void* vehicle);
+    int GetUnoccupiedSyncSeat(const void* localPed) const;
 
     static constexpr std::size_t MAX_LICENSE_PLATE_TEXT = 32;
 
-    CVehicle* m_pTrailer = nullptr;                          // 0x48
-    void* m_pGameVehicle = nullptr;                          // 0x4C, GTA CVehicle*
-    BOOL m_bEngineOn = -1;                                   // 0x50
-    BOOL m_bIsLightsOn = -1;                                 // 0x54
-    BOOL m_bIsInvulnerable = FALSE;                          // 0x58
-    int pad_5c = 0;                                          // 0x5C
-    BOOL m_bIsLocked = FALSE;                                // 0x60
-    bool m_bIsObjective = false;                             // 0x64
-    BOOL m_bObjectiveBlipCreated = FALSE;                    // 0x65
-    DWORD m_timeSinceLastDriven = 0;                         // 0x69
-    BOOL m_bHasBeenDriven = FALSE;                           // 0x6D
-    int pad_71 = 0;                                          // 0x71
-    BOOL m_bEngineState = FALSE;                             // 0x75
-    unsigned char m_nPrimaryColor = 0;                       // 0x79
-    unsigned char m_nSecondaryColor = 0;                     // 0x7A
-    BOOL m_bNeedsToUpdateColor = FALSE;                      // 0x7B
-    BOOL m_bUnoccupiedSync = FALSE;                          // 0x7F
-    BOOL m_bRemoteUnocSync = FALSE;                          // 0x83
-    BOOL m_bKeepModelLoaded = FALSE;                         // 0x87
-    BOOL m_bHasSiren = FALSE;                                // 0x8B
-    IDirect3DTexture9* m_pLicensePlate = nullptr;            // 0x8F
-    char m_szLicensePlateText[MAX_LICENSE_PLATE_TEXT + 1]{}; // 0x93
-    std::uint32_t m_marker = 0;                              // 0xB4
+    CVehicle* m_pTrailer = nullptr;
+    void* m_pGameVehicle = nullptr;                          // GTA CVehicle*
+    BOOL m_bEngineOn = -1;
+    BOOL m_bIsLightsOn = -1;
+    BOOL m_bIsInvulnerable = FALSE;
+    int pad_5c = 0;
+    BOOL m_bIsLocked = FALSE;
+    bool m_bIsObjective = false;
+    BOOL m_bObjectiveBlipCreated = FALSE;
+    DWORD m_timeSinceLastDriven = 0;
+    BOOL m_bHasBeenDriven = FALSE;
+    int pad_71 = 0;
+    BOOL m_bEngineState = FALSE;
+    unsigned char m_nPrimaryColor = 0;
+    unsigned char m_nSecondaryColor = 0;
+    BOOL m_bNeedsToUpdateColor = FALSE;
+    BOOL m_bUnoccupiedSync = FALSE;
+    BOOL m_bRemoteUnocSync = FALSE;
+    BOOL m_bKeepModelLoaded = FALSE;
+    BOOL m_bHasSiren = FALSE;
+    IDirect3DTexture9* m_pLicensePlate = nullptr;
+    char m_szLicensePlateText[MAX_LICENSE_PLATE_TEXT + 1]{};
+    std::uint32_t m_marker = 0;
 
-    CVehicle(int model, CVector position, float rotation, BOOL keepModelLoaded, BOOL hasSiren);
-    ~CVehicle() override;
+    CVehicle(int model, CVector position, float rotation, BOOL keepModelLoaded, BOOL hasSiren); // 0xB83D0
+    ~CVehicle() override;                                                                  // 0xB88F0
 
-    void Add() override;
-    void Remove() override;
+    void Add() override;                                                                   // 0xB8A10
+    void Remove() override;                                                                // 0xB8A40
 
-    void ChangeInterior(int id);
-    void ResetPointers();
-    BOOL HasDriver();
-    BOOL IsOccupied();
-    void SetInvulnerable(BOOL invulnerable);
-    void SetLocked(BOOL locked);
-    float GetHealth();
-    void SetHealth(float value);
-    void SetColor(unsigned char primary, unsigned char secondary);
-    void UpdateColor();
-    int GetSubtype();
-    BOOL IsSunk();
-    BOOL IsWrecked();
-    BOOL DriverIsPlayerPed();
-    BOOL HasPlayerPed();
-    BOOL IsTrainPart();
-    BOOL HasTurret();
-    void EnableSiren(bool enable);
+    void ChangeInterior(int id);                                                           // 0xB7090
+    void ResetPointers();                                                                  // 0xB70C0
+    BOOL HasDriver();                                                                      // 0xB70E0
+    bool HasPlayerDriver() const;
+    BOOL IsOccupied();                                                                     // 0xB7130
+    void SetInvulnerable(BOOL invulnerable);                                               // 0xB7190
+    void SetLocked(BOOL locked);                                                           // 0xB7230
+    float GetHealth();                                                                     // 0xB72A0
+    void SetHealth(float value);                                                           // 0xB72C0
+    void SetColor(unsigned char primary, unsigned char secondary);                         // 0xB72E0
+    void UpdateColor();                                                                    // 0xB7330
+    int GetSubtype();                                                                      // 0xB7390
+    BOOL IsSunk();                                                                         // 0xB73B0
+    BOOL IsWrecked();                                                                      // 0xB73D0
+    BOOL DriverIsPlayerPed();                                                              // 0xB73F0
+    BOOL HasPlayerPed();                                                                   // 0xB7420
+    BOOL IsTrainPart();                                                                    // 0xB7460
+    BOOL HasTurret();                                                                      // 0xB74A0
+    void EnableSiren(bool enable);                                                         // 0xB7540
+    void SetAlarmTime(std::uint16_t duration);                                            // 0xB7580
     void SetAlarmState(bool enable);
     void SetBonnetState(bool open);
     void SetBootState(bool open);
     void SetObjective(bool enable);
-    BOOL SirenEnabled();
-    void SetLandingGearState(BOOL hide);
-    BOOL GetLandingGearState();
-    void SetHydraThrusters(int direction);
-    int GetHydraThrusters();
-    void ProcessMarkers();
-    void Lock(BOOL lock);
-    BOOL UpdateLastDrivenTime();
-    float GetTrainSpeed();
-    void SetTrainSpeed(float value);
-    void SetTires(char state);
-    char GetTires();
-    void UpdateDamage(int panels, int doors, char lights);
-    int GetPanelsDamage();
-    int GetDoorsDamage();
-    char GetLightsDamage();
-    void AttachTrailer();
-    void DetachTrailer();
-    void SetTrailer(CVehicle* vehicle);
-    CVehicle* GetTrailer();
-    CVehicle* GetTractor();
-    BOOL IsTrailer();
-    BOOL IsTowtruck();
-    BOOL IsRC();
-    void EnableLights(bool enable);
-    void RemovePassengers();
-    BOOL AddComponent(unsigned short id);
-    BOOL RemoveComponent(unsigned short id);
-    void SetPaintjob(unsigned char id);
-    BOOL DoesExist();
-    void SetLicensePlateText(const char* text);
-    void SetRotation(float value);
-    void ConstructLicensePlate();
-    void ShutdownLicensePlate();
-    BOOL HasSiren();
-    char GetMaxPassengers();
-    void SetWindowOpenFlag(unsigned char doorId);
-    void ClearWindowOpenFlag(unsigned char doorId);
-    void EnableEngine(BOOL enable);
+    BOOL SirenEnabled();                                                                   // 0xB7560
+    void SetLandingGearState(BOOL hide);                                                   // 0xB75A0
+    BOOL GetLandingGearState();                                                            // 0xB7630
+    void SetHydraThrusters(int direction);                                                 // 0xB76A0
+    int GetHydraThrusters();                                                               // 0xB76C0
+    void ProcessMarkers();                                                                 // 0xB76E0
+    void Lock(BOOL lock);                                                                  // 0xB7840
+    BOOL UpdateLastDrivenTime();                                                           // 0xB7870
+    void SetTurretRotation(float horizontal, float vertical);                             // 0xB78A0
+    float GetTurretHorizontalRotation() const;                                             // 0xB78C0
+    float GetTurretVerticalRotation() const;                                               // 0xB78D0
+    float GetTrainSpeed();                                                                 // 0xB78E0
+    void SetTrainSpeed(float value);                                                       // 0xB7900
+    void SetTires(char state);                                                             // 0xB7940
+    char GetTires();                                                                       // 0xB7A30
+    void UpdateDamage(int panels, int doors, char lights);                                 // 0xB7AC0
+    int GetPanelsDamage();                                                                 // 0xB7B80
+    int GetDoorsDamage();                                                                  // 0xB7BB0
+    char GetLightsDamage();                                                                // 0xB7BE0
+    void AttachTrailer();                                                                  // 0xB7C10
+    void DetachTrailer();                                                                  // 0xB7C30
+    void SetTrailer(CVehicle* vehicle);                                                    // 0xB7C80
+    CVehicle* GetTrailer();                                                                // 0xB7C90
+    CVehicle* GetTractor();                                                                // 0xB7CF0
+    BOOL IsTrailer();                                                                      // 0xB7D70
+    BOOL IsTowtruck();                                                                     // 0xB7DD0
+    BOOL IsRC();                                                                           // 0xB7E00
+    void EnableLights(bool enable);                                                        // 0xB7E50
+    void RemovePassengers();                                                               // 0xB7EE0
+    BOOL AddComponent(unsigned short id);                                                  // 0xB7FC0
+    BOOL RemoveComponent(unsigned short id);                                               // 0xB80B0
+    void SetPaintjob(unsigned char id);                                                    // 0xB80F0
+    BOOL DoesExist();                                                                      // 0xB8140
+    void SetLicensePlateText(const char* text);                                            // 0xB8150
+    void SetRotation(float value);                                                         // 0xB8170
+    void ConstructLicensePlate();                                                          // 0xB81A0
+    void ShutdownLicensePlate();                                                           // 0xB81F0
+    void SetEngineOn(BOOL state);                                                          // 0xB8210
+    BOOL GetEngineOn() const;                                                              // 0xB8220
+    void SetLightsOn(BOOL state);                                                          // 0xB8230
+    BOOL GetLightsOn() const;                                                              // 0xB8240
+    void OpenDoor(int component, int door, float ratio);                                   // 0xB8250
+    BOOL HasSiren();                                                                       // 0xB8330
+    char GetMaxPassengers();                                                               // 0xB8340
+    void SetDoorOpenState(unsigned char doorId, bool open);
+    void SetWindowOpenFlag(unsigned char component);                                          // 0xB8370
+    void ClearWindowOpenFlag(unsigned char component);                                        // 0xB83A0
+    void EnableEngine(BOOL enable);                                                        // 0xB8A70
 };

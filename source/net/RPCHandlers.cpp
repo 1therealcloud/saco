@@ -33,6 +33,8 @@
 #include <BitStream.h>
 #include <StringCompressor.h>
 
+#include <cmath>
+
 // RakNet namespace
 using namespace RakNet;
 
@@ -43,6 +45,18 @@ using namespace RakNet;
 
 namespace
 {
+    CVehiclePool* NetworkVehicles()
+    {
+        return g_netGame ? g_netGame->GetVehiclePool() : nullptr;
+    }
+
+    CVehicle* NetworkVehicle(std::uint16_t id)
+    {
+        auto* pool = NetworkVehicles();
+        auto* vehicle = pool ? pool->Get(id) : nullptr;
+        return vehicle && vehicle->DoesExist() ? vehicle : nullptr;
+    }
+
     CObject* NetworkObject(std::uint16_t id)
     {
         auto* pool = g_netGame ? g_netGame->GetObjectPool() : nullptr;
@@ -663,7 +677,42 @@ void RPCHandlers::ScmEvent(RPCParameters* pParams)
     if (!bs.Read(param2))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (vehicleId >= CVehiclePool::MAX_VEHICLES)
+        return;
+    auto* pool = NetworkVehicles();
+    if (!pool)
+        return;
+    auto* vehicle = pool->Get(static_cast<CVehiclePool::ID>(vehicleId));
+    switch (eventType)
+    {
+        case 1: // paintjob
+            if (param1 > 3)
+                break;
+            if (vehicle)
+                vehicle->SetPaintjob(static_cast<unsigned char>(param1));
+            else
+                pool->QueuePaintjob(static_cast<CVehiclePool::ID>(vehicleId), static_cast<unsigned char>(param1));
+            break;
+        case 2: // component
+            if (param1 < 1000 || param1 > 1193)
+                break;
+            if (vehicle)
+                vehicle->AddComponent(static_cast<unsigned short>(param1));
+            else
+                pool->QueueComponent(static_cast<CVehiclePool::ID>(vehicleId), static_cast<unsigned short>(param1), true);
+            break;
+        case 3: // palette colors
+            if (param1 > 255 || param2 > 255)
+                break;
+            if (vehicle)
+                vehicle->SetColor(static_cast<unsigned char>(param1), static_cast<unsigned char>(param2));
+            else
+                pool->QueueColors(static_cast<CVehiclePool::ID>(vehicleId), static_cast<unsigned char>(param1), static_cast<unsigned char>(param2));
+            break;
+        default:
+            break;
+    }
+    (void)playerId;
 }
 
 // -----------------------------------------------------------------------------
@@ -966,7 +1015,32 @@ void RPCHandlers::WorldVehicleAdd(RPCParameters* pParams)
     if (!bs.Read(bodyColor2))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    auto* pool = NetworkVehicles();
+    if (!pool || vehicleId >= CVehiclePool::MAX_VEHICLES || modelId < 400 || modelId > 611 ||
+        !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) ||
+        !std::isfinite(angle) || !std::isfinite(health))
+        return;
+
+    CVehiclePool::VehicleInfo info{};
+    info.m_nId = vehicleId;
+    info.m_nType = static_cast<int>(modelId);
+    info.m_position = CVector{x, y, z};
+    info.m_fRotation = angle;
+    info.m_nPrimaryColor = color1;
+    info.m_nSecondaryColor = color2;
+    info.m_fHealth = health;
+    info.m_nInterior = static_cast<char>(interior);
+    info.m_nDoorDamageStatus = static_cast<int>(doorDamage);
+    info.m_nPanelDamageStatus = static_cast<int>(panelDamage);
+    info.m_nLightDamageStatus = static_cast<char>(lightDamage);
+    info.m_nTireDamageStatus = tireDamage;
+    info.m_bHasSiren = siren != 0;
+
+    pool->Delete(vehicleId);
+    pool->SetSpawnAppearance(vehicleId, mods, paintJob);
+    pool->SetSpawnBodyColors(vehicleId, bodyColor1, bodyColor2);
+    if (!pool->CreateWithTrainConsist(info))
+        pool->AddToWaitingList(&info);
 }
 
 // -----------------------------------------------------------------------------
@@ -985,7 +1059,8 @@ void RPCHandlers::WorldVehicleRemove(RPCParameters* pParams)
     if (!bs.Read(vehicleId))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (auto* pool = NetworkVehicles())
+        pool->Delete(vehicleId);
 }
 
 // -----------------------------------------------------------------------------
@@ -1020,7 +1095,14 @@ void RPCHandlers::UpdateVehicleDamageStatus(RPCParameters* pParams)
     if (!bs.Read(tires))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (auto* vehicle = NetworkVehicle(vehicleId))
+    {
+        vehicle->UpdateDamage(static_cast<int>(panels), static_cast<int>(doors), static_cast<char>(lights));
+        vehicle->SetTires(static_cast<char>(tires));
+    }
+    else if (auto* pool = NetworkVehicles())
+        pool->QueueDamage(vehicleId, static_cast<int>(panels), static_cast<int>(doors),
+            static_cast<char>(lights), static_cast<char>(tires));
 }
 
 // -----------------------------------------------------------------------------
@@ -1103,7 +1185,46 @@ void RPCHandlers::SetVehicleParamsEx(RPCParameters* pParams)
     if (!bs.Read(windowBackRight))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (auto* vehicle = NetworkVehicle(vehicleId))
+    {
+        if (engine <= 1)
+            vehicle->SetEngineOn(engine);
+        if (lights <= 1)
+            vehicle->SetLightsOn(lights);
+        if (doors <= 1)
+            vehicle->Lock(doors != 0);
+        if (alarm <= 1)
+            vehicle->SetAlarmState(alarm != 0);
+        if (bonnet <= 1)
+            vehicle->SetBonnetState(bonnet != 0);
+        if (boot <= 1)
+            vehicle->SetBootState(boot != 0);
+        if (objective <= 1)
+            vehicle->SetObjective(objective != 0);
+        if (siren <= 1)
+            vehicle->EnableSiren(siren != 0);
+
+        const std::array<std::uint8_t, 4> doorStates{
+            doorDriver, doorPassenger, doorBackLeft, doorBackRight};
+        for (std::uint8_t index = 0; index < doorStates.size(); ++index)
+            if (doorStates[index] <= 1)
+                vehicle->SetDoorOpenState(index, doorStates[index] != 0);
+
+        const std::array<std::uint8_t, 4> windows{
+            windowDriver, windowPassenger, windowBackLeft, windowBackRight};
+        constexpr std::uint8_t windowComponents[]{10, 8, 11, 9};
+        for (std::uint8_t index = 0; index < windows.size(); ++index)
+        {
+            if (windows[index] == 0)
+                vehicle->SetWindowOpenFlag(windowComponents[index]);
+            else if (windows[index] == 1)
+                vehicle->ClearWindowOpenFlag(windowComponents[index]);
+        }
+    }
+    else if (auto* pool = NetworkVehicles())
+        pool->QueueParams(vehicleId, {engine, lights, alarm, doors, bonnet, boot, objective, siren,
+            doorDriver, doorPassenger, doorBackLeft, doorBackRight,
+            windowDriver, windowPassenger, windowBackLeft, windowBackRight});
 }
 
 // -----------------------------------------------------------------------------
@@ -1130,7 +1251,12 @@ void RPCHandlers::PlayerEnterVehicle(RPCParameters* pParams)
     if (!bs.Read(isPassenger))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    auto* players = g_netGame ? g_netGame->GetPlayerPool() : nullptr;
+    auto* vehicles = NetworkVehicles();
+    if (!players || !vehicles || vehicleId >= CVehiclePool::MAX_VEHICLES || !vehicles->Get(vehicleId))
+        return;
+    if (auto* remote = players->GetPlayer(playerId))
+        remote->EnterVehicle(vehicleId, isPassenger != 0);
 }
 
 // -----------------------------------------------------------------------------
@@ -1153,7 +1279,14 @@ void RPCHandlers::PlayerExitVehicle(RPCParameters* pParams)
     if (!bs.Read(vehicleId))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    auto* players = g_netGame ? g_netGame->GetPlayerPool() : nullptr;
+    if (!players || vehicleId >= CVehiclePool::MAX_VEHICLES)
+        return;
+    if (auto* remote = players->GetPlayer(playerId))
+    {
+        if (remote->m_nVehicleId == vehicleId)
+            remote->ExitVehicle();
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -1885,7 +2018,12 @@ void RPCHandlers::SetVehicleHealth(RPCParameters* pParams)
     if (!bs.Read(health))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (!std::isfinite(health))
+        return;
+    if (auto* vehicle = NetworkVehicle(vehicleId))
+        vehicle->SetHealth(health);
+    else if (auto* pool = NetworkVehicles())
+        pool->QueueHealth(vehicleId, health);
 }
 
 // -----------------------------------------------------------------------------
@@ -1908,7 +2046,20 @@ void RPCHandlers::AttachTrailerToVehicle(RPCParameters* pParams)
     if (!bs.Read(vehicleId))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    auto* towing = NetworkVehicle(vehicleId);
+    auto* trailer = NetworkVehicle(trailerId);
+    if (towing && trailer && towing != trailer)
+    {
+        if (auto* attached = towing->GetTrailer(); attached && attached != trailer)
+        {
+            towing->SetTrailer(attached);
+            towing->DetachTrailer();
+        }
+        towing->SetTrailer(trailer);
+        towing->AttachTrailer();
+    }
+    else if (auto* pool = NetworkVehicles())
+        pool->QueueTrailer(vehicleId, trailerId);
 }
 
 // -----------------------------------------------------------------------------
@@ -1927,7 +2078,13 @@ void RPCHandlers::DetachTrailerFromVehicle(RPCParameters* pParams)
     if (!bs.Read(vehicleId))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (auto* pool = NetworkVehicles())
+        pool->ClearQueuedTrailer(vehicleId);
+    if (auto* towing = NetworkVehicle(vehicleId))
+    {
+        towing->DetachTrailer();
+        towing->SetTrailer(nullptr);
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -2304,7 +2461,10 @@ void RPCHandlers::SetVehicleTireStatus(RPCParameters* pParams)
     if (!bs.Read(tires))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (auto* vehicle = NetworkVehicle(vehicleId))
+        vehicle->SetTires(static_cast<char>(tires));
+    else if (auto* pool = NetworkVehicles())
+        pool->QueueTires(vehicleId, static_cast<char>(tires));
 }
 
 // -----------------------------------------------------------------------------
@@ -2330,7 +2490,10 @@ void RPCHandlers::SetVehicleNumberPlate(RPCParameters* pParams)
     if (plateLength && !bs.Read(plateText.data(), plateLength))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (auto* vehicle = NetworkVehicle(vehicleId))
+        vehicle->SetLicensePlateText(plateText.c_str());
+    else if (auto* pool = NetworkVehicles())
+        pool->SetSpawnLicensePlate(vehicleId, plateText.c_str());
 }
 
 // -----------------------------------------------------------------------------
@@ -2449,7 +2612,10 @@ void RPCHandlers::RemoveVehicleComponent(RPCParameters* pParams)
     if (!bs.Read(componentId))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (auto* vehicle = NetworkVehicle(vehicleId))
+        vehicle->RemoveComponent(componentId);
+    else if (auto* pool = NetworkVehicles())
+        pool->QueueComponent(vehicleId, componentId, false);
 }
 
 // -----------------------------------------------------------------------------
@@ -2940,20 +3106,28 @@ void RPCHandlers::SetVehicleVelocity(RPCParameters* pParams)
     BitStream bs(pParams->input, BITS_TO_BYTES(pParams->numberOfBitsOfData), false);
 
     std::uint8_t turn{};
-    float x{};
-    float y{};
-    float z{};
-
-    if (!bs.Read(turn))
+    CVector velocity{};
+    if (!bs.Read(turn) || !bs.Read(velocity.x) || !bs.Read(velocity.y) || !bs.Read(velocity.z))
         return;
-    if (!bs.Read(x))
-        return;
-    if (!bs.Read(y))
-        return;
-    if (!bs.Read(z))
+    if (!std::isfinite(velocity.x) || !std::isfinite(velocity.y) || !std::isfinite(velocity.z))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    auto* players = g_netGame ? g_netGame->GetPlayerPool() : nullptr;
+    auto* local = players ? players->GetLocalPlayer() : nullptr;
+    auto* ped = local ? local->GetPed() : nullptr;
+    auto* pool = NetworkVehicles();
+    if (!ped || !pool || !ped->GetVehicle())
+        return;
+
+    const auto vehicleId = pool->Find(ped->GetVehicle());
+    auto* vehicle = vehicleId != CVehiclePool::INVALID_ID ? pool->Get(vehicleId) : nullptr;
+    if (!vehicle || !vehicle->DoesExist())
+        return;
+
+    if (turn)
+        vehicle->SetTurnSpeed(velocity);
+    else
+        vehicle->SetSpeed(velocity);
 }
 
 // -----------------------------------------------------------------------------
@@ -3314,13 +3488,23 @@ void RPCHandlers::PutPlayerInVehicle(RPCParameters* pParams)
 
     std::uint16_t vehicleId{};
     std::uint8_t seatId{};
-
-    if (!bs.Read(vehicleId))
-        return;
-    if (!bs.Read(seatId))
+    if (!bs.Read(vehicleId) || !bs.Read(seatId))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    auto* pool = NetworkVehicles();
+    auto* players = g_netGame ? g_netGame->GetPlayerPool() : nullptr;
+    auto* local = players ? players->GetLocalPlayer() : nullptr;
+    auto* ped = local ? local->GetPed() : nullptr;
+    auto* vehicle = pool ? pool->Get(vehicleId) : nullptr;
+    if (!ped || !ped->HasNativePed() || !vehicle || !vehicle->DoesExist() ||
+        seatId > static_cast<std::uint8_t>(vehicle->GetMaxPassengers()))
+        return;
+
+    ped->PutIntoVehicle(vehicle->m_handle, seatId);
+    if (ped->GetVehicle() == vehicle->GetNativeVehicleHandle())
+        if (auto* players = g_netGame ? g_netGame->GetPlayerPool() : nullptr)
+            if (auto* local = players->GetLocalPlayer())
+                local->OnServerVehicleWarp(vehicleId);
 }
 
 // -----------------------------------------------------------------------------
@@ -3332,10 +3516,19 @@ void RPCHandlers::RemovePlayerFromVehicle(RPCParameters* pParams)
     if (!pParams)
         return;
 
-    BitStream bs;
-    (void)bs;
+    auto* players = g_netGame ? g_netGame->GetPlayerPool() : nullptr;
+    auto* local = players ? players->GetLocalPlayer() : nullptr;
+    auto* ped = local ? local->GetPed() : nullptr;
+    if (!ped || !ped->HasNativePed() || !ped->GetVehicle())
+        return;
 
-    // TODO: apply decoded RPC to the game state.
+    CMatrix matrix = CMatrix::Unity();
+    ped->GetMatrix(&matrix);
+    ped->WarpFromVehicle(matrix.GetPosition() + matrix.GetRight() * 2.0f);
+    if (!ped->GetVehicle())
+        if (auto* players = g_netGame ? g_netGame->GetPlayerPool() : nullptr)
+            if (auto* local = players->GetLocalPlayer())
+                local->OnServerVehicleWarp(CLocalPlayer::INVALID_ID);
 }
 
 // -----------------------------------------------------------------------------
@@ -3501,7 +3694,12 @@ void RPCHandlers::SetVehiclePos(RPCParameters* pParams)
     if (!bs.Read(z))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z))
+        return;
+    if (auto* vehicle = NetworkVehicle(vehicleId))
+        vehicle->Teleport(CVector{x, y, z});
+    else if (auto* pool = NetworkVehicles())
+        pool->QueuePosition(vehicleId, CVector{x, y, z});
 }
 
 // -----------------------------------------------------------------------------
@@ -3524,7 +3722,12 @@ void RPCHandlers::SetVehicleZAngle(RPCParameters* pParams)
     if (!bs.Read(angle))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (!std::isfinite(angle))
+        return;
+    if (auto* vehicle = NetworkVehicle(vehicleId))
+        vehicle->SetRotation(angle);
+    else if (auto* pool = NetworkVehicles())
+        pool->QueueRotation(vehicleId, angle);
 }
 
 // -----------------------------------------------------------------------------
@@ -3551,7 +3754,13 @@ void RPCHandlers::SetVehicleParams(RPCParameters* pParams)
     if (!bs.Read(doorsLocked))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (auto* pool = NetworkVehicles())
+    {
+        if (pool->IsPending(vehicleId))
+            pool->QueueSimpleParams(vehicleId, objective != 0, doorsLocked != 0);
+        else
+            pool->SetParams(vehicleId, objective != 0, doorsLocked != 0);
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -3784,7 +3993,13 @@ void RPCHandlers::LinkVehicleToInterior(RPCParameters* pParams)
     if (!bs.Read(interiorId))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (auto* pool = NetworkVehicles())
+    {
+        if (pool->IsPending(vehicleId))
+            pool->QueueInterior(vehicleId, interiorId);
+        else
+            pool->ChangeInterior(vehicleId, interiorId);
+    }
 }
 
 // -----------------------------------------------------------------------------

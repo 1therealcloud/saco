@@ -14,6 +14,11 @@ namespace Synchronization
 {
     using ID = std::uint16_t;
 
+    constexpr std::uint8_t PackWeaponAndKeys(std::uint8_t weaponId, std::uint8_t extraKeys)
+    {
+        return static_cast<std::uint8_t>((weaponId & 0x3Fu) | ((extraKeys & 0x03u) << 6));
+    }
+
     struct OnfootData
     {
         ControllerState m_controllerState;

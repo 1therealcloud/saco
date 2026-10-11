@@ -113,8 +113,8 @@ public:
         ID m_nVehicleUpdating;
         int m_nBumper;
         int m_nDoor;
-        bool m_bLight;
-        bool m_bWheel;
+        std::uint8_t m_bLight;
+        std::uint8_t m_bWheel;
     };
 
     Synchronization::IncarData m_incarData;         // 0x000
@@ -158,7 +158,7 @@ public:
     Spectating m_spectating;         // 0x30E
     Damage m_damage;                 // 0x318
 
-    CLocalPlayer();
+    CLocalPlayer(); // 0x4C50
 
     CLocalPlayer(const CLocalPlayer&) = delete;
     CLocalPlayer& operator=(const CLocalPlayer&) = delete;
@@ -197,7 +197,7 @@ public:
     bool DefineCameraTarget(CameraTarget* info);
     void UpdateCameraTarget();
     void DrawCameraTargetLabel();
-    void SendUnoccupiedData(ID vehicle, char seat);
+    void SendUnoccupiedData(ID vehicle, char seat); // 0x4D30
     void SendOnfootData();
     void SendAimData();
     void SendTrailerData(ID trailer);
@@ -206,10 +206,11 @@ public:
     void RequestClass(int id);
     void ChangeInterior(char id);
     void Chat(const char* text);
-    void EnterVehicle(int vehicle, BOOL passenger);
-    void ExitVehicle(int vehicle);
+    void EnterVehicle(int vehicle, BOOL passenger); // 0x5AD0
+    void ExitVehicle(int vehicle); // 0x5BF0
+    void OnServerVehicleWarp(ID vehicle);
     void SendStats();
-    void UpdateVehicleDamage(ID vehicle);
+    void UpdateVehicleDamage(ID vehicle); // 0x5DE0
     void NextClass();
     void PrevClass();
     void ProcessClassSelection();
@@ -221,9 +222,9 @@ public:
     void SendGiveDamage(int id, float damage, int type, int bodyPart);
 
     void ProcessSpectating();
-    bool ProcessUnoccupiedSync(ID vehicle, CVehicle* object);
+    bool ProcessUnoccupiedSync(ID vehicle, CVehicle* object); // 0x6E00
     void EnterVehicleAsPassenger();
     void ProcessPassengerEntry(const CPad& keys);
     void SendIncarData();
-    void Process();
+    void Process(); // 0x74C0
 };

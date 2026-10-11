@@ -69,6 +69,12 @@ namespace game::patch
         if (!game::players::Install())
             return false;
 
+        if (!vehicle::install())
+        {
+            Log("[game::patch] vehicle siren hook failed");
+            return false;
+        }
+
         installed = true;
 
         Log("[game::patch] installed");

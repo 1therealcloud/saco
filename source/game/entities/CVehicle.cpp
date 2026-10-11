@@ -1,14 +1,25 @@
 #include <stdafx.h>
 
 #include "CVehicle.h"
+#include "game/patch/patch.h"
+#include "game/patch/hooks.h"
 
 #include "game/ModelInfo.h"
 #include "game/Scripting.h"
 #include "game/render/CLicensePlate.h"
 #include "main.h"
 
+namespace game::patch::vehicle::detail
+{
+    UsesSirenFn originalUsesSiren = nullptr;
+    VehicleAudioFn originalVehicleAudio = nullptr;
+    bool nextVehicleHasSiren = false;
+    bool detachingTrailer = false;
+}
+
 namespace
 {
+    using namespace game::patch::vehicle::detail;
     constexpr scm::OpcodeInfo CREATE_CAR{0x00A5, "ifffv"};
     constexpr scm::OpcodeInfo DELETE_CAR{0x00A6, "i"};
     constexpr scm::OpcodeInfo SET_CAR_Z_ANGLE{0x0175, "if"};
@@ -42,8 +53,21 @@ namespace
     constexpr int TRAIN_TRAM = 449;
 
     std::unordered_map<void*, CVehicle*> g_nativeVehicles;
-    std::unordered_map<CVehicle*, RwTexture*> g_originalPlates;
+    struct PlateTextures
+    {
+        RwTexture* original = nullptr;
+        RwTexture* replacement = nullptr;
+    };
+    std::unordered_map<CVehicle*, PlateTextures> g_vehiclePlates;
     void* g_lastTrainVehicle = nullptr;
+
+    CVehicle* VehicleWrapperFromPointer(void* vehicle);
+
+    constexpr std::array<std::uintptr_t, 5> TRAILER_VTABLE_SLOTS = {
+        0x871218, 0x871778, 0x8718D0, 0x871A40, 0x871BE0,
+    };
+
+
 
     template <class T>
     T Read(const void* data, std::size_t offset)
@@ -89,8 +113,15 @@ namespace
         if (!vehicle)
             return nullptr;
         const auto found = g_nativeVehicles.find(vehicle);
-        return found != g_nativeVehicles.end() ? found->second : nullptr;
+        if (found == g_nativeVehicles.end())
+            return nullptr;
+        CVehicle* wrapper = found->second;
+        return wrapper && wrapper->GetNativeVehicleHandle() == vehicle ? wrapper : nullptr;
     }
+
+
+
+
 
     int VehicleSubtype(void* vehicle)
     {
@@ -195,6 +226,16 @@ namespace
     }
 }
 
+bool CVehicle::HasNativeVehicle() const
+{
+    return m_pGameVehicle && VehicleFromHandle(m_handle) == m_pGameVehicle;
+}
+
+void* CVehicle::GetNativeVehicleHandle() const
+{
+    return HasNativeVehicle() ? m_pGameVehicle : nullptr;
+}
+
 CVehicle::CVehicle(int model, CVector position, float rotation, BOOL keepModelLoaded, BOOL hasSiren)
 {
     m_pTrailer = nullptr;
@@ -208,7 +249,9 @@ CVehicle::CVehicle(int model, CVector position, float rotation, BOOL keepModelLo
 
         m_bHasSiren = hasSiren ? TRUE : FALSE;
 
+        nextVehicleHasSiren = hasSiren != FALSE;
         scm::ProcessCommand(&CREATE_CAR, model, static_cast<double>(position.x), static_cast<double>(position.y), static_cast<double>(position.z), &m_handle);
+        nextVehicleHasSiren = false;
         scm::ProcessCommand(&SET_CAR_Z_ANGLE, m_handle, static_cast<double>(rotation));
         scm::ProcessCommand(&VEHICLE_CTOR_09C4, m_handle, 0);
         scm::ProcessCommand(&VEHICLE_CTOR_07FF, m_handle, 0);
@@ -292,18 +335,24 @@ CVehicle::CVehicle(int model, CVector position, float rotation, BOOL keepModelLo
 
 CVehicle::~CVehicle()
 {
-    m_pGameVehicle = VehicleFromHandle(m_handle);
+    const void* original = m_pGameVehicle;
+    m_pGameVehicle = VehicleFromHandle(m_handle) == original ? m_pGameVehicle : nullptr;
     m_pGameEntity = m_pGameVehicle;
     UnregisterVehicle(this);
     ShutdownLicensePlate();
-
-    if (!m_pGameVehicle)
-        return;
 
     if (m_marker)
     {
         scm::ProcessCommand(&DISABLE_MARKER, m_marker);
         m_marker = 0;
+    }
+
+    if (!m_pGameVehicle)
+    {
+        if (g_lastTrainVehicle == original)
+            g_lastTrainVehicle = nullptr;
+        m_handle = 0;
+        return;
     }
 
     RemovePassengers();
@@ -313,8 +362,6 @@ CVehicle::~CVehicle()
         DetachTrailer();
         m_pTrailer = nullptr;
     }
-
-    ShutdownLicensePlate();
 
     const int model = Read<std::uint16_t>(m_pGameVehicle, 0x22);
     if (model == TRAIN_FREIGHT_LOCO || model == TRAIN_STREAK_LOCO)
@@ -358,21 +405,25 @@ void CVehicle::Remove()
 
 void CVehicle::ChangeInterior(int id)
 {
-    if (VehicleFromHandle(m_handle))
+    if (HasNativeVehicle())
         scm::ProcessCommand(&CHANGE_CAR_INTERIOR, m_handle, id);
 }
 
 void CVehicle::ResetPointers()
 {
-    if (!m_pGameVehicle)
-        return;
-    m_pGameVehicle = VehicleFromHandle(m_handle);
-    m_pGameEntity = m_pGameVehicle;
+    void* native = VehicleFromHandle(m_handle);
+    if (native != m_pGameVehicle)
+        ShutdownLicensePlate();
+
+    UnregisterVehicle(this);
+    m_pGameVehicle = native;
+    m_pGameEntity = native;
+    RegisterVehicle(this);
 }
 
 BOOL CVehicle::HasDriver()
 {
-    if (!m_pGameVehicle || !VehicleFromHandle(m_handle))
+    if (!HasNativeVehicle())
         return FALSE;
 
     auto* driver = Read<void*>(m_pGameVehicle, 0x460);
@@ -382,9 +433,17 @@ BOOL CVehicle::HasDriver()
     return (Read<std::uint32_t>(driver, 0x46C) & 0x100) && !Read<void*>(driver, 0x598);
 }
 
+bool CVehicle::HasPlayerDriver() const
+{
+    if (!m_pGameVehicle || VehicleFromHandle(m_handle) != m_pGameVehicle)
+        return false;
+    auto* driver = Read<void*>(m_pGameVehicle, 0x460);
+    return driver && (Read<std::uint32_t>(driver, 0x46C) & 0x100u) != 0;
+}
+
 BOOL CVehicle::IsOccupied()
 {
-    if (!m_pGameVehicle)
+    if (!HasNativeVehicle())
         return FALSE;
     for (std::size_t offset = 0x460; offset < 0x480; offset += 4)
         if (Read<void*>(m_pGameVehicle, offset))
@@ -394,7 +453,7 @@ BOOL CVehicle::IsOccupied()
 
 void CVehicle::SetInvulnerable(BOOL invulnerable)
 {
-    if (!m_pGameVehicle || !VehicleFromHandle(m_handle) || Read<std::uintptr_t>(m_pGameVehicle, 0) == 0x863C40)
+    if (!HasNativeVehicle() || Read<std::uintptr_t>(m_pGameVehicle, 0) == 0x863C40)
         return;
 
     const int value = invulnerable ? 1 : 0;
@@ -405,24 +464,24 @@ void CVehicle::SetInvulnerable(BOOL invulnerable)
 
 void CVehicle::SetLocked(BOOL locked)
 {
-    if (m_pGameVehicle)
+    if (HasNativeVehicle())
         scm::ProcessCommand(&SET_CAR_LOCKED, m_handle, locked ? 1 : 0);
 }
 
 float CVehicle::GetHealth()
 {
-    return m_pGameVehicle ? Read<float>(m_pGameVehicle, 0x4C0) : 0.0f;
+    return HasNativeVehicle() ? Read<float>(m_pGameVehicle, 0x4C0) : 0.0f;
 }
 
 void CVehicle::SetHealth(float value)
 {
-    if (m_pGameVehicle)
+    if (HasNativeVehicle())
         Write<float>(m_pGameVehicle, 0x4C0, value);
 }
 
 void CVehicle::SetColor(unsigned char primary, unsigned char secondary)
 {
-    if (m_pGameVehicle && VehicleFromHandle(m_handle))
+    if (HasNativeVehicle())
     {
         Write<unsigned char>(m_pGameVehicle, 0x434, primary);
         Write<unsigned char>(m_pGameVehicle, 0x435, secondary);
@@ -434,7 +493,7 @@ void CVehicle::SetColor(unsigned char primary, unsigned char secondary)
 
 void CVehicle::UpdateColor()
 {
-    if (!m_pGameVehicle || !VehicleFromHandle(m_handle) || !m_bNeedsToUpdateColor || pad_71)
+    if (!HasNativeVehicle() || !m_bNeedsToUpdateColor || pad_71)
         return;
     if (Read<unsigned char>(m_pGameVehicle, 0x434) == m_nPrimaryColor && Read<unsigned char>(m_pGameVehicle, 0x435) == m_nSecondaryColor)
         return;
@@ -444,22 +503,22 @@ void CVehicle::UpdateColor()
 
 int CVehicle::GetSubtype()
 {
-    return VehicleSubtype(m_pGameVehicle);
+    return HasNativeVehicle() ? VehicleSubtype(m_pGameVehicle) : 0;
 }
 
 BOOL CVehicle::IsSunk()
 {
-    return m_pGameVehicle ? scm::ProcessCommand(&IS_CAR_SUNK, m_handle) : FALSE;
+    return HasNativeVehicle() ? scm::ProcessCommand(&IS_CAR_SUNK, m_handle) : FALSE;
 }
 
 BOOL CVehicle::IsWrecked()
 {
-    return m_pGameVehicle ? scm::ProcessCommand(&IS_CAR_WRECKED, m_handle) : FALSE;
+    return HasNativeVehicle() ? scm::ProcessCommand(&IS_CAR_WRECKED, m_handle) : FALSE;
 }
 
 BOOL CVehicle::DriverIsPlayerPed()
 {
-    if (!m_pGameVehicle)
+    if (!HasNativeVehicle())
         return FALSE;
     auto* player = *reinterpret_cast<void**>(0xB7CD98);
     return player && Read<void*>(m_pGameVehicle, 0x460) == player;
@@ -467,7 +526,7 @@ BOOL CVehicle::DriverIsPlayerPed()
 
 BOOL CVehicle::HasPlayerPed()
 {
-    if (!m_pGameVehicle)
+    if (!HasNativeVehicle())
         return FALSE;
     auto* player = *reinterpret_cast<void**>(0xB7CD98);
     return player && (Read<std::uint32_t>(player, 0x46C) & 0x100) && Read<void*>(player, 0x58C) == m_pGameVehicle;
@@ -495,35 +554,34 @@ BOOL CVehicle::HasTurret()
 
 void CVehicle::EnableSiren(bool enable)
 {
+    if (!HasNativeVehicle())
+        return;
     auto flags = Read<unsigned char>(m_pGameVehicle, 0x42D);
     Write<unsigned char>(m_pGameVehicle, 0x42D, enable ? static_cast<unsigned char>(flags | 0x80) : static_cast<unsigned char>(flags & ~0x80));
 }
 
+void CVehicle::SetAlarmTime(std::uint16_t duration)
+{
+    if (DoesExist())
+        Write<std::uint16_t>(m_pGameVehicle, 0x45C, duration);
+}
+
 void CVehicle::SetAlarmState(bool enable)
 {
-    if (!m_pGameVehicle)
+    if (!DoesExist())
         return;
-    Write<std::uint16_t>(m_pGameVehicle, 0x45C, enable ? 0xFFFFu : 0u);
+    EnableSiren(enable);
+    SetAlarmTime(enable ? 20000 : 0);
 }
 
 void CVehicle::SetBonnetState(bool open)
 {
-    if (!m_pGameVehicle || GetSubtype() != 1)
-        return;
-    auto* vtable = Read<void**>(m_pGameVehicle, 0);
-    if (!vtable || !vtable[27])
-        return;
-    reinterpret_cast<void(__thiscall*)(void*, void*, int, int, float, bool)>(vtable[27])(m_pGameVehicle, nullptr, 16, 0, open ? 1.0f : 0.0f, false);
+    OpenDoor(16, 0, open ? 1.0f : 0.0f);
 }
 
 void CVehicle::SetBootState(bool open)
 {
-    if (!m_pGameVehicle || GetSubtype() != 1)
-        return;
-    auto* vtable = Read<void**>(m_pGameVehicle, 0);
-    if (!vtable || !vtable[27])
-        return;
-    reinterpret_cast<void(__thiscall*)(void*, void*, int, int, float, bool)>(vtable[27])(m_pGameVehicle, nullptr, 17, 1, open ? 1.0f : 0.0f, false);
+    OpenDoor(17, 1, open ? 1.0f : 0.0f);
 }
 
 void CVehicle::SetObjective(bool enable)
@@ -534,12 +592,12 @@ void CVehicle::SetObjective(bool enable)
 
 BOOL CVehicle::SirenEnabled()
 {
-    return (Read<unsigned char>(m_pGameVehicle, 0x42D) & 0x80) != 0;
+    return HasNativeVehicle() && (Read<unsigned char>(m_pGameVehicle, 0x42D) & 0x80) != 0;
 }
 
 void CVehicle::SetLandingGearState(BOOL hide)
 {
-    if (!m_pGameVehicle || GetSubtype() != 5)
+    if (!HasNativeVehicle() || GetSubtype() != 5)
         return;
 
     const float state = Read<float>(m_pGameVehicle, 0x9CC);
@@ -556,23 +614,23 @@ void CVehicle::SetLandingGearState(BOOL hide)
 
 BOOL CVehicle::GetLandingGearState()
 {
-    return m_pGameVehicle && GetSubtype() == 5 && Read<float>(m_pGameVehicle, 0x9CC) != 0.0f;
+    return HasNativeVehicle() && GetSubtype() == 5 && Read<float>(m_pGameVehicle, 0x9CC) != 0.0f;
 }
 
 void CVehicle::SetHydraThrusters(int direction)
 {
-    if (m_pGameVehicle)
+    if (HasNativeVehicle())
         Write<int>(m_pGameVehicle, 0x86C, direction);
 }
 
 int CVehicle::GetHydraThrusters()
 {
-    return m_pGameVehicle ? Read<int>(m_pGameVehicle, 0x86C) : 0;
+    return HasNativeVehicle() ? Read<int>(m_pGameVehicle, 0x86C) : 0;
 }
 
 void CVehicle::ProcessMarkers()
 {
-    if (!m_pGameVehicle)
+    if (!HasNativeVehicle())
         return;
 
     if (m_bIsObjective)
@@ -585,16 +643,19 @@ void CVehicle::ProcessMarkers()
             m_marker = 0;
         }
         scm::ProcessCommand(&CREATE_MARKER_ABOVE_CAR, m_handle, 1, 3, &m_marker);
-        // r5's radar colour translator maps 1006 to this rgba value
-        scm::ProcessCommand(&SET_MARKER_COLOR, m_marker, static_cast<int>(0xE2C063FFu));
-        scm::ProcessCommand(&SET_MARKER_SCALE, m_marker, 3);
-        m_bObjectiveBlipCreated = TRUE;
+        if (m_marker)
+        {
+            scm::ProcessCommand(&SET_MARKER_COLOR, m_marker, 1006);
+            scm::ProcessCommand(&SET_MARKER_SCALE, m_marker, 3);
+            m_bObjectiveBlipCreated = TRUE;
+        }
         return;
     }
 
-    if (m_bObjectiveBlipCreated && m_marker)
+    if (m_bObjectiveBlipCreated)
     {
-        scm::ProcessCommand(&DISABLE_MARKER, m_marker);
+        if (m_marker)
+            scm::ProcessCommand(&DISABLE_MARKER, m_marker);
         m_bObjectiveBlipCreated = FALSE;
         m_marker = 0;
     }
@@ -605,9 +666,7 @@ void CVehicle::ProcessMarkers()
         if (!m_marker)
         {
             scm::ProcessCommand(&CREATE_MARKER_ABOVE_CAR, m_handle, 1, 2, &m_marker);
-            // r5's radar colour translator maps 1004 to this rgba value
-            scm::ProcessCommand(&SET_MARKER_COLOR, m_marker, static_cast<int>(0x89A4C440u));
-            scm::ProcessCommand(&SET_MARKER_SCALE, m_marker, 2);
+            scm::ProcessCommand(&SET_MARKER_COLOR, m_marker, 1004);
         }
         return;
     }
@@ -621,13 +680,15 @@ void CVehicle::ProcessMarkers()
 
 void CVehicle::Lock(BOOL lock)
 {
+    if (!HasNativeVehicle())
+        return;
     Write<std::uint32_t>(m_pGameVehicle, 0x4F8, lock ? 2u : 0u);
     m_bIsLocked = lock ? TRUE : FALSE;
 }
 
 BOOL CVehicle::UpdateLastDrivenTime()
 {
-    if (!m_pGameVehicle || !Read<void*>(m_pGameVehicle, 0x460))
+    if (!HasNativeVehicle() || !Read<void*>(m_pGameVehicle, 0x460))
         return FALSE;
     m_bHasBeenDriven = TRUE;
     m_timeSinceLastDriven = ::GetTickCount();
@@ -636,18 +697,36 @@ BOOL CVehicle::UpdateLastDrivenTime()
 
 float CVehicle::GetTrainSpeed()
 {
-    return m_pGameVehicle ? Read<float>(m_pGameVehicle, 0x5A4) : 0.0f;
+    return HasNativeVehicle() ? Read<float>(m_pGameVehicle, 0x5A4) : 0.0f;
+}
+
+void CVehicle::SetTurretRotation(float horizontal, float vertical)
+{
+    if (!DoesExist())
+        return;
+    Write<float>(m_pGameVehicle, 0x94C, horizontal);
+    Write<float>(m_pGameVehicle, 0x950, vertical);
+}
+
+float CVehicle::GetTurretHorizontalRotation() const
+{
+    return m_pGameVehicle && VehicleFromHandle(m_handle) == m_pGameVehicle ? Read<float>(m_pGameVehicle, 0x94C) : 0.0f;
+}
+
+float CVehicle::GetTurretVerticalRotation() const
+{
+    return m_pGameVehicle && VehicleFromHandle(m_handle) == m_pGameVehicle ? Read<float>(m_pGameVehicle, 0x950) : 0.0f;
 }
 
 void CVehicle::SetTrainSpeed(float value)
 {
-    if (m_pGameVehicle && value >= -100.0f && value <= 100.0f)
+    if (HasNativeVehicle() && value >= -100.0f && value <= 100.0f)
         Write<float>(m_pGameVehicle, 0x5A4, value);
 }
 
 void CVehicle::SetTires(char state)
 {
-    if (!m_pGameVehicle)
+    if (!HasNativeVehicle())
         return;
 
     const unsigned char value = static_cast<unsigned char>(state);
@@ -667,7 +746,7 @@ void CVehicle::SetTires(char state)
 
 char CVehicle::GetTires()
 {
-    if (!m_pGameVehicle)
+    if (!HasNativeVehicle())
         return 0;
 
     unsigned char state = 0;
@@ -698,7 +777,7 @@ char CVehicle::GetTires()
 
 void CVehicle::UpdateDamage(int panels, int doors, char lights)
 {
-    if (!m_pGameVehicle)
+    if (!HasNativeVehicle())
         return;
 
     const int subtype = GetSubtype();
@@ -719,44 +798,61 @@ void CVehicle::UpdateDamage(int panels, int doors, char lights)
 
 int CVehicle::GetPanelsDamage()
 {
-    return m_pGameVehicle && GetSubtype() == 1 ? Read<int>(m_pGameVehicle, 0x5B4) : 0;
+    return HasNativeVehicle() && GetSubtype() == 1 ? Read<int>(m_pGameVehicle, 0x5B4) : 0;
 }
 
 int CVehicle::GetDoorsDamage()
 {
-    return m_pGameVehicle && GetSubtype() == 1 ? Read<int>(m_pGameVehicle, 0x5A9) : 0;
+    return HasNativeVehicle() && GetSubtype() == 1 ? Read<int>(m_pGameVehicle, 0x5A9) : 0;
 }
 
 char CVehicle::GetLightsDamage()
 {
-    return m_pGameVehicle && GetSubtype() == 1 ? static_cast<char>(Read<unsigned char>(m_pGameVehicle, 0x5B0)) : 0;
+    return HasNativeVehicle() && GetSubtype() == 1 ? static_cast<char>(Read<unsigned char>(m_pGameVehicle, 0x5B0)) : 0;
 }
 
 void CVehicle::AttachTrailer()
 {
-    if (m_pTrailer)
-        scm::ProcessCommand(&ATTACH_TRAILER_TO_CAB, m_pTrailer->m_handle, m_handle);
+    if (!HasNativeVehicle() || !m_pTrailer || m_pTrailer == this || !m_pTrailer->HasNativeVehicle())
+        return;
+
+    if (GetTrailer() == m_pTrailer)
+        return;
+
+    if (CVehicle* previous = m_pTrailer->GetTractor(); previous && previous != this)
+    {
+        previous->SetTrailer(m_pTrailer);
+        previous->DetachTrailer();
+        previous->SetTrailer(nullptr);
+    }
+
+    scm::ProcessCommand(&ATTACH_TRAILER_TO_CAB, m_pTrailer->m_handle, m_handle);
 }
 
 void CVehicle::DetachTrailer()
 {
-    if (m_pTrailer && m_pTrailer->m_handle && VehicleFromHandle(m_pTrailer->m_handle) && m_pTrailer->m_pGameVehicle)
-        scm::ProcessCommand(&DETACH_TRAILER_FROM_CAB, m_pTrailer->m_handle, m_handle);
+    if (!HasNativeVehicle() || !m_pTrailer || !m_pTrailer->HasNativeVehicle())
+        return;
+
+    const bool wasDetaching = detachingTrailer;
+    detachingTrailer = true;
+    scm::ProcessCommand(&DETACH_TRAILER_FROM_CAB, m_pTrailer->m_handle, m_handle);
+    detachingTrailer = wasDetaching;
 }
 
 void CVehicle::SetTrailer(CVehicle* vehicle)
 {
-    m_pTrailer = vehicle;
+    m_pTrailer = vehicle == this ? nullptr : vehicle;
 }
 
 CVehicle* CVehicle::GetTrailer()
 {
-    return m_pGameVehicle ? VehicleWrapperFromPointer(Read<void*>(m_pGameVehicle, 0x4C8)) : nullptr;
+    return HasNativeVehicle() ? VehicleWrapperFromPointer(Read<void*>(m_pGameVehicle, 0x4C8)) : nullptr;
 }
 
 CVehicle* CVehicle::GetTractor()
 {
-    if (!m_pGameVehicle)
+    if (!HasNativeVehicle())
         return nullptr;
     const int subtype = GetSubtype();
     if (subtype == 2 || subtype == 4 || subtype == 6 || subtype == 7)
@@ -766,7 +862,7 @@ CVehicle* CVehicle::GetTractor()
 
 BOOL CVehicle::IsTrailer()
 {
-    if (!m_pGameVehicle || !VehicleFromHandle(m_handle))
+    if (!HasNativeVehicle())
         return FALSE;
     switch (Read<std::uint16_t>(m_pGameVehicle, 0x22))
     {
@@ -787,12 +883,12 @@ BOOL CVehicle::IsTrailer()
 
 BOOL CVehicle::IsTowtruck()
 {
-    return m_pGameVehicle && VehicleFromHandle(m_handle) && Read<std::uint16_t>(m_pGameVehicle, 0x22) == 525;
+    return HasNativeVehicle() && Read<std::uint16_t>(m_pGameVehicle, 0x22) == 525;
 }
 
 BOOL CVehicle::IsRC()
 {
-    if (!m_pGameVehicle || !VehicleFromHandle(m_handle))
+    if (!HasNativeVehicle())
         return FALSE;
     switch (Read<std::uint16_t>(m_pGameVehicle, 0x22))
     {
@@ -810,7 +906,7 @@ BOOL CVehicle::IsRC()
 
 void CVehicle::EnableLights(bool enable)
 {
-    if (!m_pGameVehicle || !VehicleFromHandle(m_handle))
+    if (!HasNativeVehicle())
         return;
 
     auto flags4A8 = Read<unsigned char>(m_pGameVehicle, 0x4A8);
@@ -831,7 +927,7 @@ void CVehicle::EnableLights(bool enable)
 
 void CVehicle::RemovePassengers()
 {
-    if (!m_pGameVehicle || !VehicleFromHandle(m_handle))
+    if (!HasNativeVehicle())
         return;
 
     auto* matrix = Read<void*>(m_pGameVehicle, 0x14);
@@ -856,7 +952,7 @@ void CVehicle::RemovePassengers()
 
 BOOL CVehicle::AddComponent(unsigned short id)
 {
-    if (!m_pGameVehicle || !VehicleFromHandle(m_handle) || GetSubtype() != 1)
+    if (!HasNativeVehicle() || GetSubtype() != 1)
         return FALSE;
 
     if (!scm::ProcessCommand(&IS_CAR_COMPONENT_AVAILABLE, static_cast<int>(id)))
@@ -878,7 +974,7 @@ BOOL CVehicle::AddComponent(unsigned short id)
 
 BOOL CVehicle::RemoveComponent(unsigned short id)
 {
-    if (!m_pGameVehicle || !VehicleFromHandle(m_handle))
+    if (!HasNativeVehicle())
         return FALSE;
     scm::ProcessCommand(&REMOVE_CAR_COMPONENT, m_handle, static_cast<int>(id));
     return TRUE;
@@ -886,13 +982,13 @@ BOOL CVehicle::RemoveComponent(unsigned short id)
 
 void CVehicle::SetPaintjob(unsigned char id)
 {
-    if (m_pGameVehicle && VehicleFromHandle(m_handle) && GetSubtype() == 1 && id <= 3)
+    if (HasNativeVehicle() && GetSubtype() == 1 && id <= 3)
         scm::ProcessCommand(&SET_CAR_PAINTJOB, m_handle, static_cast<int>(id));
 }
 
 BOOL CVehicle::DoesExist()
 {
-    return VehicleFromHandle(m_handle) != nullptr;
+    return m_pGameVehicle && VehicleFromHandle(m_handle) == m_pGameVehicle;
 }
 
 void CVehicle::SetLicensePlateText(const char* text)
@@ -906,13 +1002,16 @@ void CVehicle::SetLicensePlateText(const char* text)
 
 void CVehicle::SetRotation(float value)
 {
-    if (VehicleFromHandle(m_handle))
+    if (HasNativeVehicle())
         scm::ProcessCommand(&SET_CAR_Z_ANGLE, m_handle, static_cast<double>(value));
 }
 
 void CVehicle::ConstructLicensePlate()
 {
-    if (!m_pLicensePlate && m_szLicensePlateText[0] && g_licensePlate && VehicleFromHandle(m_handle) == m_pGameVehicle)
+    if (!HasNativeVehicle() || GetSubtype() != 1)
+        return;
+
+    if (!m_pLicensePlate && m_szLicensePlateText[0] && g_licensePlate)
     {
         m_pLicensePlate = g_licensePlate->Create(m_szLicensePlateText);
         if (!m_pLicensePlate)
@@ -924,32 +1023,70 @@ void CVehicle::ConstructLicensePlate()
             m_pLicensePlate = nullptr;
             return;
         }
-        // CAutomobile::CustomCarPlate_BeforeRenderingStart reads CVehicle + 0x588
-        g_originalPlates.emplace(this, Read<RwTexture*>(m_pGameVehicle, 0x588));
+        // gta owns one texture reference; saco keeps another until shutdown
+        RwTextureAddRef(texture);
+        g_vehiclePlates[this] = {Read<RwTexture*>(m_pGameVehicle, 0x588), texture};
         Write<RwTexture*>(m_pGameVehicle, 0x588, texture);
     }
 }
 
 void CVehicle::ShutdownLicensePlate()
 {
-    const auto original = g_originalPlates.find(this);
-    if (original != g_originalPlates.end())
+    const auto it = g_vehiclePlates.find(this);
+    if (it != g_vehiclePlates.end())
     {
-        if (m_pGameVehicle && VehicleFromHandle(m_handle) == m_pGameVehicle)
+        const auto state = it->second;
+        const bool nativeAlive = m_pGameVehicle && VehicleFromHandle(m_handle) == m_pGameVehicle;
+        const bool stillInstalled = nativeAlive && Read<RwTexture*>(m_pGameVehicle, 0x588) == state.replacement;
+        if (stillInstalled)
         {
-            if (auto* texture = Read<RwTexture*>(m_pGameVehicle, 0x588))
-                RwTextureDestroy(texture);
-            Write<RwTexture*>(m_pGameVehicle, 0x588, original->second);
+            Write<RwTexture*>(m_pGameVehicle, 0x588, state.original);
+            if (state.replacement)
+                RwTextureDestroy(state.replacement); // release gta's reference
         }
-        else if (original->second)
-            RwTextureDestroy(original->second);
-        g_originalPlates.erase(original);
+        else if (state.original)
+        {
+            // gta destroyed its installed plate, or another mod replaced it
+            RwTextureDestroy(state.original);
+        }
+        if (state.replacement)
+            RwTextureDestroy(state.replacement); // release saco's retained reference
+        g_vehiclePlates.erase(it);
     }
     if (m_pLicensePlate)
     {
         m_pLicensePlate->Release();
         m_pLicensePlate = nullptr;
     }
+}
+
+void CVehicle::SetEngineOn(BOOL state)
+{
+    m_bEngineOn = state;
+}
+
+BOOL CVehicle::GetEngineOn() const
+{
+    return m_bEngineOn;
+}
+
+void CVehicle::SetLightsOn(BOOL state)
+{
+    m_bIsLightsOn = state;
+}
+
+BOOL CVehicle::GetLightsOn() const
+{
+    return m_bIsLightsOn;
+}
+
+void CVehicle::OpenDoor(int component, int door, float ratio)
+{
+    if (!DoesExist() || GetSubtype() != 1)
+        return;
+
+    reinterpret_cast<void(__thiscall*)(void*, void*, int, int, float, bool)>(0x6A6AE0)(
+        m_pGameVehicle, nullptr, component, door, ratio, true);
 }
 
 BOOL CVehicle::HasSiren()
@@ -959,24 +1096,33 @@ BOOL CVehicle::HasSiren()
 
 char CVehicle::GetMaxPassengers()
 {
-    return m_pGameVehicle && VehicleFromHandle(m_handle) ? static_cast<char>(Read<unsigned char>(m_pGameVehicle, 0x488)) : 0;
+    return HasNativeVehicle() ? static_cast<char>(Read<unsigned char>(m_pGameVehicle, 0x488)) : 0;
 }
 
-void CVehicle::SetWindowOpenFlag(unsigned char doorId)
+void CVehicle::SetDoorOpenState(unsigned char doorId, bool open)
 {
-    if (m_pGameVehicle)
-        reinterpret_cast<void(__thiscall*)(void*, unsigned char)>(0x6D3080)(m_pGameVehicle, doorId);
+    if (doorId >= 4)
+        return;
+
+    constexpr int components[]{10, 8, 11, 9};
+    OpenDoor(components[doorId], 2 + doorId, open ? 1.0f : 0.0f);
 }
 
-void CVehicle::ClearWindowOpenFlag(unsigned char doorId)
+void CVehicle::SetWindowOpenFlag(unsigned char component)
 {
-    if (m_pGameVehicle)
-        reinterpret_cast<void(__thiscall*)(void*, unsigned char)>(0x6D30B0)(m_pGameVehicle, doorId);
+    if ((component == 10 || component == 8 || component == 11 || component == 9) && DoesExist() && GetSubtype() == 1)
+        reinterpret_cast<void(__thiscall*)(void*, unsigned char)>(0x6D3080)(m_pGameVehicle, component);
+}
+
+void CVehicle::ClearWindowOpenFlag(unsigned char component)
+{
+    if ((component == 10 || component == 8 || component == 11 || component == 9) && DoesExist() && GetSubtype() == 1)
+        reinterpret_cast<void(__thiscall*)(void*, unsigned char)>(0x6D30B0)(m_pGameVehicle, component);
 }
 
 void CVehicle::EnableEngine(BOOL enable)
 {
-    if (!m_pGameVehicle)
+    if (!HasNativeVehicle())
         return;
 
     auto flags = Read<unsigned char>(m_pGameVehicle, 0x428);
@@ -999,4 +1145,51 @@ void CVehicle::EnableEngine(BOOL enable)
     Write<unsigned char>(m_pGameVehicle, 0x428, static_cast<unsigned char>(flags | 0x10));
     if (GetSubtype() == 3 && HasDriver() && !DriverIsPlayerPed())
         m_bEngineState = TRUE;
+}
+
+namespace game::patch::vehicle
+{
+    bool install()
+    {
+        static bool installed = false;
+        if (installed)
+            return true;
+
+        if (!hook::install(0x6D8470, reinterpret_cast<detail::UsesSirenFn>(&UsesSirenHook), &detail::originalUsesSiren))
+            return false;
+        if (!hook::install(0x502280, reinterpret_cast<detail::VehicleAudioFn>(&VehicleAudioHook), &detail::originalVehicleAudio))
+            return false;
+        const auto replacement = reinterpret_cast<std::uintptr_t>(&TrailerProcessHook);
+        for (const auto slot : TRAILER_VTABLE_SLOTS)
+            if (!::patch::write(slot, replacement))
+                return false;
+
+        installed = true;
+        return true;
+    }
+}
+
+std::uint32_t CVehicle::GetNativeRef(void* vehicle)
+{
+    auto* pool = *reinterpret_cast<void**>(0xB74494);
+    return pool && vehicle ? VehicleHandleFromPointer(vehicle) : 0xFFFFFFFFu;
+}
+
+int CVehicle::GetUnoccupiedSyncSeat(const void* localPed) const
+{
+    if (!HasNativeVehicle())
+        return -1;
+    for (int seat = 1; seat <= 7; ++seat)
+    {
+        void* occupant = Read<void*>(m_pGameVehicle, 0x460 + seat * 4);
+        if (!occupant || Read<void*>(occupant, 0x598))
+            continue;
+        return occupant == localPed ? seat : -1;
+    }
+    return 0;
+}
+
+CVehicle* CVehicle::FindNative(void* vehicle)
+{
+    return VehicleWrapperFromPointer(vehicle);
 }

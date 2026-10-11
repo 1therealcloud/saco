@@ -42,7 +42,23 @@ namespace
     constexpr float ONFOOT_CORRECTION = 0.1f;
     constexpr float ONFOOT_ROTATION_SLERP = 0.75f;
     constexpr float INCAR_EPSILON = 0.05f;
-    constexpr float SNAP_DISTANCE = 8.0f;
+    constexpr float INCAR_SNAP_XY = 8.0f;
+    constexpr float INCAR_SNAP_Z = 0.5f;
+    constexpr float INCAR_AIR_WATER_SNAP_Z = 2.0f;
+    constexpr float INCAR_CORRECTION = 0.06f;
+    constexpr float INCAR_MIN_SPEED = 0.01f;
+    constexpr float INCAR_ROTATION_SLERP = 0.75f;
+    constexpr float INCAR_MAX_TURN_SPEED = 0.02f;
+    constexpr float UNOCCUPIED_DEAD_ZONE = 0.1f;
+    constexpr float UNOCCUPIED_SNAP_XY = 6.0f;
+    constexpr float UNOCCUPIED_SNAP_Z = 3.0f;
+    constexpr float UNOCCUPIED_CORRECTION_DEAD_ZONE = 0.05f;
+    constexpr float UNOCCUPIED_CORRECTION = 0.06f;
+    constexpr float TRAILER_DEAD_ZONE = 0.5f;
+    constexpr float TRAILER_SNAP_XY = 6.0f;
+    constexpr float TRAILER_SNAP_Z = 3.0f;
+    constexpr float TRAILER_CORRECTION_DEAD_ZONE = 0.05f;
+    constexpr float TRAILER_CORRECTION = 0.025f;
     constexpr float DISTANCE_INVALID = 10000.0f;
     constexpr CRemotePlayer::TICK ENTRY_EXIT_ANIM_MS = 500;
     constexpr CRemotePlayer::TICK HEAD_UPDATE_MS = 1000;
@@ -122,19 +138,24 @@ namespace
         return std::fabs(a - b);
     }
 
-    bool NearPosition(const CVector& a, const CVector& b, float epsilon)
-    {
-        return Offset(a.x, b.x) <= epsilon && Offset(a.y, b.y) <= epsilon && Offset(a.z, b.z) <= epsilon;
-    }
-
     bool NeedsOnfootSnap(const CVector& a, const CVector& b)
     {
         return Offset(a.x, b.x) > ONFOOT_SNAP_XY || Offset(a.y, b.y) > ONFOOT_SNAP_XY || Offset(a.z, b.z) > ONFOOT_SNAP_Z;
     }
 
-    bool NeedsSnap(const CVector& a, const CVector& b)
+    bool PositionErrorExceeds(const CVector& target, const CVector& current, float xy, float z)
     {
-        return Offset(a.x, b.x) > SNAP_DISTANCE || Offset(a.y, b.y) > SNAP_DISTANCE || Offset(a.z, b.z) > SNAP_DISTANCE;
+        return Offset(target.x, current.x) > xy || Offset(target.y, current.y) > xy || Offset(target.z, current.z) > z;
+    }
+
+    void CorrectVelocity(CVector& speed, const CVector& target, const CVector& current, float deadZone, float factor)
+    {
+        if (Offset(target.x, current.x) > deadZone)
+            speed.x += (target.x - current.x) * factor;
+        if (Offset(target.y, current.y) > deadZone)
+            speed.y += (target.y - current.y) * factor;
+        if (Offset(target.z, current.z) > deadZone)
+            speed.z += (target.z - current.z) * factor;
     }
 
     CVector PositionOf(const CEntity* entity)
@@ -379,10 +400,12 @@ void CRemotePlayer::OnEnterVehicle()
     if (!m_pPed || !m_pVehicle || !m_pVehicle->DoesExist())
         return;
 
-    if (m_pPed->GetVehicle() == m_pVehicle->GetNativeVehicleHandle())
+    const int seat = m_nState == PLAYER_STATE_DRIVER ? 0 : static_cast<int>(m_nSeatId);
+    if (seat < 0 || seat > 7)
+        return;
+    if (m_pPed->GetVehicle() == m_pVehicle->GetNativeVehicleHandle() && m_pPed->GetVehicleSeatIndex() == seat)
         return;
 
-    const int seat = m_nState == PLAYER_STATE_DRIVER ? 0 : static_cast<int>(m_nSeatId);
     m_pPed->PutIntoVehicle(m_pVehicle->m_handle, seat);
 }
 
@@ -534,18 +557,31 @@ void CRemotePlayer::SetOnfootTargetSpeedAndPosition(CVector* position, CVector* 
 
 void CRemotePlayer::UpdateIncarSpeedAndPosition()
 {
-    if (!m_pVehicle || !FiniteVector(m_incarTargetPosition) || !FiniteVector(m_incarTargetSpeed))
+    if (!m_pVehicle || !m_pVehicle->DoesExist() || !FiniteVector(m_incarTargetPosition) || !FiniteVector(m_incarTargetSpeed))
         return;
 
     CMatrix matrix = CMatrix::Unity();
     m_pVehicle->GetMatrix(&matrix);
-    const CVector current = matrix.GetPosition();
-    m_positionDifference = m_incarTargetPosition - current;
+    if (!m_pVehicle->CEntity::DoesExist())
+    {
+        matrix.GetPosition() = m_incarTargetPosition;
+        m_pVehicle->SetMatrix(matrix);
+        m_pVehicle->SetSpeed(m_incarTargetSpeed);
+        return;
+    }
 
-    if (NearPosition(m_incarTargetPosition, current, INCAR_EPSILON))
+    const CVector current = matrix.GetPosition();
+    m_positionDifference.x = Offset(m_incarTargetPosition.x, current.x);
+    m_positionDifference.y = Offset(m_incarTargetPosition.y, current.y);
+    m_positionDifference.z = Offset(m_incarTargetPosition.z, current.z);
+
+    if (m_positionDifference.x <= INCAR_EPSILON && m_positionDifference.y <= INCAR_EPSILON && m_positionDifference.z <= INCAR_EPSILON)
         return;
 
-    if (!m_pVehicle->DoesExist() || NeedsSnap(m_incarTargetPosition, current))
+    const int subtype = m_pVehicle->GetSubtype();
+    const float snapZ = subtype == 3 || subtype == 4 || subtype == 5 ? INCAR_AIR_WATER_SNAP_Z : INCAR_SNAP_Z;
+    if (m_positionDifference.x > INCAR_SNAP_XY || m_positionDifference.y > INCAR_SNAP_XY ||
+        m_positionDifference.z > snapZ)
     {
         matrix.GetPosition() = m_incarTargetPosition;
         m_pVehicle->SetMatrix(matrix);
@@ -555,20 +591,22 @@ void CRemotePlayer::UpdateIncarSpeedAndPosition()
 
     CVector speed{};
     m_pVehicle->GetSpeed(&speed);
-    if (Offset(m_incarTargetPosition.x, current.x) > INCAR_EPSILON)
-        speed.x += (m_incarTargetPosition.x - current.x) * 0.05f;
-    if (Offset(m_incarTargetPosition.y, current.y) > INCAR_EPSILON)
-        speed.y += (m_incarTargetPosition.y - current.y) * 0.05f;
-    if (Offset(m_incarTargetPosition.z, current.z) > INCAR_EPSILON)
-        speed.z += (m_incarTargetPosition.z - current.z) * 0.05f;
+    if (m_positionDifference.x > INCAR_EPSILON)
+        speed.x += (m_incarTargetPosition.x - current.x) * INCAR_CORRECTION;
+    if (m_positionDifference.y > INCAR_EPSILON)
+        speed.y += (m_incarTargetPosition.y - current.y) * INCAR_CORRECTION;
+    if (m_positionDifference.z > INCAR_EPSILON)
+        speed.z += (m_incarTargetPosition.z - current.z) * INCAR_CORRECTION;
 
-    if (FiniteVector(speed))
+    if (FiniteVector(speed) && (Offset(speed.x, 0.0f) > INCAR_MIN_SPEED ||
+                                Offset(speed.y, 0.0f) > INCAR_MIN_SPEED ||
+                                Offset(speed.z, 0.0f) > INCAR_MIN_SPEED))
         m_pVehicle->SetSpeed(speed);
 }
 
 void CRemotePlayer::UpdateIncarRotation()
 {
-    if (!m_pVehicle)
+    if (!m_pVehicle || !m_pVehicle->DoesExist())
         return;
 
     CQuaternion target{m_incarTargetRotation.imag.x, m_incarTargetRotation.imag.y, m_incarTargetRotation.imag.z, m_incarTargetRotation.real};
@@ -576,16 +614,22 @@ void CRemotePlayer::UpdateIncarRotation()
         return;
     target.Normalise();
 
+    // r5's default turn-speed clamp
+    CVector turnSpeed{};
+    m_pVehicle->GetTurnSpeed(&turnSpeed);
+    if (FiniteVector(turnSpeed))
+    {
+        turnSpeed.x = std::clamp(turnSpeed.x, -INCAR_MAX_TURN_SPEED, INCAR_MAX_TURN_SPEED);
+        turnSpeed.y = std::clamp(turnSpeed.y, -INCAR_MAX_TURN_SPEED, INCAR_MAX_TURN_SPEED);
+        turnSpeed.z = std::clamp(turnSpeed.z, -INCAR_MAX_TURN_SPEED, INCAR_MAX_TURN_SPEED);
+        m_pVehicle->SetTurnSpeed(turnSpeed);
+    }
+
     CMatrix matrix = CMatrix::Unity();
     m_pVehicle->GetMatrix(&matrix);
-    CQuaternion current = MatrixQuaternion(matrix);
-
-    if (DotProduct(current, target) < 0.0f)
-        target = -target;
-
+    const CQuaternion current = MatrixQuaternion(matrix);
     CQuaternion result{};
-    result.Slerp(current, target, 0.1f);
-    result.Normalise();
+    result.Slerp(target, current, INCAR_ROTATION_SLERP);
 
     const CVector position = matrix.GetPosition();
     matrix.SetRotate(result);
@@ -604,11 +648,14 @@ void CRemotePlayer::SetIncarTargetSpeedAndPosition(CMatrix* matrix, CVector* pos
     const CQuaternion rotation = MatrixQuaternion(*matrix);
     m_incarTargetRotation.real = rotation.real;
     m_incarTargetRotation.imag = rotation.imag;
+
+    if (m_pVehicle && m_pVehicle->DoesExist())
+        m_pVehicle->SetSpeed(*speed);
 }
 
 void CRemotePlayer::UpdateTrain(CMatrix* matrix, CVector* speed, float trainSpeed)
 {
-    if (!m_pVehicle || !matrix || !speed || !FiniteVector(*speed) || !Finite(trainSpeed))
+    if (!m_pVehicle || !m_pVehicle->DoesExist() || !matrix || !speed || !FiniteVector(*speed) || !Finite(trainSpeed))
         return;
 
     CMatrix current = CMatrix::Unity();
@@ -621,7 +668,7 @@ void CRemotePlayer::UpdateTrain(CMatrix* matrix, CVector* speed, float trainSpee
         m_pVehicle->SetMatrix(current);
     }
 
-    m_pVehicle->SetSpeed(*speed);
+    // keep gta's train velocity
     m_pVehicle->SetTrainSpeed(trainSpeed);
 }
 
@@ -648,106 +695,119 @@ void CRemotePlayer::Update(Synchronization::AimData* data)
 
 void CRemotePlayer::Update(Synchronization::UnoccupiedData* data)
 {
-    auto* pools = g_netGame ? g_netGame->m_pPools : nullptr;
-    auto* vehiclePool = pools ? pools->m_pVehicle : nullptr;
-
-    if (!data || data->m_nVehicleId == INVALID_ID)
+    if (!data || data->m_nVehicleId == 0 || data->m_nVehicleId >= CVehiclePool::MAX_VEHICLES ||
+        !FiniteVector(data->m_roll) || !FiniteVector(data->m_direction) || !FiniteVector(data->m_position) ||
+        !FiniteVector(data->m_speed) || !FiniteVector(data->m_turnSpeed) ||
+        (m_nState == PLAYER_STATE_DRIVER && m_nVehicleId == data->m_nVehicleId))
         return;
 
-    CVehicle* vehicle = ResolveVehicle(data->m_nVehicleId);
-    if (!vehicle || !vehicle->DoesExist() || vehicle->HasDriver())
+    auto* pool = g_netGame ? g_netGame->GetVehiclePool() : nullptr;
+    CVehicle* vehicle = pool ? pool->Get(data->m_nVehicleId) : nullptr;
+    if (!vehicle || !vehicle->DoesExist() || vehicle->HasDriver() || vehicle->HasPlayerDriver() || vehicle->GetTractor())
         return;
 
     CMatrix matrix = CMatrix::Unity();
     vehicle->GetMatrix(&matrix);
+    const CVector current = matrix.GetPosition();
+    if (!FiniteVector(current))
+        return;
 
-    if (FiniteVector(data->m_roll) && FiniteVector(data->m_direction))
+    if (PositionErrorExceeds(data->m_position, current, UNOCCUPIED_DEAD_ZONE, UNOCCUPIED_DEAD_ZONE))
     {
         CVector right = data->m_roll;
         CVector forward = data->m_direction;
-        if (right.SquaredMagnitude() > 0.000001f && forward.SquaredMagnitude() > 0.000001f)
-        {
-            right.Normalise();
-            forward.Normalise();
-            CVector up = right.Cross(forward);
-            if (up.SquaredMagnitude() > 0.000001f)
-            {
-                up.Normalise();
-                forward = up.Cross(right);
-                forward.Normalise();
-                matrix.GetRight() = right;
-                matrix.GetForward() = forward;
-                matrix.GetUp() = up;
-            }
-        }
-    }
+        if (right.SquaredMagnitude() < 0.000001f || forward.SquaredMagnitude() < 0.000001f)
+            return;
+        right.Normalise();
+        forward.Normalise();
+        CVector up = right.Cross(forward);
+        if (up.SquaredMagnitude() < 0.000001f)
+            return;
+        up.Normalise();
+        forward = up.Cross(right);
+        forward.Normalise();
 
-    const CVector current = matrix.GetPosition();
-    if (FiniteVector(data->m_position))
-    {
-        if (NeedsSnap(data->m_position, current))
+        matrix.GetRight() = right;
+        matrix.GetForward() = forward;
+        matrix.GetUp() = up;
+
+        const bool snap = PositionErrorExceeds(data->m_position, current, UNOCCUPIED_SNAP_XY, UNOCCUPIED_SNAP_Z);
+        if (snap)
             matrix.GetPosition() = data->m_position;
         vehicle->SetMatrix(matrix);
-    }
 
-    if (FiniteVector(data->m_speed))
-    {
         CVector speed = data->m_speed;
-        if (FiniteVector(data->m_position) && !NeedsSnap(data->m_position, current))
-        {
-            if (Offset(data->m_position.x, current.x) > INCAR_EPSILON)
-                speed.x += (data->m_position.x - current.x) * 0.05f;
-            if (Offset(data->m_position.y, current.y) > INCAR_EPSILON)
-                speed.y += (data->m_position.y - current.y) * 0.05f;
-            if (Offset(data->m_position.z, current.z) > INCAR_EPSILON)
-                speed.z += (data->m_position.z - current.z) * 0.05f;
-        }
+        if (!snap)
+            CorrectVelocity(speed, data->m_position, current, UNOCCUPIED_CORRECTION_DEAD_ZONE, UNOCCUPIED_CORRECTION);
         vehicle->SetSpeed(speed);
-    }
-
-    if (FiniteVector(data->m_turnSpeed))
         vehicle->SetTurnSpeed(data->m_turnSpeed);
-    if (Finite(data->m_fHealth))
-        vehicle->SetHealth(data->m_fHealth);
-
-    vehicle->m_bRemoteUnocSync = TRUE;
-    if (vehiclePool && data->m_nVehicleId < CVehiclePool::MAX_VEHICLES)
-    {
-        vehiclePool->m_nLastUndrivenId[data->m_nVehicleId] = m_nId;
-        vehiclePool->m_lastUndrivenProcessTick[data->m_nVehicleId] = GetTickCount();
     }
+
+    vehicle->m_bUnoccupiedSync = FALSE;
+    vehicle->m_bRemoteUnocSync = TRUE;
+    pool->m_nLastUndrivenId[data->m_nVehicleId] = m_nId;
+    pool->m_lastUndrivenProcessTick[data->m_nVehicleId] = GetTickCount();
 }
 
 void CRemotePlayer::Update(Synchronization::TrailerData* data)
 {
-    if (!data)
+    if (!data || data->m_nId == 0 || data->m_nId >= CVehiclePool::MAX_VEHICLES ||
+        m_nState != PLAYER_STATE_DRIVER || m_nVehicleId == INVALID_ID ||
+        !FiniteVector(data->m_position) || !FiniteQuaternion(data->m_fQuaternion) ||
+        !FiniteVector(data->m_speed) || !FiniteVector(data->m_turnSpeed))
         return;
+
+    CVehicle* tractor = ResolveVehicle(m_nVehicleId);
+    CVehicle* trailer = ResolveVehicle(data->m_nId);
+    if (!tractor || !trailer || tractor == trailer || !tractor->DoesExist() || !trailer->DoesExist() ||
+        (!trailer->IsTrailer() && !tractor->IsTowtruck()))
+        return;
+
+    // reject late packets from an old trailer
+    if (m_incarData.m_nTrailerId != data->m_nId)
+        return;
+
+    if (tractor->GetTrailer() != trailer)
+    {
+        if (CVehicle* attached = tractor->GetTrailer())
+        {
+            tractor->SetTrailer(attached);
+            tractor->DetachTrailer();
+            tractor->SetTrailer(nullptr);
+        }
+        tractor->SetTrailer(trailer);
+        tractor->AttachTrailer();
+    }
 
     m_trailerData = *data;
-    ID trailerId = data->m_nId;
-    if (trailerId == INVALID_ID)
-        trailerId = m_incarData.m_nTrailerId;
-
-    CVehicle* trailer = ResolveVehicle(trailerId);
-    if (!trailer || !trailer->DoesExist())
-        return;
-
     CMatrix matrix = CMatrix::Unity();
     trailer->GetMatrix(&matrix);
-    if (FiniteVector(data->m_position))
+    const CVector current = matrix.GetPosition();
+    if (!FiniteVector(current))
+        return;
+
+    if (!PositionErrorExceeds(data->m_position, current, TRAILER_DEAD_ZONE, TRAILER_DEAD_ZONE))
+        return;
+
+    const CVector position = matrix.GetPosition();
+    matrix.SetRotate(SyncQuaternion(data->m_fQuaternion));
+    matrix.GetPosition() = position;
+
+    const bool snap = PositionErrorExceeds(data->m_position, current, TRAILER_SNAP_XY, TRAILER_SNAP_Z);
+    if (snap)
         matrix.GetPosition() = data->m_position;
-    if (FiniteQuaternion(data->m_fQuaternion))
-    {
-        const CVector position = matrix.GetPosition();
-        matrix.SetRotate(SyncQuaternion(data->m_fQuaternion));
-        matrix.GetPosition() = position;
-    }
     trailer->SetMatrix(matrix);
 
-    if (FiniteVector(data->m_speed))
+    if (snap)
         trailer->SetSpeed(data->m_speed);
-    if (FiniteVector(data->m_turnSpeed))
-        trailer->SetTurnSpeed(data->m_turnSpeed);
+    else
+    {
+        CVector speed{};
+        trailer->GetSpeed(&speed);
+        CorrectVelocity(speed, data->m_position, current, TRAILER_CORRECTION_DEAD_ZONE, TRAILER_CORRECTION);
+        trailer->SetSpeed(speed);
+    }
+    trailer->SetTurnSpeed(data->m_turnSpeed);
 }
 
 void CRemotePlayer::ResetData()
@@ -877,12 +937,10 @@ void CRemotePlayer::Update(Synchronization::BulletData* data)
 
 void CRemotePlayer::Process()
 {
+    m_pVehicle = m_nVehicleId == INVALID_ID ? nullptr : ResolveVehicle(m_nVehicleId);
     ProcessRemoteMarker(*this);
     if (!m_pPed)
         return;
-
-    if (m_nVehicleId != INVALID_ID)
-        m_pVehicle = ResolveVehicle(m_nVehicleId);
     const TICK now = GetTickCount();
     auto& runtime = Runtime(this);
     if (runtime.entryExitDeadline && now >= runtime.entryExitDeadline)
@@ -902,6 +960,9 @@ void CRemotePlayer::Process()
 
     if (m_nState == PLAYER_STATE_ONFOOT && m_nUpdateType == UPDATE_TYPE_ONFOOT)
     {
+        if (m_pPed->IsInVehicle() && !runtime.exitingVehicle)
+            OnExitVehicle();
+
         if (!m_pPed->IsInVehicle())
         {
             SetOnfootTargetSpeedAndPosition(&m_onfootData.m_position, &m_onfootData.m_speed);
@@ -917,6 +978,10 @@ void CRemotePlayer::Process()
     {
         if (m_pVehicle && m_pVehicle->DoesExist())
         {
+            if (!runtime.enteringVehicle &&
+                (m_pPed->GetVehicle() != m_pVehicle->GetNativeVehicleHandle() || m_pPed->GetVehicleSeatIndex() != 0))
+                OnEnterVehicle();
+
             CMatrix target = CMatrix::Unity();
             m_pVehicle->GetMatrix(&target);
             target.GetPosition() = m_incarData.m_position;
@@ -933,7 +998,6 @@ void CRemotePlayer::Process()
             {
                 SetIncarTargetSpeedAndPosition(&target, &m_incarData.m_position, &m_incarData.m_speed);
                 UpdateIncarSpeedAndPosition();
-                UpdateIncarRotation();
             }
 
             m_pVehicle->SetHealth(m_incarData.m_fHealth);
@@ -941,16 +1005,21 @@ void CRemotePlayer::Process()
             m_pVehicle->SetLandingGearState(m_incarData.m_bLandingGear ? TRUE : FALSE);
 
             const ID trailerId = m_incarData.m_nTrailerId;
-            CVehicle* trailer = ResolveVehicle(trailerId);
-            if (trailer && !m_pVehicle->GetTrailer())
+            CVehicle* trailer = trailerId != 0 && trailerId != INVALID_ID ? ResolveVehicle(trailerId) : nullptr;
+            CVehicle* attached = m_pVehicle->GetTrailer();
+            if (attached != trailer)
             {
-                m_pVehicle->SetTrailer(trailer);
-                m_pVehicle->AttachTrailer();
-            }
-            else if (!trailer && m_pVehicle->GetTrailer())
-            {
-                m_pVehicle->DetachTrailer();
-                m_pVehicle->SetTrailer(nullptr);
+                if (attached)
+                {
+                    m_pVehicle->SetTrailer(attached);
+                    m_pVehicle->DetachTrailer();
+                    m_pVehicle->SetTrailer(nullptr);
+                }
+                if (trailer && trailer->DoesExist())
+                {
+                    m_pVehicle->SetTrailer(trailer);
+                    m_pVehicle->AttachTrailer();
+                }
             }
         }
         m_nUpdateType = UPDATE_TYPE_NONE;
@@ -960,6 +1029,11 @@ void CRemotePlayer::Process()
         OnEnterVehicle();
         m_nUpdateType = UPDATE_TYPE_NONE;
     }
+
+    // smooth rotation between packets
+    if (m_nState == PLAYER_STATE_DRIVER && m_pVehicle && m_pVehicle->DoesExist() &&
+        !IsTrainModel(m_pVehicle->GetModelIndex()))
+        UpdateIncarRotation();
 
     if (m_nState == PLAYER_STATE_ONFOOT && !m_pPed->IsInVehicle())
     {
@@ -1055,6 +1129,8 @@ void CRemotePlayer::Update(Synchronization::OnfootData* data, TICK timestamp)
 {
     if (!data || !FiniteVector(data->m_position) || !FiniteVector(data->m_speed) || !FiniteVector(data->m_surfingOffset) || !FiniteQuaternion(data->m_fQuaternion))
         return;
+    if (timestamp && static_cast<std::int32_t>(timestamp - m_lastTimestamp) < 0)
+        return;
 
     m_onfootData = *data;
     m_fReportedHealth = static_cast<float>(data->m_nHealth);
@@ -1073,29 +1149,25 @@ void CRemotePlayer::Update(Synchronization::OnfootData* data, TICK timestamp)
 
 void CRemotePlayer::Update(Synchronization::IncarData* data, TICK timestamp)
 {
-    if (!data || !FiniteVector(data->m_position) || !FiniteVector(data->m_speed) || !FiniteQuaternion(data->m_fQuaternion) || !Finite(data->m_fHealth))
+    if (!data || data->m_nVehicle >= CVehiclePool::MAX_VEHICLES || !FiniteVector(data->m_position) || !FiniteVector(data->m_speed) ||
+        !FiniteQuaternion(data->m_fQuaternion) || !Finite(data->m_fHealth))
+        return;
+    if (timestamp && static_cast<std::int32_t>(timestamp - m_lastTimestamp) < 0)
         return;
 
     m_incarData = *data;
     m_nVehicleId = data->m_nVehicle;
     m_pVehicle = ResolveVehicle(m_nVehicleId);
     m_nSeatId = 0;
-    m_fReportedHealth = static_cast<float>(data->m_nDriverHealth);
-    m_fReportedArmour = static_cast<float>(data->m_nDriverArmor);
-
     if (m_pVehicle)
     {
-        CMatrix matrix = CMatrix::Unity();
-        m_pVehicle->GetMatrix(&matrix);
-        matrix.GetPosition() = data->m_position;
-        if (FiniteQuaternion(data->m_fQuaternion))
-        {
-            const CVector position = matrix.GetPosition();
-            matrix.SetRotate(SyncQuaternion(data->m_fQuaternion));
-            matrix.GetPosition() = position;
-        }
-        SetIncarTargetSpeedAndPosition(&matrix, &data->m_position, &data->m_speed);
+        m_pVehicle->m_bUnoccupiedSync = FALSE;
+        m_pVehicle->m_bRemoteUnocSync = FALSE;
+        if (auto* vehiclePool = g_netGame ? g_netGame->GetVehiclePool() : nullptr)
+            vehiclePool->m_nLastUndrivenId[m_nVehicleId] = CVehiclePool::INVALID_ID;
     }
+    m_fReportedHealth = static_cast<float>(data->m_nDriverHealth);
+    m_fReportedArmour = static_cast<float>(data->m_nDriverArmor);
 
     const char oldState = static_cast<char>(m_nState);
     m_nUpdateType = UPDATE_TYPE_INCAR;
@@ -1107,7 +1179,8 @@ void CRemotePlayer::Update(Synchronization::IncarData* data, TICK timestamp)
 
 void CRemotePlayer::Update(Synchronization::PassengerData* data, TICK timestamp)
 {
-    if (!data || !FiniteVector(data->m_position))
+    if (!data || data->m_nVehicleId >= CVehiclePool::MAX_VEHICLES || (data->m_nSeatId & 0x3Fu) == 0 ||
+        (data->m_nSeatId & 0x3Fu) > 7 || !FiniteVector(data->m_position))
         return;
 
     m_passengerData = *data;

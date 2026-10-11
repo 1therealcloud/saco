@@ -25,6 +25,20 @@ namespace game::patch
         bool install();
     }
 
+    namespace vehicle
+    {
+        namespace detail
+        {
+            using UsesSirenFn = bool(__thiscall*)(void*);
+            using VehicleAudioFn = void(__thiscall*)(void*);
+            extern VehicleAudioFn originalVehicleAudio;
+            extern UsesSirenFn originalUsesSiren;
+            extern bool nextVehicleHasSiren;
+            extern bool detachingTrailer;
+        }
+        bool install();
+    }
+
     // streaming.h
     namespace streaming
     {

@@ -50,3 +50,7 @@ namespace game::hooks
 
 void EmptyVertexStreamAllocateHook();
 void EmptyVertexStreamLockHook();
+
+bool __fastcall UsesSirenHook(void* vehicle, void*);
+void __fastcall TrailerProcessHook(void* vehicle, void*);
+void __fastcall VehicleAudioHook(void* audio, void*);

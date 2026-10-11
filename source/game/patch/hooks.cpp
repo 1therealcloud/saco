@@ -1,4 +1,6 @@
 #include <stdafx.h>
+#include "game/entities/CVehicle.h"
+#include "game/patch/patch.h"
 
 #include "hooks.h"
 #include "main.h"
@@ -24,6 +26,33 @@ using namespace game::patch::fps;
 using namespace game::players::detail;
 using namespace game::patch::hudscalefix::detail;
 using game::patch::hudscalefix::ScopedScaleFix;
+
+void __fastcall VehicleAudioHook(void* audio, void*)
+{
+    using namespace game::patch::vehicle::detail;
+    auto* vehicle = static_cast<std::uint8_t*>(audio) - 0x138;
+    auto* driver = *reinterpret_cast<std::uint8_t**>(vehicle + 0x460);
+    auto* localPed = *reinterpret_cast<void**>(0xB7CD98);
+    if (!driver || driver == localPed || !FindSlot(driver))
+    {
+        originalVehicleAudio(audio);
+        return;
+    }
+
+    // R5 processes remote engine audio as a civilian driver, not the local radio listener.
+    auto& type = *reinterpret_cast<std::uint32_t*>(driver + 0x598);
+    auto& status = vehicle[0x36];
+    auto& listener = *reinterpret_cast<void**>(0xB6B990);
+    const auto savedType = type;
+    const auto savedStatus = status;
+    auto* savedListener = listener;
+    type = 4;
+    status = 0x1A;
+    originalVehicleAudio(audio);
+    status = savedStatus;
+    type = savedType;
+    listener = savedListener;
+}
 
 void __cdecl ShutdownHook()
 {
@@ -393,4 +422,35 @@ __declspec(naked) void EmptyVertexStreamLockHook()
         push 757D76h
         ret
     }
+}
+
+bool __fastcall UsesSirenHook(void* vehicle, void*)
+{
+    using namespace game::patch::vehicle::detail;
+    if (nextVehicleHasSiren)
+    {
+        nextVehicleHasSiren = false;
+        return true;
+    }
+    if (originalUsesSiren && originalUsesSiren(vehicle))
+        return true;
+    if (auto* wrapper = CVehicle::FindNative(vehicle))
+        return wrapper->HasSiren() != FALSE;
+    return false;
+}
+
+void __fastcall TrailerProcessHook(void* vehicle, void*)
+{
+    float health{};
+    void* tractor = nullptr;
+    if (vehicle)
+    {
+        std::memcpy(&health, static_cast<const std::uint8_t*>(vehicle) + 0x4C0, sizeof(health));
+        std::memcpy(&tractor, static_cast<const std::uint8_t*>(vehicle) + 0x4C4, sizeof(tractor));
+    }
+    if (!game::patch::vehicle::detail::detachingTrailer && health > 0.0f)
+        if (auto* wrapper = CVehicle::FindNative(tractor))
+            if (!wrapper->DriverIsPlayerPed() && wrapper->m_pTrailer)
+                return;
+    reinterpret_cast<void(__thiscall*)(void*)>(0x6A4400)(vehicle);
 }
