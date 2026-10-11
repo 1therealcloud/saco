@@ -36,6 +36,8 @@ bool __cdecl CameraToIgnoreObjectHook(void* entity);
 
 namespace game::hooks
 {
+    bool InstallRenderHooks();
+
     using DrawFn = void(__cdecl*)();
     using LoadInstanceFn = void*(__cdecl*)(void*, const char*);
     using DestroyEntityFn = void(__thiscall*)(void*);

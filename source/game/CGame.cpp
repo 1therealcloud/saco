@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include "patch/hooks.h"
 
 #include "CGame.h"
 #include "PlayerSlots.h"
@@ -182,7 +183,7 @@ bool CGame::StartGame()
         return false;
 
     // base patches already ran before the frontend; install game hooks once
-    if (!CObject::InstallRenderHook() || !render::InstallHooks())
+    if (!CObject::InstallRenderHook() || !game::hooks::InstallRenderHooks())
         return false;
 
     int limit = 48;

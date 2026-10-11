@@ -5,7 +5,6 @@
 namespace render
 {
     extern bool g_classSelectionVisible;
-    bool InstallHooks();
     void InitializeUi(IDirect3DDevice9* device);
     void SetCursorMode(int mode, bool immediatelyHideCursor);
     void SetVehicleDebugLabels(bool enabled);

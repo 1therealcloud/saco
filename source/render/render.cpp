@@ -4,7 +4,6 @@
 #include "game/CGame.h"
 
 #include "render.h"
-#include "game/patch/hooks.h"
 
 #include "game/Cursor.h"
 #include "net/CNetGame.h"
@@ -73,12 +72,6 @@ std::unique_ptr<CTextDrawSelection> g_textDrawSelection;
 
 namespace render
 {
-    bool InstallHooks()
-    {
-        return hook::install(0x53E230, &NativeTextHook, &game::hooks::g_text) && hook::install(0x586650, &GangZoneRadarHook) &&
-               hook::install(0x553AA0, &WorldRenderHook, &game::hooks::g_world) && hook::install(0x5531E0, &FadingRenderHook, &game::hooks::g_fading);
-    }
-
     void DrawPlayerTags();
     bool ResolvePlayerLabel(std::uint16_t id, CVector& position, float& localDistance, float& cameraDistance);
     void ApplyGuiFontConfig();
