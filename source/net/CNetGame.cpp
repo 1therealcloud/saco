@@ -270,7 +270,7 @@ namespace
     bool ReadSyncHeader(BitStream& bs, std::uint8_t expectedId, std::uint32_t& timestamp)
     {
         std::uint8_t packetId{};
-        timestamp = ::GetTickCount();
+        timestamp = 0;
         if (!bs.Read(packetId))
             return false;
 
@@ -1846,9 +1846,9 @@ bool CNetGame::MapMarker(float x, float y, float z)
 }
 
 // RequestClass
-bool CNetGame::RequestClass(std::uint16_t classId)
+bool CNetGame::RequestClass(std::int32_t classId)
 {
-    if (!m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
+    if (classId < 0 || !m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
 
     BitStream bs;

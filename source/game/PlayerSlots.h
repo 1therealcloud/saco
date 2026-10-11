@@ -8,7 +8,10 @@ namespace game::players
     bool Install();
     int AcquireSlot();
     void ReleaseSlot(std::uint8_t slot);
+    std::uint8_t GetActiveSlotCount(); // saco wrapper for r5 0xa00f0
     void SetPed(std::uint8_t slot, void* ped);
+    bool ReplacePedIfMatches(std::uint8_t slot, void* previous, void* replacement);
+    bool ReleaseSlotIfPed(std::uint8_t slot, const void* expected);
     void SetUseCJWalk(bool enabled);
 }
 

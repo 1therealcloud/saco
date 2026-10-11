@@ -151,6 +151,13 @@ namespace render
             gangZonePool->Draw();
     }
 
+    static bool g_cameraTargetLabels = false;
+
+    void SetCameraTargetLabels(bool enabled)
+    {
+        g_cameraTargetLabels = enabled;
+    }
+
     static void DrawVehicleDebugLabels()
     {
         auto* pools = g_netGame ? g_netGame->m_pPools : nullptr;
@@ -444,6 +451,7 @@ namespace render
         auto* menuPool = pools ? pools->m_pMenu : nullptr;
         auto* textDrawPool = pools ? pools->m_pTextDraw : nullptr;
         auto* labelPool = pools ? pools->m_pLabel : nullptr;
+        auto* playerPool = pools ? pools->m_pPlayer : nullptr;
 
         if (objectPool)
             objectPool->ConstructMaterials();
@@ -491,6 +499,8 @@ namespace render
         if (g_chatBubble)
             g_chatBubble->Draw();
         DrawVehicleDebugLabels();
+        if (g_cameraTargetLabels && playerPool && playerPool->GetLocalPlayer())
+            playerPool->GetLocalPlayer()->DrawCameraTargetLabel();
         if (labelPool)
             labelPool->Draw();
         if (!hideChatForStats)

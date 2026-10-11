@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include "pools/CActorPool.h"
 #include "pools/CGangZonePool.h"
 #include "pools/CLabelPool.h"
@@ -196,7 +198,7 @@ public:
     bool GiveActorDamage(bool unused, std::uint16_t actorId, float damage, std::uint32_t weaponId, std::uint32_t bodyPart);
     bool MapMarker(float x, float y, float z);
     std::uint32_t m_nClassesAvailable = 0;
-    bool RequestClass(std::uint16_t classId);
+    bool RequestClass(std::int32_t classId);
     bool RequestSpawn();
     bool MenuSelect(std::uint8_t row);
     bool MenuQuit();

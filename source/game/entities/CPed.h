@@ -45,17 +45,28 @@ public:
 
     bool HasNativePed() const
     {
-        return m_pGamePed != nullptr;
+        return HasCurrentNativePed();
+    }
+    bool HasCurrentNativePed() const;
+    bool IsValid() const
+    {
+        return HasCurrentNativePed() && CEntity::IsValid();
+    }
+    BOOL DoesExist() const
+    {
+        return HasCurrentNativePed() && CEntity::DoesExist();
+    }
+    void* GetNativeHandle() const
+    {
+        return HasCurrentNativePed() ? m_pGameEntity : nullptr;
     }
     void* GetNativePedHandle() const
     {
-        return m_pGamePed;
+        return HasCurrentNativePed() ? m_pGamePed : nullptr;
     }
     bool IsHoldingStuff() const
     {
-        std::uint32_t value{};
-        std::memcpy(&value, m_opaqueStuff, sizeof(value));
-        return value != 0;
+        return m_stuff.m_nType != 0;
     }
     void* m_pGamePed = nullptr;            // 0x2A4, GTA CPed*
     std::uint32_t pad_2a8[2]{};            // 0x2A8
@@ -64,10 +75,12 @@ public:
     std::uint32_t m_parachuteObject = 0;   // 0x2B9
     std::uint32_t m_urinatingParticle = 0; // 0x2BD
 
-    // R5 owns a 12-byte auxiliary state block here. It is intentionally kept
-    // opaque in this build so the binary layout stays exact without exposing
-    // the intoxication-related API that uses it.
-    std::uint8_t m_opaqueStuff[12]{}; // 0x2C1
+    struct Stuff
+    {
+        int m_nType = 0;
+        std::uint32_t m_object = 0;
+        int m_nDrunkLevel = 0;
+    } m_stuff;
 
     std::uint32_t m_arrow = 0;          // 0x2CD
     std::uint8_t field_2d1 = 0;         // 0x2D1
@@ -140,7 +153,7 @@ public:
     void SetKeys(short buttons, short leftStickX, short leftStickY);
     void SetPlayerStat(int index, std::uint16_t value); // 0xAE450
     BOOL CopyAppearanceFrom(const CPed& source);
-    void* GetFloor() const;
+    void* GetFloor() const; // 0xACA10
 
     void HandsUp();
     BOOL DoesHandsUp() const;
@@ -151,25 +164,26 @@ public:
     void SetFightingStyle(int style);
     int GetFightingStyle() const;
 
-    // TODO
-    // stuff
     int ApplyStuff();
     void GiveStuff(int type);
     int GetStuff();
     void DropStuff();
 
     void ProcessDrunk();
-    int GetDrunkLevel();
-    void SetDrunkLevel(int level);
-    // END TODO
+    int GetDrunkLevel();           // 0xADFA0
+    void SetDrunkLevel(int level); // 0xADFB0
 
     std::uint8_t GetCurrentWeapon() const;
+    bool GetWeaponData(int slot, int& weapon, std::uint32_t& ammo) const;
+    std::uint8_t GetWeaponSlot() const;
+    void* GetTargetEntity() const;
+    std::uint8_t GetDeathReason(void*& source) const;
     void ClearWeapons();
     void GiveWeapon(int weapon, int ammo);
     void SetWeaponAmmo(int weapon, int ammo);
     void SetArmedWeapon(int weapon);
 
-    void PerformAnimation(const char* name, const char* file, float frameDelta, int loop, int lockX, int lockY, int lockF, int time);
+    void PerformAnimation(const char* name, const char* file, float frameDelta, int loop, int lockX, int lockY, int lockF, int time); // 0xAD230
     void ClearTasks();
     void LinkToInterior(char id, BOOL refresh);
 
@@ -180,14 +194,14 @@ public:
     int GetStat() const;
     BOOL PerformingCustomAnimation() const;
 
-    void StartDancing(int style);
-    void StopDancing();
-    BOOL DoesDancing() const;
-    const char* GetAnimationForDance(int move) const;
-    void ProcessDancing();
+    void StartDancing(int style);                     // 0xADAD0
+    void StopDancing();                               // 0xADB20
+    BOOL DoesDancing() const;                         // 0xADB60
+    const char* GetAnimationForDance(int move) const; // 0xADB70
+    void ProcessDancing();                            // 0xB00B0
 
     void LookAt(const CVector& target);
-    void StopLooking();
+    void StopLooking(); // r5 rva not confirmed
 
     void ApplyCommandTask(const char* name, int a3, int a4, int a5, int a6, int a7, int a8, int a9, int a10, int a11);
     void DestroyCommandTask();
@@ -203,7 +217,7 @@ public:
     void LoadShoppingDataSubsection(const char* name);
 
     void CreateArrow(int color);
-    void SetModelIndex(int model);
+    void SetModelIndex(int model); // 0xAFF50
     void Destroy();
 
     void SetCameraMode(char mode);
@@ -214,7 +228,7 @@ public:
     void DeleteAccessory(int slot);
     BOOL GetAccessoryState(int slot) const;
     void DeleteAllAccessories();
-    void AddAccessory(int slot, const Accessory* info);
+    void AddAccessory(int slot, const Accessory* info); // 0xB0B10
     CObject* GetAccessory(int slot) const;
     void ProcessAccessories();
     bool GetAccessoryMatrix(int slot, CMatrix* matrix) const;

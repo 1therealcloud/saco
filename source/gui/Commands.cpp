@@ -451,6 +451,7 @@ namespace Commands
             bool enabled = g_cameraTargetLabels;
             enabled = !enabled;
             g_cameraTargetLabels = enabled;
+            render::SetCameraTargetLabels(enabled);
         }
 
         // +0x68D00

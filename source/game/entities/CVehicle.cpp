@@ -67,8 +67,6 @@ namespace
         0x871218, 0x871778, 0x8718D0, 0x871A40, 0x871BE0,
     };
 
-
-
     template <class T>
     T Read(const void* data, std::size_t offset)
     {
@@ -118,10 +116,6 @@ namespace
         CVehicle* wrapper = found->second;
         return wrapper && wrapper->GetNativeVehicleHandle() == vehicle ? wrapper : nullptr;
     }
-
-
-
-
 
     int VehicleSubtype(void* vehicle)
     {
@@ -1085,8 +1079,7 @@ void CVehicle::OpenDoor(int component, int door, float ratio)
     if (!DoesExist() || GetSubtype() != 1)
         return;
 
-    reinterpret_cast<void(__thiscall*)(void*, void*, int, int, float, bool)>(0x6A6AE0)(
-        m_pGameVehicle, nullptr, component, door, ratio, true);
+    reinterpret_cast<void(__thiscall*)(void*, void*, int, int, float, bool)>(0x6A6AE0)(m_pGameVehicle, nullptr, component, door, ratio, true);
 }
 
 BOOL CVehicle::HasSiren()
@@ -1192,4 +1185,9 @@ int CVehicle::GetUnoccupiedSyncSeat(const void* localPed) const
 CVehicle* CVehicle::FindNative(void* vehicle)
 {
     return VehicleWrapperFromPointer(vehicle);
+}
+
+void* CVehicle::GetDriver() const
+{
+    return HasNativeVehicle() ? Read<void*>(m_pGameVehicle, 0x460) : nullptr;
 }

@@ -1016,8 +1016,7 @@ void RPCHandlers::WorldVehicleAdd(RPCParameters* pParams)
         return;
 
     auto* pool = NetworkVehicles();
-    if (!pool || vehicleId >= CVehiclePool::MAX_VEHICLES || modelId < 400 || modelId > 611 ||
-        !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) ||
+    if (!pool || vehicleId >= CVehiclePool::MAX_VEHICLES || modelId < 400 || modelId > 611 || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) ||
         !std::isfinite(angle) || !std::isfinite(health))
         return;
 
@@ -1101,8 +1100,7 @@ void RPCHandlers::UpdateVehicleDamageStatus(RPCParameters* pParams)
         vehicle->SetTires(static_cast<char>(tires));
     }
     else if (auto* pool = NetworkVehicles())
-        pool->QueueDamage(vehicleId, static_cast<int>(panels), static_cast<int>(doors),
-            static_cast<char>(lights), static_cast<char>(tires));
+        pool->QueueDamage(vehicleId, static_cast<int>(panels), static_cast<int>(doors), static_cast<char>(lights), static_cast<char>(tires));
 }
 
 // -----------------------------------------------------------------------------
@@ -1204,14 +1202,12 @@ void RPCHandlers::SetVehicleParamsEx(RPCParameters* pParams)
         if (siren <= 1)
             vehicle->EnableSiren(siren != 0);
 
-        const std::array<std::uint8_t, 4> doorStates{
-            doorDriver, doorPassenger, doorBackLeft, doorBackRight};
+        const std::array<std::uint8_t, 4> doorStates{doorDriver, doorPassenger, doorBackLeft, doorBackRight};
         for (std::uint8_t index = 0; index < doorStates.size(); ++index)
             if (doorStates[index] <= 1)
                 vehicle->SetDoorOpenState(index, doorStates[index] != 0);
 
-        const std::array<std::uint8_t, 4> windows{
-            windowDriver, windowPassenger, windowBackLeft, windowBackRight};
+        const std::array<std::uint8_t, 4> windows{windowDriver, windowPassenger, windowBackLeft, windowBackRight};
         constexpr std::uint8_t windowComponents[]{10, 8, 11, 9};
         for (std::uint8_t index = 0; index < windows.size(); ++index)
         {
@@ -1222,9 +1218,8 @@ void RPCHandlers::SetVehicleParamsEx(RPCParameters* pParams)
         }
     }
     else if (auto* pool = NetworkVehicles())
-        pool->QueueParams(vehicleId, {engine, lights, alarm, doors, bonnet, boot, objective, siren,
-            doorDriver, doorPassenger, doorBackLeft, doorBackRight,
-            windowDriver, windowPassenger, windowBackLeft, windowBackRight});
+        pool->QueueParams(vehicleId, {engine, lights, alarm, doors, bonnet, boot, objective, siren, doorDriver, doorPassenger, doorBackLeft, doorBackRight, windowDriver,
+                                      windowPassenger, windowBackLeft, windowBackRight});
 }
 
 // -----------------------------------------------------------------------------
@@ -2625,6 +2620,10 @@ void RPCHandlers::RemoveVehicleComponent(RPCParameters* pParams)
 void RPCHandlers::ForceClassSelection(RPCParameters* pParams)
 {
     (void)pParams;
+    auto* players = g_netGame ? g_netGame->GetPlayerPool() : nullptr;
+    auto* local = players ? players->GetLocalPlayer() : nullptr;
+    if (local)
+        local->m_classSelection.m_bEnableAfterDeath = TRUE;
 }
 
 // -----------------------------------------------------------------------------
@@ -3496,8 +3495,7 @@ void RPCHandlers::PutPlayerInVehicle(RPCParameters* pParams)
     auto* local = players ? players->GetLocalPlayer() : nullptr;
     auto* ped = local ? local->GetPed() : nullptr;
     auto* vehicle = pool ? pool->Get(vehicleId) : nullptr;
-    if (!ped || !ped->HasNativePed() || !vehicle || !vehicle->DoesExist() ||
-        seatId > static_cast<std::uint8_t>(vehicle->GetMaxPassengers()))
+    if (!ped || !ped->HasNativePed() || !vehicle || !vehicle->DoesExist() || seatId > static_cast<std::uint8_t>(vehicle->GetMaxPassengers()))
         return;
 
     ped->PutIntoVehicle(vehicle->m_handle, seatId);
@@ -4098,7 +4096,8 @@ void RPCHandlers::SetPlayerDrunkLevel(RPCParameters* pParams)
     if (!bs.Read(drunkLevel))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (auto* ped = g_game ? g_game->GetPlayerPed() : nullptr)
+        ped->SetDrunkLevel(drunkLevel);
 }
 
 // -----------------------------------------------------------------------------
@@ -4176,10 +4175,8 @@ void RPCHandlers::SetPlayerAttachedObject(RPCParameters* pParams)
     }
 
     CPed::Accessory info{};
-    if (!bs.Read(info.m_nModel) || !bs.Read(info.m_nBone) ||
-        !bs.Read(info.m_offset.x) || !bs.Read(info.m_offset.y) || !bs.Read(info.m_offset.z) ||
-        !bs.Read(info.m_rotation.x) || !bs.Read(info.m_rotation.y) || !bs.Read(info.m_rotation.z) ||
-        !bs.Read(info.m_scale.x) || !bs.Read(info.m_scale.y) || !bs.Read(info.m_scale.z) ||
+    if (!bs.Read(info.m_nModel) || !bs.Read(info.m_nBone) || !bs.Read(info.m_offset.x) || !bs.Read(info.m_offset.y) || !bs.Read(info.m_offset.z) || !bs.Read(info.m_rotation.x) ||
+        !bs.Read(info.m_rotation.y) || !bs.Read(info.m_rotation.z) || !bs.Read(info.m_scale.x) || !bs.Read(info.m_scale.y) || !bs.Read(info.m_scale.z) ||
         !bs.Read(info.m_firstMaterialColor) || !bs.Read(info.m_secondMaterialColor))
         return;
 

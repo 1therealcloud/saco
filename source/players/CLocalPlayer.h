@@ -207,7 +207,7 @@ public:
     void ChangeInterior(char id);
     void Chat(const char* text);
     void EnterVehicle(int vehicle, BOOL passenger); // 0x5AD0
-    void ExitVehicle(int vehicle); // 0x5BF0
+    void ExitVehicle(int vehicle);                  // 0x5BF0
     void OnServerVehicleWarp(ID vehicle);
     void SendStats();
     void UpdateVehicleDamage(ID vehicle); // 0x5DE0
@@ -215,8 +215,6 @@ public:
     void PrevClass();
     void ProcessClassSelection();
 
-    // Kept on the ABI surface. Combat-specific behavior is intentionally not
-    // implemented in this port.
     void UpdateWeapons();
     void SendTakeDamage(int id, float damage, int type, int bodyPart);
     void SendGiveDamage(int id, float damage, int type, int bodyPart);

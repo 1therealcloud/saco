@@ -175,6 +175,39 @@ float CEntity::GetDistanceFromCentreOfMassToBaseOfModel() const
     const auto bits = reinterpret_cast<std::uint32_t(__thiscall*)(void*)>(0x536BE0)(m_pGameEntity);
     return std::bit_cast<float>(bits);
 }
+bool CEntity::IntersectsCameraRay(const CVector& origin, const CVector& target, float scale) const
+{
+    if (!IsValid())
+        return false;
+    const auto* info = ModelInfo::GetRelocated(GetModelIndex());
+    const auto* collision = info ? Read<void*>(info, 0x14) : nullptr;
+    if (!collision)
+        return false;
+    float radius = Read<float>(collision, 0x24);
+    if (radius <= 1.0f)
+        radius *= 1.5f;
+    radius *= scale;
+    if (!std::isfinite(radius) || radius <= 0.0f)
+        return false;
+    CVector centre{};
+    GetBoundCentre(&centre);
+    struct Line
+    {
+        CVector start;
+        float startSize;
+        CVector end;
+        float endSize;
+    };
+    struct Sphere
+    {
+        CVector centre;
+        float radius;
+    };
+    const Line line{origin - centre, 0.0f, target - centre, 0.0f};
+    const Sphere sphere{CVector{}, radius};
+    return reinterpret_cast<bool(__cdecl*)(const Line&, const Sphere&)>(0x417470)(line, sphere);
+}
+
 void CEntity::GetBoundCentre(CVector* centre) const
 {
     if (centre && IsValid())

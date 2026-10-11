@@ -76,6 +76,16 @@ bool CCamera::HasLineOfSight(const CVector& position)
     return reinterpret_cast<IsLineOfSightClear>(0x56A490)(position, source, true, false, false, true, false, false, false);
 }
 
+CVector CCamera::TraceTarget(const CVector& origin, const CVector& target, bool vehicles, bool objects)
+{
+    alignas(4) std::uint8_t collision[44]{};
+    void* entity = nullptr;
+    using Trace = bool(__cdecl*)(const CVector&, const CVector&, void*, void**, bool, bool, bool, bool, bool, bool, bool, bool);
+    if (reinterpret_cast<Trace>(0x56BA00)(origin, target, collision, &entity, true, vehicles, false, objects, false, false, false, false) && entity)
+        return *reinterpret_cast<const CVector*>(collision);
+    return target;
+}
+
 CCamera::CCamera()
 {
     m_pAttachedTo = nullptr;

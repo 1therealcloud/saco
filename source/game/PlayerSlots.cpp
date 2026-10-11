@@ -130,10 +130,35 @@ namespace game::players::detail
 namespace game::players
 {
     using namespace detail;
+    std::uint8_t GetActiveSlotCount()
+    {
+        std::uint8_t count = 0;
+        for (int slot = 2; slot < SLOT_COUNT; ++slot)
+            if (g_used[slot])
+                ++count;
+        return count;
+    }
+
     void SetPed(std::uint8_t slot, void* ped)
     {
         if (slot >= 2 && slot < SLOT_COUNT)
             g_peds[slot] = ped;
+    }
+
+    bool ReplacePedIfMatches(std::uint8_t slot, void* previous, void* replacement)
+    {
+        if (slot < 2 || slot >= SLOT_COUNT || !g_used[slot] || g_peds[slot] != previous)
+            return false;
+        g_peds[slot] = replacement;
+        return true;
+    }
+
+    bool ReleaseSlotIfPed(std::uint8_t slot, const void* expected)
+    {
+        if (slot < 2 || slot >= SLOT_COUNT || !g_used[slot] || g_peds[slot] != expected)
+            return false;
+        ReleaseSlot(slot);
+        return true;
     }
 
     bool Install()

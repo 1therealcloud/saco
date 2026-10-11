@@ -9,6 +9,7 @@ namespace render
     void InitializeUi(IDirect3DDevice9* device);
     void SetCursorMode(int mode, bool immediatelyHideCursor);
     void SetVehicleDebugLabels(bool enabled);
+    void SetCameraTargetLabels(bool enabled);
     void ShowClassSelection(bool visible);
     void RenderWorldObjects();
     void RenderFadingObjects();

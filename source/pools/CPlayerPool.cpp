@@ -101,7 +101,7 @@ void CPlayerPool::ForceCollision()
         m_bPrevCollisionFlag[id] = FALSE;
 
         CRemotePlayer* player = GetPlayer(static_cast<ID>(id));
-        if (!player || !player->m_pPed || !player->m_pPed->DoesExist())
+        if (!player || !player->m_pPed || !player->m_pPed->DoesExist() || (player->m_pPed->GetFlags() & 0x100) != 0)
             continue;
 
         m_bPrevCollisionFlag[id] = player->m_pPed->GetCollisionFlag();
@@ -114,7 +114,7 @@ void CPlayerPool::RestoreCollision()
     for (int id = 0; id <= m_nLargestId && id < MAX_PLAYERS; ++id)
     {
         CRemotePlayer* player = GetPlayer(static_cast<ID>(id));
-        if (!player || !player->m_pPed || !player->m_pPed->DoesExist())
+        if (!player || !player->m_pPed || !player->m_pPed->DoesExist() || (player->m_pPed->GetFlags() & 0x100) != 0)
             continue;
 
         player->m_pPed->SetCollisionFlag(m_bPrevCollisionFlag[id]);

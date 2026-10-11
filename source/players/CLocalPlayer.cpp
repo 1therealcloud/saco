@@ -14,6 +14,7 @@
 #include "gui/CInput.h"
 #include "config/CSettings.h"
 #include "game/CPad.h"
+#include "game/PlayerSlots.h"
 #include "game/Scripting.h"
 #include "sync/KeyStuff.h"
 #include "sync/AimStuff.h"
@@ -23,6 +24,8 @@
 #include "game/entities/CVehicle.h"
 #include "render/render.h"
 #include "pools/CObjectPool.h"
+#include "pools/CActorPool.h"
+#include "gui/CLabel.h"
 #include "pools/CVehiclePool.h"
 #include "pools/CMenuPool.h"
 #include "utils/math/CQuaternion.h"
@@ -120,7 +123,6 @@ namespace
         return 0;
     }
 
-
 }
 
 int& CLocalPlayer::RefIncarSendrate()
@@ -145,9 +147,39 @@ int& CLocalPlayer::RefSendMultiplier()
 
 CLocalPlayer::CLocalPlayer()
 {
-    std::memset(this, 0, sizeof(*this));
+    m_incarData = {};
+    m_aimData = {};
+    m_trailerData = {};
+    m_onfootData = {};
+    m_passengerData = {};
+    m_bIsActive = FALSE;
+    m_bIsWasted = FALSE;
+    m_nCurrentVehicle = INVALID_ID;
+    m_nLastVehicle = INVALID_ID;
+    m_animation = {};
+    field_100 = 0;
+    m_pPed = nullptr;
+    m_bDoesSpectating = FALSE;
+    m_nTeam = 0xFF;
+    field_10d = 0;
+    m_cameraTarget = {};
+    m_head = {};
+    m_bClearedToSpawn = FALSE;
+    m_spawnInfo = {};
+    m_bHasSpawnInfo = FALSE;
+    m_weaponsData = {};
+    m_bPassengerDriveBy = FALSE;
+    m_nCurrentInterior = 0;
+    m_bInRCMode = FALSE;
+    std::memset(m_szName, 0, sizeof(m_szName));
+    m_surfing = {};
+    m_classSelection = {};
+    m_spectating = {};
+    m_damage = {};
+
     const TICK now = GetTickCount();
     m_lastSelectionTick = now;
+    m_initialSelectionTick = 0;
     m_head.m_lastUpdate = now;
     m_head.m_lastLook = now;
     m_lastWeaponsUpdate = now;
@@ -206,8 +238,9 @@ void CLocalPlayer::ResetData()
     field_100 = 0;
 
     std::memset(&m_weaponsData, 0, sizeof(m_weaponsData));
-    *reinterpret_cast<ID*>(&m_weaponsData.data[0]) = INVALID_ID;
-    *reinterpret_cast<ID*>(&m_weaponsData.data[2]) = INVALID_ID;
+    const ID invalidId = INVALID_ID;
+    std::memcpy(m_weaponsData.data, &invalidId, sizeof(invalidId));
+    std::memcpy(m_weaponsData.data + sizeof(invalidId), &invalidId, sizeof(invalidId));
 
     const TICK now = GetTickCount();
     m_lastWeaponsUpdate = now;
@@ -272,6 +305,8 @@ void CLocalPlayer::SetSpecialAction(char id)
     switch (static_cast<unsigned char>(id))
     {
         case SPECIAL_ACTION_NONE:
+            if (m_pPed->IsHoldingStuff())
+                m_pPed->DropStuff();
             if (m_pPed->DoesDancing())
                 m_pPed->StopDancing();
             if (m_pPed->UsingCellphone())
@@ -298,6 +333,17 @@ void CLocalPlayer::SetSpecialAction(char id)
             if (m_pPed->UsingCellphone())
                 m_pPed->EnableCellphone(FALSE);
             break;
+        case SPECIAL_ACTION_DRINK_BEER:
+        case SPECIAL_ACTION_DRINK_WINE:
+        case SPECIAL_ACTION_DRINK_SPRUNK:
+        case SPECIAL_ACTION_SMOKE_CIGGY:
+        {
+            const auto action = static_cast<unsigned char>(id);
+            const int type = action == SPECIAL_ACTION_DRINK_BEER ? 1 : action == SPECIAL_ACTION_DRINK_WINE ? 2 : action == SPECIAL_ACTION_DRINK_SPRUNK ? 3 : 4;
+            if (m_pPed->GetStuff() != type)
+                m_pPed->GiveStuff(type);
+            break;
+        }
         case SPECIAL_ACTION_URINATING:
             if (!m_pPed->GetVehicle())
                 m_pPed->StartUrinating();
@@ -319,17 +365,38 @@ char CLocalPlayer::GetSpecialAction()
         return SPECIAL_ACTION_USECELLPHONE;
     if (m_pPed->DoesUrinating())
         return SPECIAL_ACTION_URINATING;
+    switch (m_pPed->GetStuff())
+    {
+        case 1:
+            return SPECIAL_ACTION_DRINK_BEER;
+        case 2:
+            return SPECIAL_ACTION_DRINK_WINE;
+        case 3:
+            return SPECIAL_ACTION_DRINK_SPRUNK;
+        case 4:
+            return SPECIAL_ACTION_SMOKE_CIGGY;
+        default:
+            break;
+    }
     return SPECIAL_ACTION_NONE;
 }
 
 void CLocalPlayer::UpdateSurfing()
 {
-    if (!m_pPed || !m_surfing.m_pVehicle)
+    if (!m_pPed || !m_pPed->HasNativePed() || !m_surfing.m_pVehicle)
         return;
 
-    const CVector playerPosition = PositionOf(m_pPed);
-    const CVector entityPosition = PositionOf(reinterpret_cast<CEntity*>(m_surfing.m_pVehicle));
-    m_surfing.m_position = playerPosition - entityPosition;
+    auto* entity = reinterpret_cast<CEntity*>(m_surfing.m_pVehicle);
+    if (!entity->IsValid())
+        return;
+
+    CMatrix matrix = CMatrix::Unity();
+    entity->GetMatrix(&matrix);
+    const CVector offset = matrix.InverseTransformPoint(PositionOf(m_pPed));
+    if (!FiniteVector(offset))
+        return;
+
+    m_surfing.m_position = offset;
     m_surfing.m_lastUpdate = GetTickCount();
 }
 
@@ -433,8 +500,7 @@ int CLocalPlayer::GetIncarSendRate()
         return 1000;
     if (g_netGame && g_netGame->LanMode())
         return 15;
-    const int affected = 0;
-    return RefIncarSendrate() + std::max(affected, 0) * RefSendMultiplier();
+    return RefIncarSendrate() + game::players::GetActiveSlotCount();
 }
 
 int CLocalPlayer::GetOnfootSendRate()
@@ -443,15 +509,14 @@ int CLocalPlayer::GetOnfootSendRate()
         return 1000;
     if (g_netGame && g_netGame->LanMode())
         return 15;
-    const int affected = 0;
-    return RefOnfootSendrate() + std::max(affected, 0) * RefSendMultiplier();
+    return RefOnfootSendrate() + game::players::GetActiveSlotCount();
 }
 
 int CLocalPlayer::GetUnoccupiedSendRate()
 {
     if (!m_pPed)
         return 1000;
-    return m_pPed->GetVehicle() ? GetIncarSendRate() : GetOnfootSendRate();
+    return (m_pPed->GetFlags() & 0x100) ? GetIncarSendRate() : GetOnfootSendRate();
 }
 
 void CLocalPlayer::SetSpawnInfo(const SpawnInfo* info)
@@ -534,6 +599,7 @@ BOOL CLocalPlayer::Spawn()
     m_spectating.m_nObject = -1;
     m_spectating.m_bProcessed = FALSE;
 
+    ped->SetDrunkLevel(0);
     m_bIsWasted = FALSE;
     m_bIsActive = TRUE;
     m_classSelection.m_bIsActive = FALSE;
@@ -644,20 +710,33 @@ void CLocalPlayer::EnableSpectating(BOOL enable)
     if (!!enable == !!m_bDoesSpectating)
         return;
 
-    if (m_classSelection.m_bEnableAfterDeath && !enable)
+    if (!enable && m_classSelection.m_bEnableAfterDeath)
     {
         m_bIsActive = FALSE;
         m_bHasSpawnInfo = FALSE;
     }
 
     m_bDoesSpectating = enable;
+    if (enable)
+    {
+        m_lastSpecUpdate = 0;
+        m_lastAimUpdate = 0;
+    }
     m_spectating.m_nMode = 0;
     m_spectating.m_nType = SPEC_TYPE_NONE;
     m_spectating.m_nObject = -1;
     m_spectating.m_bProcessed = FALSE;
 
     if (!enable)
+    {
+        if (!m_bIsActive && g_netGame)
+        {
+            m_classSelection.m_bEnableAfterDeath = FALSE;
+            g_netGame->SpawnScreen();
+            RequestClass(m_classSelection.m_nSelected);
+        }
         return;
+    }
 
     render::ShowClassSelection(false);
 
@@ -714,11 +793,60 @@ bool CLocalPlayer::DefineCameraTarget(CameraTarget* info)
     if (!info)
         return false;
     ResetCameraTarget(*info);
-    return false;
+    if (!g_netGame || !g_netGame->m_pPools)
+        return false;
+    const auto* aim = AimStuff::GetAim();
+    if (!aim || !FiniteVector(aim->source) || !FiniteVector(aim->front))
+        return false;
+    const CVector origin = aim->source + aim->front;
+    const CVector end = aim->source + aim->front * 70.0f;
+    auto find = [&](auto* pool, int count, float range, float scale, const CVector& target, auto get) -> ID {
+        ID result = INVALID_ID;
+        float nearest = 100000.0f;
+        if (!pool)
+            return result;
+        for (int id = 0; id < count; ++id)
+        {
+            auto* entity = get(pool, static_cast<ID>(id));
+            if (!entity || !entity->IsValid())
+                continue;
+            const float distance = entity->GetDistanceToPoint(origin);
+            if (entity->GetDistanceToCamera() < range && distance < nearest && entity->IntersectsCameraRay(origin, target, scale))
+            {
+                nearest = distance;
+                result = static_cast<ID>(id);
+            }
+        }
+        return result;
+    };
+    auto* pools = g_netGame->m_pPools;
+    CVector target = CCamera::TraceTarget(origin, end, false, false);
+    info->m_nObject = find(pools->m_pObject, CObjectPool::MAX_OBJECTS, 40.0f, 1.0f, target, [](auto* pool, ID id) {
+        auto* object = pool->Get(id);
+        return object && object->GetModelIndex() != 19300 ? object : nullptr;
+    });
+    target = CCamera::TraceTarget(origin, end, false, true);
+    info->m_nVehicle = find(pools->m_pVehicle, CVehiclePool::MAX_VEHICLES, 40.0f, 1.0f, target, [](auto* pool, ID id) {
+        return pool->Get(id);
+    });
+    target = CCamera::TraceTarget(origin, end, true, true);
+    info->m_nPlayer = find(pools->m_pPlayer, CPlayerPool::MAX_PLAYERS, 20.0f, 1.5f, target, [](auto* pool, ID id) {
+        auto* player = pool->GetPlayer(id);
+        return player ? player->m_pPed : nullptr;
+    });
+    info->m_nActor = find(pools->m_pActor, CActorPool::MAX_ACTORS, 20.0f, 1.5f, target, [](auto* pool, ID id) {
+        return pool->Get(id);
+    });
+    return true;
 }
 
 void CLocalPlayer::UpdateCameraTarget()
 {
+    if (!g_netGame || !g_netGame->m_bUpdateCameraTarget)
+    {
+        ResetCameraTarget(m_cameraTarget);
+        return;
+    }
     const TICK now = GetTickCount();
     if (now - m_lastCameraTargetUpdate <= CAMERA_TARGET_UPDATE_MS)
         return;
@@ -728,13 +856,33 @@ void CLocalPlayer::UpdateCameraTarget()
     DefineCameraTarget(&target);
     if (std::memcmp(&target, &m_cameraTarget, sizeof(target)) != 0)
     {
-        m_cameraTarget = target;
+        if (g_netGame->CameraTarget(target.m_nObject, target.m_nVehicle, target.m_nPlayer, target.m_nActor))
+            m_cameraTarget = target;
     }
     m_lastCameraTargetUpdate = now;
 }
 
 void CLocalPlayer::DrawCameraTargetLabel()
-{}
+{
+    if (!g_label || !g_netGame || !g_netGame->m_pPools)
+        return;
+    auto draw = [](CEntity* entity, ID id, const char* type) {
+        if (id == INVALID_ID || !entity || !entity->IsValid())
+            return;
+        CVector position = PositionOf(entity);
+        char text[80];
+        std::snprintf(text, sizeof(text), "CAMERA_TARGET_TYPE_%s: ID(%u)", type, static_cast<unsigned>(id));
+        g_label->Draw(&position, text, 0xFFD47B75, TRUE, false);
+    };
+    auto* pools = g_netGame->m_pPools;
+    g_label->Begin();
+    draw(pools->m_pObject ? pools->m_pObject->Get(m_cameraTarget.m_nObject) : nullptr, m_cameraTarget.m_nObject, "OBJECT");
+    draw(pools->m_pVehicle ? pools->m_pVehicle->Get(m_cameraTarget.m_nVehicle) : nullptr, m_cameraTarget.m_nVehicle, "VEHICLE");
+    auto* player = pools->m_pPlayer ? pools->m_pPlayer->GetPlayer(m_cameraTarget.m_nPlayer) : nullptr;
+    draw(player ? player->m_pPed : nullptr, m_cameraTarget.m_nPlayer, "PLAYER");
+    draw(pools->m_pActor ? pools->m_pActor->Get(m_cameraTarget.m_nActor) : nullptr, m_cameraTarget.m_nActor, "ACTOR");
+    g_label->End();
+}
 
 void CLocalPlayer::SendUnoccupiedData(ID vehicleId, char seat)
 {
@@ -756,8 +904,8 @@ void CLocalPlayer::SendUnoccupiedData(ID vehicleId, char seat)
     vehicle->GetTurnSpeed(&data.m_turnSpeed);
     data.m_fHealth = vehicle->GetHealth();
 
-    if (!FiniteVector(data.m_roll) || !FiniteVector(data.m_direction) || !FiniteVector(data.m_position) ||
-        !FiniteVector(data.m_speed) || !FiniteVector(data.m_turnSpeed) || !std::isfinite(data.m_fHealth))
+    if (!FiniteVector(data.m_roll) || !FiniteVector(data.m_direction) || !FiniteVector(data.m_position) || !FiniteVector(data.m_speed) || !FiniteVector(data.m_turnSpeed) ||
+        !std::isfinite(data.m_fHealth))
         return;
 
     if (SendSyncPacket(ID_UNOCCUPIED_SYNC, data))
@@ -928,12 +1076,51 @@ void CLocalPlayer::SendPassengerData()
 }
 
 void CLocalPlayer::WastedNotification()
-{}
+{
+    if (!g_netGame || !m_pPed || !m_pPed->HasNativePed())
+        return;
+
+    std::uint8_t reason = 0xFF;
+    ID responsible = INVALID_ID;
+    void* source{};
+    reason = m_pPed->GetDeathReason(source);
+    {
+        const bool directSource = reason < 0x2B || reason == 0x32 || reason == 0x33;
+        const bool vehicleSource = reason == 0x31 || reason == 0x36;
+        const bool knownSource = source && g_netGame->GetPlayerPool();
+        bool recognized = reason == 0x35;
+        if (knownSource && (directSource || vehicleSource))
+        {
+            auto* players = g_netGame->GetPlayerPool();
+            if (directSource)
+                responsible = players->Find(source);
+            if (responsible != INVALID_ID)
+                recognized = true;
+            else
+            {
+                auto* vehicles = g_netGame->GetVehiclePool();
+                const auto vehicleId = vehicles ? vehicles->Find(source) : CVehiclePool::INVALID_ID;
+                auto* vehicle = vehicleId != CVehiclePool::INVALID_ID ? vehicles->Get(vehicleId) : nullptr;
+                if (vehicle && vehicle->HasNativeVehicle() && vehicle->GetNativeVehicleHandle() == source)
+                {
+                    responsible = players->Find(vehicle->GetDriver());
+                    recognized = responsible != INVALID_ID;
+                }
+                else if (reason == 0x36)
+                    recognized = true;
+            }
+        }
+        if (!recognized)
+            reason = 0xFF;
+    }
+
+    g_netGame->DeathNotification(reason, responsible);
+}
 
 void CLocalPlayer::RequestClass(int id)
 {
     if (g_netGame)
-        g_netGame->RequestClass(static_cast<std::uint16_t>(id));
+        g_netGame->RequestClass(id);
 }
 
 void CLocalPlayer::ChangeInterior(char id)
@@ -943,8 +1130,11 @@ void CLocalPlayer::ChangeInterior(char id)
         m_pPed->LinkToInterior(id, TRUE);
 }
 
-void CLocalPlayer::Chat(const char*)
-{}
+void CLocalPlayer::Chat(const char* text)
+{
+    if (text && g_netGame)
+        g_netGame->ChatMessage(text);
+}
 
 void CLocalPlayer::EnterVehicle(int vehicle, BOOL passenger)
 {
@@ -990,7 +1180,19 @@ void CLocalPlayer::ExitVehicle(int vehicle)
 }
 
 void CLocalPlayer::SendStats()
-{}
+{
+    if (!g_game || !g_netGame || !m_pPed || !m_pPed->HasNativePed() || g_netGame->GetState() != CNetGame::GAME_MODE_CONNECTED)
+        return;
+    auto* client = g_netGame->GetRakClient();
+    if (!client)
+        return;
+
+    RakNet::BitStream bs;
+    bs.Write(static_cast<std::uint8_t>(ID_STATS_UPDATE));
+    bs.Write(static_cast<std::int32_t>(g_game->GetPlayerMoney()));
+    bs.Write(static_cast<std::int32_t>(m_pPed->GetDrunkLevel()));
+    client->Send(&bs, HIGH_PRIORITY, UNRELIABLE, 0);
+}
 
 void CLocalPlayer::UpdateVehicleDamage(ID vehicleId)
 {
@@ -1014,12 +1216,10 @@ void CLocalPlayer::UpdateVehicleDamage(ID vehicleId)
         return;
     }
 
-    if (m_damage.m_nBumper == panels && m_damage.m_nDoor == doors &&
-        m_damage.m_bLight == lights && m_damage.m_bWheel == tires)
+    if (m_damage.m_nBumper == panels && m_damage.m_nDoor == doors && m_damage.m_bLight == lights && m_damage.m_bWheel == tires)
         return;
 
-    if (!g_netGame->VehicleDamaged(vehicleId, static_cast<std::uint32_t>(panels),
-                                   static_cast<std::uint32_t>(doors), lights, tires))
+    if (!g_netGame->VehicleDamaged(vehicleId, static_cast<std::uint32_t>(panels), static_cast<std::uint32_t>(doors), lights, tires))
         return;
 
     m_damage.m_nBumper = panels;
@@ -1030,12 +1230,11 @@ void CLocalPlayer::UpdateVehicleDamage(ID vehicleId)
 
 void CLocalPlayer::NextClass()
 {
-    if (!g_game || !g_netGame || !g_netGame->m_nClassesAvailable || !m_classSelection.m_bIsActive ||
-        !m_bClearedToSpawn || m_classSelection.m_bWaitingForSpawnRequestReply || GetTickCount() - m_initialSelectionTick < 2000 ||
-        GetTickCount() - m_lastSelectionTick <= 250)
+    if (!g_game || !g_netGame || !g_netGame->m_nClassesAvailable || !m_classSelection.m_bIsActive || !m_bClearedToSpawn || m_classSelection.m_bWaitingForSpawnRequestReply ||
+        GetTickCount() - m_initialSelectionTick < 2000 || GetTickCount() - m_lastSelectionTick <= 250)
         return;
     const int next = (m_classSelection.m_nSelected + 1) % static_cast<int>(g_netGame->m_nClassesAvailable);
-    if (!g_netGame->RequestClass(static_cast<std::uint16_t>(next)))
+    if (!g_netGame->RequestClass(next))
         return;
     m_classSelection.m_nSelected = next;
     m_bClearedToSpawn = FALSE;
@@ -1049,12 +1248,11 @@ void CLocalPlayer::NextClass()
 
 void CLocalPlayer::PrevClass()
 {
-    if (!g_game || !g_netGame || !g_netGame->m_nClassesAvailable || !m_classSelection.m_bIsActive ||
-        !m_bClearedToSpawn || m_classSelection.m_bWaitingForSpawnRequestReply || GetTickCount() - m_initialSelectionTick < 2000 ||
-        GetTickCount() - m_lastSelectionTick <= 250)
+    if (!g_game || !g_netGame || !g_netGame->m_nClassesAvailable || !m_classSelection.m_bIsActive || !m_bClearedToSpawn || m_classSelection.m_bWaitingForSpawnRequestReply ||
+        GetTickCount() - m_initialSelectionTick < 2000 || GetTickCount() - m_lastSelectionTick <= 250)
         return;
     const int previous = m_classSelection.m_nSelected <= 0 ? static_cast<int>(g_netGame->m_nClassesAvailable) - 1 : m_classSelection.m_nSelected - 1;
-    if (!g_netGame->RequestClass(static_cast<std::uint16_t>(previous)))
+    if (!g_netGame->RequestClass(previous))
         return;
     m_classSelection.m_nSelected = previous;
     m_bClearedToSpawn = FALSE;
@@ -1072,8 +1270,7 @@ void CLocalPlayer::ProcessClassSelection()
         return;
     if (GetTickCount() - m_lastSelectionTick > 1000 && m_classSelection.m_bWaitingForSpawnRequestReply)
         m_classSelection.m_bWaitingForSpawnRequestReply = FALSE;
-    if (!g_game || CGame::IsPaused() || GetTickCount() - m_initialSelectionTick < 2000 ||
-        (g_input && g_input->IsEnabled()) || (g_dialog && g_dialog->IsActive()))
+    if (!g_game || CGame::IsPaused() || GetTickCount() - m_initialSelectionTick < 2000 || (g_input && g_input->IsEnabled()) || (g_dialog && g_dialog->IsActive()))
         return;
     if (GetAsyncKeyState(VK_SHIFT) & 0x8000)
         RequestSpawn();
@@ -1085,7 +1282,52 @@ void CLocalPlayer::ProcessClassSelection()
 
 void CLocalPlayer::UpdateWeapons()
 {
-    // ABI placeholder only.
+    if (!g_netGame || !m_pPed || !m_pPed->HasNativePed() || g_netGame->GetState() != CNetGame::GAME_MODE_CONNECTED)
+        return;
+    const auto* pools = g_netGame->m_pPools;
+    void* target = m_pPed->GetTargetEntity();
+    const ID playerId = target && pools && pools->m_pPlayer ? pools->m_pPlayer->Find(target) : INVALID_ID;
+    const ID actorId = target && pools && pools->m_pActor ? pools->m_pActor->Find(target) : INVALID_ID;
+    ID oldPlayer{}, oldActor{};
+    std::memcpy(&oldPlayer, m_weaponsData.data, sizeof(oldPlayer));
+    std::memcpy(&oldActor, m_weaponsData.data + 2, sizeof(oldActor));
+    const auto slot = m_pPed->GetWeaponSlot();
+    const TICK now = GetTickCount();
+    if (playerId == oldPlayer && actorId == oldActor && slot == m_weaponsData.data[4] && now - m_lastWeaponsUpdate < 100)
+        return;
+
+    RakNet::BitStream bs;
+    bs.Write(static_cast<std::uint8_t>(ID_WEAPONS_UPDATE));
+    bs.Write(playerId);
+    bs.Write(actorId);
+    auto next = m_weaponsData;
+    std::memcpy(next.data, &playerId, sizeof(playerId));
+    std::memcpy(next.data + 2, &actorId, sizeof(actorId));
+    next.data[4] = slot;
+    m_weaponsData.data[4] = slot;
+    bool changed = playerId != oldPlayer || actorId != oldActor;
+    for (std::uint8_t index = 0; index < 13; ++index)
+    {
+        int weapon{};
+        std::uint32_t ammo{}, previousAmmo{};
+        if (!m_pPed->GetWeaponData(index, weapon, ammo))
+            return;
+        std::memcpy(&previousAmmo, m_weaponsData.data + 18 + index * 4, sizeof(previousAmmo));
+        if (weapon == m_weaponsData.data[5 + index] && ammo == previousAmmo)
+            continue;
+        next.data[5 + index] = static_cast<std::uint8_t>(weapon);
+        std::memcpy(next.data + 18 + index * 4, &ammo, sizeof(ammo));
+        bs.Write(index);
+        bs.Write(static_cast<std::uint8_t>(weapon));
+        bs.Write(static_cast<std::uint16_t>(ammo));
+        changed = true;
+    }
+    auto* client = g_netGame->GetRakClient();
+    if (changed && client && client->Send(&bs, HIGH_PRIORITY, UNRELIABLE, 0))
+    {
+        m_weaponsData = next;
+        m_lastWeaponsUpdate = now;
+    }
 }
 
 void CLocalPlayer::ProcessSpectating()
@@ -1100,9 +1342,44 @@ void CLocalPlayer::ProcessSpectating()
     if (!camera)
         return;
 
+    // spectator sync uses camera position, not the hidden player's position.
     if (m_pPed && m_pPed->HasNativePed())
     {
-        CMatrix matrix;
+        const TICK now = GetTickCount();
+        const auto rate = static_cast<TICK>(std::max(1, GetOnfootSendRate()));
+        if (now - m_lastSpecUpdate > rate)
+        {
+            Synchronization::SpectatorData data{};
+            short leftStickX{}, leftStickY{};
+            data.m_controllerState.m_value = m_pPed->GetKeys(&leftStickX, &leftStickY);
+            data.m_controllerState.m_sLeftStickX = leftStickX;
+            data.m_controllerState.m_sLeftStickY = leftStickY;
+
+            CMatrix matrix = CMatrix::Unity();
+            camera->GetMatrix(&matrix);
+            data.m_position = matrix.GetPosition();
+            if (FiniteVector(data.m_position) && SendSyncPacket(ID_SPECTATOR_SYNC, data))
+                m_lastSpecUpdate = now;
+        }
+        if (now - m_lastAimUpdate > rate * 2)
+            SendAimData();
+    }
+
+    if (m_spectating.m_nType == SPEC_TYPE_PLAYER)
+    {
+        auto* playerPool = g_netGame ? g_netGame->GetPlayerPool() : nullptr;
+        auto* remote = playerPool ? playerPool->GetPlayer(static_cast<ID>(m_spectating.m_nObject)) : nullptr;
+        if (!remote || !remote->m_pPed || !remote->m_pPed->HasNativePed() || remote->m_nState == CRemotePlayer::PLAYER_STATE_WASTED)
+        {
+            m_spectating.m_nType = SPEC_TYPE_NONE;
+            m_spectating.m_nObject = -1;
+            m_spectating.m_bProcessed = FALSE;
+        }
+    }
+
+    if (m_pPed && m_pPed->HasNativePed())
+    {
+        CMatrix matrix = CMatrix::Unity();
         camera->GetMatrix(&matrix);
         auto position = matrix.GetPosition();
         position.z += 20.0f;
@@ -1142,26 +1419,26 @@ void CLocalPlayer::ProcessSpectating()
     }
 }
 
-void CLocalPlayer::SendTakeDamage(int, float, int, int)
+void CLocalPlayer::SendTakeDamage(int id, float damage, int type, int bodyPart)
 {
-    // ABI placeholder only.
+    if (g_netGame && id >= 0 && id <= INVALID_ID && std::isfinite(damage) && damage >= 0.0f && type >= 0 && bodyPart >= 0)
+        g_netGame->GiveTakeDamage(true, static_cast<ID>(id), damage, static_cast<std::uint32_t>(type), static_cast<std::uint32_t>(bodyPart));
 }
 
-void CLocalPlayer::SendGiveDamage(int, float, int, int)
+void CLocalPlayer::SendGiveDamage(int id, float damage, int type, int bodyPart)
 {
-    // ABI placeholder only.
+    if (g_netGame && id >= 0 && id <= INVALID_ID && std::isfinite(damage) && damage >= 0.0f && type >= 0 && bodyPart >= 0)
+        g_netGame->GiveTakeDamage(false, static_cast<ID>(id), damage, static_cast<std::uint32_t>(type), static_cast<std::uint32_t>(bodyPart));
 }
 
 bool CLocalPlayer::ProcessUnoccupiedSync(ID vehicleId, CVehicle* vehicle)
 {
-    if (!vehicle || vehicleId >= CVehiclePool::MAX_VEHICLES || !vehicle->HasNativeVehicle() ||
-        !m_pPed || !m_pPed->HasNativePed() || m_pPed->IsDead() || !m_bIsActive || m_bDoesSpectating ||
-        !g_netGame || g_netGame->GetState() != CNetGame::GAME_MODE_CONNECTED || vehicle->HasPlayerDriver())
+    if (!vehicle || vehicleId >= CVehiclePool::MAX_VEHICLES || !vehicle->HasNativeVehicle() || !m_pPed || !m_pPed->HasNativePed() || m_pPed->IsDead() || !m_bIsActive ||
+        m_bDoesSpectating || !g_netGame || g_netGame->GetState() != CNetGame::GAME_MODE_CONNECTED || vehicle->HasPlayerDriver())
         return false;
 
     const float distance = vehicle->GetDistanceToLocalPlayer();
-    if (vehicle->IsTrainPart() || !std::isfinite(distance) || distance >= 90.0f ||
-        vehicle->IsStationary() || vehicle->GetTractor())
+    if (vehicle->IsTrainPart() || !std::isfinite(distance) || distance >= 90.0f || vehicle->IsStationary() || vehicle->GetTractor())
     {
         vehicle->m_bUnoccupiedSync = FALSE;
         vehicle->m_bRemoteUnocSync = FALSE;
@@ -1183,8 +1460,7 @@ bool CLocalPlayer::ProcessUnoccupiedSync(ID vehicleId, CVehicle* vehicle)
         return false;
 
     const ID localId = playerPool->m_localInfo.m_nId;
-    const int lastId = std::min(CPlayerPool::MAX_PLAYERS - 1,
-        std::max(static_cast<int>(localId), playerPool->m_nLargestId));
+    const int lastId = std::min(CPlayerPool::MAX_PLAYERS - 1, std::max(static_cast<int>(localId), playerPool->m_nLargestId));
     float nearestDistance = 100000.0f;
     ID nearestId = CPlayerPool::INVALID_ID;
 
@@ -1217,7 +1493,7 @@ void CLocalPlayer::EnterVehicleAsPassenger()
     auto* vehiclePool = pools ? pools->m_pVehicle : nullptr;
 
     auto* menuPool = pools ? pools->m_pMenu : nullptr;
-    if (!m_pPed || !m_pPed->HasNativePed() || m_pPed->IsDead() || m_pPed->IsInVehicle() || !vehiclePool || m_bDoesSpectating || m_classSelection.m_bIsActive ||
+    if (!m_pPed || !m_pPed->HasNativePed() || m_pPed->IsDead() || m_pPed->GetVehicle() || !vehiclePool || m_bDoesSpectating || m_classSelection.m_bIsActive ||
         !(m_bIsActive || g_settings.m_bDebugMode) || game::inputhandler::game_input_blocked() || CGame::IsPaused() ||
         (menuPool && menuPool->m_nCurrent != CMenuPool::INVALID_MENU) || (!g_game || GetForegroundWindow() != static_cast<HWND>(g_game->GetWindowHandle())))
         return;
@@ -1226,13 +1502,13 @@ void CLocalPlayer::EnterVehicleAsPassenger()
     if (!vehicle || !vehicle->HasNativeVehicle() || !vehicle->m_handle || !(m_pPed->GetDistanceToEntity(vehicle) < 4.5f))
         return;
 
-    // Опкод 0x0470 (get_current_char_weapon): отримує ID поточної зброї персонажа
+    // РћРїРєРѕРґ 0x0470 (get_current_char_weapon): РѕС‚СЂРёРјСѓС” ID РїРѕС‚РѕС‡РЅРѕС— Р·Р±СЂРѕС— РїРµСЂСЃРѕРЅР°Р¶Р°
     int weapon = 0;
     constexpr scm::OpcodeInfo opGetWeapon{0x0470, "iv"};
     scm::ProcessCommand(&opGetWeapon, m_pPed->m_handle, &weapon);
     if (weapon == 46)
     {
-        // Опкод 0x01B9 (set_char_current_weapon): примусово змінює поточну зброю персонажа (в даному випадку скидає парашут/зброю на 0 - кулаки)
+        // РћРїРєРѕРґ 0x01B9 (set_char_current_weapon): РїСЂРёРјСѓСЃРѕРІРѕ Р·РјС–РЅСЋС” РїРѕС‚РѕС‡РЅСѓ Р·Р±СЂРѕСЋ РїРµСЂСЃРѕРЅР°Р¶Р° (РІ РґР°РЅРѕРјСѓ РІРёРїР°РґРєСѓ СЃРєРёРґР°С” РїР°СЂР°С€СѓС‚/Р·Р±СЂРѕСЋ РЅР° 0 - РєСѓР»Р°РєРё)
         constexpr scm::OpcodeInfo opSetWeapon{0x01B9, "ii"};
         scm::ProcessCommand(&opSetWeapon, m_pPed->m_handle, 0);
     }
@@ -1332,6 +1608,8 @@ void CLocalPlayer::Process()
     }
 
     const TICK now = GetTickCount();
+    if (!m_bIsActive && m_pPed->GetDrunkLevel() > 0)
+        m_pPed->SetDrunkLevel(0);
     if (m_bDoesSpectating)
     {
         ProcessSpectating();
@@ -1350,6 +1628,7 @@ void CLocalPlayer::Process()
         if (!m_bIsWasted)
         {
             WastedNotification();
+            m_pPed->SetDrunkLevel(0);
             m_bIsActive = FALSE;
             m_bIsWasted = TRUE;
         }
@@ -1359,8 +1638,7 @@ void CLocalPlayer::Process()
     const void* currentNativeVehicle = m_pPed->GetVehicle();
     auto* vehiclePool = g_netGame ? g_netGame->GetVehiclePool() : nullptr;
     const ID currentVehicleId = currentNativeVehicle && vehiclePool ? vehiclePool->Find(const_cast<void*>(currentNativeVehicle)) : INVALID_ID;
-    if (m_nLastVehicle != INVALID_ID && m_nLastVehicle != currentVehicleId &&
-        (currentVehicleId != INVALID_ID || m_nCurrentVehicle == m_nLastVehicle))
+    if (m_nLastVehicle != INVALID_ID && m_nLastVehicle != currentVehicleId && (currentVehicleId != INVALID_ID || m_nCurrentVehicle == m_nLastVehicle))
         ExitVehicle(m_nLastVehicle);
     if (currentVehicleId != INVALID_ID && m_nLastVehicle != currentVehicleId)
         EnterVehicle(currentVehicleId, m_pPed->IsPassenger());
@@ -1416,5 +1694,11 @@ void CLocalPlayer::Process()
         m_lastStatsUpdate = now;
         SendStats();
     }
+    m_pPed->ProcessDrunk();
+    if (m_pPed->DoesDancing())
+        m_pPed->ProcessDancing();
+    if (m_pPed->IsHoldingStuff())
+        m_pPed->ApplyStuff();
+    UpdateWeapons();
     UpdateCameraTarget();
 }

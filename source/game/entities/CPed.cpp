@@ -14,7 +14,9 @@
 #include "sync/AimStuff.h"
 
 #include <new>
+#include <array>
 #include <cmath>
+#include <cstdlib>
 
 namespace
 {
@@ -46,6 +48,10 @@ namespace
     constexpr scm::OpcodeInfo SET_CELLPHONE{0x0729, "ii"};
     constexpr scm::OpcodeInfo CREATE_PARTICLE{0x066A, "siffffffiv"};
     constexpr scm::OpcodeInfo DESTROY_PARTICLE{0x064C, "i"};
+    constexpr scm::OpcodeInfo CREATE_STUFF{0x0107, "ifffv"};
+    constexpr scm::OpcodeInfo ATTACH_STUFF{0x070A, "iifffiissi"};
+    constexpr scm::OpcodeInfo SET_DRUNK_VISUALS{0x052C, "ii"};
+    std::uint32_t g_lastDrunkSteer = 0;
 
     template <class T>
     T Read(const void* data, std::size_t offset)
@@ -174,9 +180,14 @@ CPed::CPed(int playerNumber, int model, CVector position, float rotation)
     NotifyPlayerPed(this);
 
     SetModelIndex(model);
+    if (!HasCurrentNativePed() || GetModelIndex() != model)
+    {
+        Destroy();
+        return;
+    }
     ForceRotation(rotation);
 
-    if (NativeValid(m_pGamePed))
+    if (HasCurrentNativePed())
     {
         CMatrix matrix = CMatrix::Unity();
         GetMatrix(&matrix);
@@ -188,35 +199,51 @@ CPed::CPed(int playerNumber, int model, CVector position, float rotation)
 
 CPed::~CPed()
 {
+    DropStuff();
     DeleteAllAccessories();
     DeleteArrow();
     StopUrinating();
 }
 
+bool CPed::HasCurrentNativePed() const
+{
+    // resolve the handle before touching the possibly freed native pointer
+    return m_handle && m_pGamePed && PedFromHandle(m_handle) == m_pGamePed && NativeValid(m_pGamePed);
+}
+
 void CPed::ResetPointers()
 {
-    const void* previous = m_pGamePed;
-    if (!m_nPlayerNumber)
+    if (m_nPlayerNumber != 0)
     {
-        m_pGamePed = LocalPed();
-        m_handle = PedHandleFromPointer(m_pGamePed);
+        // a remote ped may not adopt another native object with the same pool handle
+        if (!m_pGamePed || !m_handle || PedFromHandle(m_handle) != m_pGamePed)
+        {
+            if (m_pGameEntity)
+                DeleteAllAccessories();
+            m_pGameEntity = nullptr;
+            return;
+        }
+        m_pGameEntity = m_pGamePed;
+        return;
     }
-    else
-        m_pGamePed = PedFromHandle(m_handle);
-    if (previous != m_pGamePed)
+
+    void* native = LocalPed();
+    if (native != m_pGamePed)
         DeleteAllAccessories();
-    m_pGameEntity = m_pGamePed;
+    m_pGamePed = native;
+    m_handle = PedHandleFromPointer(native);
+    m_pGameEntity = native;
 }
 
 void CPed::SetInitialState()
 {
-    if (NativeValid(m_pGamePed))
+    if (HasCurrentNativePed())
         reinterpret_cast<void(__thiscall*)(void*, int)>(0x60CD20)(m_pGamePed, 0);
 }
 
 std::uint32_t CPed::GetVehicleRef() const
 {
-    if (!NativeValid(m_pGamePed))
+    if (!HasCurrentNativePed())
         return 0;
     return VehicleHandleFromPointer(Read<void*>(m_pGamePed, 0x58C));
 }
@@ -230,28 +257,28 @@ void CPed::DeleteArrow()
 
 BOOL CPed::IsOnScreen() const
 {
-    return NativeValid(m_pGamePed) && reinterpret_cast<bool(__thiscall*)(void*)>(0x534540)(m_pGamePed);
+    return HasCurrentNativePed() && reinterpret_cast<bool(__thiscall*)(void*)>(0x534540)(m_pGamePed);
 }
 
 float CPed::GetHealth() const
 {
-    return NativeValid(m_pGamePed) ? Read<float>(m_pGamePed, 0x540) : 0.0f;
+    return HasCurrentNativePed() ? Read<float>(m_pGamePed, 0x540) : 0.0f;
 }
 
 void CPed::SetHealth(float value)
 {
-    if (NativeValid(m_pGamePed))
+    if (HasCurrentNativePed())
         Write(m_pGamePed, 0x540, value);
 }
 
 float CPed::GetArmour() const
 {
-    return NativeValid(m_pGamePed) ? Read<float>(m_pGamePed, 0x548) : 0.0f;
+    return HasCurrentNativePed() ? Read<float>(m_pGamePed, 0x548) : 0.0f;
 }
 
 float CPed::GetAimZ() const
 {
-    if (!NativeValid(m_pGamePed))
+    if (!HasCurrentNativePed())
         return 0.0f;
     auto* playerData = Read<void*>(m_pGamePed, 0x480);
     return playerData ? Read<float>(playerData, 0x54) : 0.0f;
@@ -265,7 +292,7 @@ void CPed::SetAim(const AimStuff::Aim* aim)
 
 void CPed::SetAimZ(float value)
 {
-    if (!NativeValid(m_pGamePed) || !std::isfinite(value) || value < -100.0f || value > 100.0f)
+    if (!HasCurrentNativePed() || !std::isfinite(value) || value < -100.0f || value > 100.0f)
         return;
     if (auto* playerData = Read<void*>(m_pGamePed, 0x480))
         Write(playerData, 0x54, value);
@@ -273,40 +300,40 @@ void CPed::SetAimZ(float value)
 
 void CPed::SetArmour(float value)
 {
-    if (NativeValid(m_pGamePed))
+    if (HasCurrentNativePed())
         Write(m_pGamePed, 0x548, value);
 }
 
 int CPed::GetFlags() const
 {
-    return NativeValid(m_pGamePed) ? static_cast<int>(Read<std::uint32_t>(m_pGamePed, 0x46C)) : 0;
+    return HasCurrentNativePed() ? static_cast<int>(Read<std::uint32_t>(m_pGamePed, 0x46C)) : 0;
 }
 
 void CPed::SetFlags(int value)
 {
-    if (NativeValid(m_pGamePed))
+    if (HasCurrentNativePed())
         Write(m_pGamePed, 0x46C, static_cast<std::uint32_t>(value));
 }
 
 BOOL CPed::IsDead() const
 {
-    return !NativeValid(m_pGamePed) || GetHealth() <= 0.0f;
+    return !HasCurrentNativePed() || GetHealth() <= 0.0f;
 }
 
 char CPed::GetState() const
 {
-    return NativeValid(m_pGamePed) ? Read<char>(m_pGamePed, 0x530) : 0;
+    return HasCurrentNativePed() ? Read<char>(m_pGamePed, 0x530) : 0;
 }
 
 void CPed::SetState(char value)
 {
-    if (NativeValid(m_pGamePed))
+    if (HasCurrentNativePed())
         Write(m_pGamePed, 0x530, static_cast<std::uint32_t>(static_cast<std::uint8_t>(value)));
 }
 
 float CPed::GetRotation() const
 {
-    if (!NativeValid(m_pGamePed) || !PedFromHandle(m_handle))
+    if (!HasCurrentNativePed())
         return 0.0f;
 
     CMatrix matrix = CMatrix::Unity();
@@ -321,13 +348,13 @@ float CPed::GetRotation() const
 
 void CPed::ForceRotation(float value)
 {
-    if (NativeValid(m_pGamePed) && PedFromHandle(m_handle))
+    if (HasCurrentNativePed() && std::isfinite(value))
         SetNativeRotation(m_pGamePed, value);
 }
 
 void CPed::SetRotation(float value)
 {
-    if (!NativeValid(m_pGamePed) || !PedFromHandle(m_handle))
+    if (!HasCurrentNativePed() || !std::isfinite(value))
         return;
     SetNativeRotation(m_pGamePed, value);
     scm::ProcessCommand(&SET_ACTOR_Z_ANGLE, m_handle, static_cast<double>(value));
@@ -335,7 +362,7 @@ void CPed::SetRotation(float value)
 
 BOOL CPed::IsPassenger() const
 {
-    if (!NativeValid(m_pGamePed) || !InVehicle(m_pGamePed))
+    if (!HasCurrentNativePed() || !InVehicle(m_pGamePed))
         return FALSE;
 
     auto* vehicle = Read<void*>(m_pGamePed, 0x58C);
@@ -350,17 +377,17 @@ BOOL CPed::IsPassenger() const
 
 BOOL CPed::IsInVehicle() const
 {
-    return NativeValid(m_pGamePed) && InVehicle(m_pGamePed);
+    return HasCurrentNativePed() && InVehicle(m_pGamePed);
 }
 
 void* CPed::GetVehicle() const
 {
-    return NativeValid(m_pGamePed) ? Read<void*>(m_pGamePed, 0x58C) : nullptr;
+    return HasCurrentNativePed() ? Read<void*>(m_pGamePed, 0x58C) : nullptr;
 }
 
 float CPed::GetDistanceToEntity(const CEntity* entity) const
 {
-    if (!entity || !NativeValid(m_pGamePed) || !entity->IsValid())
+    if (!entity || !HasCurrentNativePed() || !entity->IsValid())
         return 10000.0f;
     CMatrix other = CMatrix::Unity();
     entity->GetMatrix(&other);
@@ -369,7 +396,7 @@ float CPed::GetDistanceToEntity(const CEntity* entity) const
 
 int CPed::GetVehicleSeatIndex() const
 {
-    if (!NativeValid(m_pGamePed) || GetState() != 0x32)
+    if (!HasCurrentNativePed() || GetState() != 0x32)
         return -1;
 
     auto* vehicle = Read<void*>(m_pGamePed, 0x58C);
@@ -385,7 +412,7 @@ int CPed::GetVehicleSeatIndex() const
 
 void CPed::PutIntoVehicle(std::uint32_t vehicleRef, int seat)
 {
-    if (!NativeValid(m_pGamePed) || !PedFromHandle(m_handle))
+    if (!HasCurrentNativePed() || seat < 0 || seat > 7)
         return;
     auto* vehicle = VehicleFromHandle(vehicleRef);
     if (!NativeValid(vehicle) || Read<float>(vehicle, 0x4C0) <= 0.0f)
@@ -399,7 +426,7 @@ void CPed::PutIntoVehicle(std::uint32_t vehicleRef, int seat)
 
 void CPed::EnterVehicle(std::uint32_t vehicleRef, BOOL asPassenger)
 {
-    if (!NativeValid(m_pGamePed) || !PedFromHandle(m_handle))
+    if (!HasCurrentNativePed())
         return;
     auto* vehicle = VehicleFromHandle(vehicleRef);
     if (!NativeValid(vehicle))
@@ -420,7 +447,7 @@ void CPed::EnterVehicle(std::uint32_t vehicleRef, BOOL asPassenger)
 
 void CPed::ExitVehicle()
 {
-    if (!NativeValid(m_pGamePed) || !InVehicle(m_pGamePed))
+    if (!HasCurrentNativePed() || !InVehicle(m_pGamePed))
         return;
     auto* vehicle = Read<void*>(m_pGamePed, 0x58C);
     if (!vehicle)
@@ -435,13 +462,13 @@ void CPed::ExitVehicle()
 
 void CPed::WarpFromVehicle(CVector putAt)
 {
-    if (NativeValid(m_pGamePed) && InVehicle(m_pGamePed))
+    if (HasCurrentNativePed() && std::isfinite(putAt.x) && std::isfinite(putAt.y) && std::isfinite(putAt.z) && InVehicle(m_pGamePed))
         scm::ProcessCommand(&WARP_ACTOR_FROM_CAR, m_handle, static_cast<double>(putAt.x), static_cast<double>(putAt.y), static_cast<double>(putAt.z));
 }
 
 void CPed::SetSpawnInfo(const CVector* position, float rotation)
 {
-    if (!position)
+    if (!position || !std::isfinite(position->x) || !std::isfinite(position->y) || !std::isfinite(position->z) || !std::isfinite(rotation))
         return;
     *reinterpret_cast<std::uint16_t*>(0xA4326C) = 0;
     *reinterpret_cast<CVector*>(0xA43318) = *position;
@@ -451,13 +478,13 @@ void CPed::SetSpawnInfo(const CVector* position, float rotation)
 
 void CPed::SetControllable(BOOL enable)
 {
-    if (!PedFromHandle(m_handle))
+    if (!HasCurrentNativePed())
         return;
 
     scm::ProcessCommand(&TOGGLE_PLAYER_CONTROLLABLE, static_cast<int>(m_nPlayerNumber), enable ? 1 : 0);
     scm::ProcessCommand(&LOCK_ACTOR, m_handle, enable ? 0 : 1);
 
-    if (enable && NativeValid(m_pGamePed) && !InVehicle(m_pGamePed))
+    if (enable && HasCurrentNativePed() && !InVehicle(m_pGamePed))
     {
         CMatrix matrix = CMatrix::Unity();
         GetMatrix(&matrix);
@@ -498,14 +525,15 @@ short CPed::GetKeys(short* leftStickX, short* leftStickY) const
     state.m_bPedWalk = keys.m_bPedWalk != 0;
     state.m_bShockButtonR = keys.ShockButtonR != 0;
 
-    const bool inVehicle = m_pGamePed && InVehicle(m_pGamePed);
+    const bool currentPed = HasCurrentNativePed();
+    const bool inVehicle = currentPed && InVehicle(m_pGamePed);
     state.m_bLeftShoulder2 = inVehicle && keys.LeftShoulder2 != 0;
     state.m_bRightShoulder1 = keys.RightShoulder1 != 0;
     state.m_bRightShoulder2 = inVehicle && keys.RightShoulder2 != 0;
     state.m_bButtonSquare = keys.ButtonSquare != 0;
 
     bool suppressEnter = false;
-    if (m_pGamePed && !inVehicle)
+    if (currentPed && !inVehicle)
     {
         auto* intelligence = Read<void*>(m_pGamePed, 0x47C);
         auto* task = intelligence ? Read<void*>(intelligence, 0x10) : nullptr;
@@ -515,12 +543,15 @@ short CPed::GetKeys(short* leftStickX, short* leftStickY) const
     state.m_bButtonCross = keys.ButtonCross != 0;
 
     bool suppressFire = false;
-    if (m_pGamePed)
+    if (currentPed)
     {
         const auto slot = Read<std::uint8_t>(m_pGamePed, 0x718);
-        const auto* weapon = static_cast<const std::uint8_t*>(m_pGamePed) + 0x5A0 + slot * 0x1C;
-        const int type = Read<int>(weapon, 0);
-        suppressFire = type > 15 && type != 46 && Read<int>(weapon, 0x0C) == 0;
+        if (slot < 13)
+        {
+            const auto* weapon = static_cast<const std::uint8_t*>(m_pGamePed) + 0x5A0 + slot * 0x1C;
+            const int type = Read<int>(weapon, 0);
+            suppressFire = type > 15 && type != 46 && Read<int>(weapon, 0x0C) == 0;
+        }
     }
     state.m_bButtonCircle = !suppressFire && keys.ButtonCircle != 0;
     state.m_bShockButtonL = keys.ShockButtonL != 0;
@@ -531,7 +562,7 @@ short CPed::GetKeys(short* leftStickX, short* leftStickY) const
 void CPed::SetKeys(short buttons, short leftStickX, short leftStickY)
 {
     bool suppressEnter = false;
-    if (NativeValid(m_pGamePed) && !InVehicle(m_pGamePed))
+    if (HasCurrentNativePed() && !InVehicle(m_pGamePed))
     {
         auto* intelligence = Read<void*>(m_pGamePed, 0x47C);
         auto* task = intelligence ? Read<void*>(intelligence, 0x10) : nullptr;
@@ -557,7 +588,7 @@ void CPed::SetKeys(short buttons, short leftStickX, short leftStickY)
     auto& now = pad->NewState;
     auto& old = pad->OldState;
     const auto bits = static_cast<std::uint16_t>(buttons);
-    const bool inVehicle = NativeValid(m_pGamePed) && InVehicle(m_pGamePed);
+    const bool inVehicle = HasCurrentNativePed() && InVehicle(m_pGamePed);
     axis(now.LeftStickX, old.LeftStickX, leftStickX);
     axis(now.LeftStickY, old.LeftStickY, leftStickY);
     button(now.LeftShoulder1, old.LeftShoulder1, bits & 1);
@@ -587,18 +618,33 @@ void CPed::SetPlayerStat(int index, std::uint16_t value)
 
 void* CPed::GetFloor() const
 {
-    return IsOnGround() ? GetContactEntity() : nullptr;
+    if (!HasCurrentNativePed() || InVehicle(m_pGamePed) || !DoesExist())
+        return nullptr;
+
+    CMatrix matrix = CMatrix::Unity();
+    GetMatrix(&matrix);
+    const CVector position = matrix.GetPosition();
+    if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z))
+        return nullptr;
+
+    const CVector from{position.x, position.y, position.z - 0.25f};
+    const CVector to{position.x, position.y, position.z - 1.75f};
+    std::array<float, 11> collision{};
+    void* entity = nullptr;
+    using ProcessLineOfSight = bool(__cdecl*)(const CVector&, const CVector&, void*, void**, bool, bool, bool, bool, bool, bool, bool, bool);
+    reinterpret_cast<ProcessLineOfSight>(0x56BA00)(from, to, collision.data(), &entity, false, true, false, true, false, false, false, false);
+    return entity;
 }
 
 void CPed::HandsUp()
 {
-    if (NativeValid(m_pGamePed) && !InVehicle(m_pGamePed) && DoesExist() && PedFromHandle(m_handle))
+    if (HasCurrentNativePed() && !InVehicle(m_pGamePed) && DoesExist())
         scm::ProcessCommand(&HANDS_UP, m_handle, -2);
 }
 
 BOOL CPed::DoesHandsUp() const
 {
-    if (!NativeValid(m_pGamePed) || InVehicle(m_pGamePed) || !DoesExist() || !PedFromHandle(m_handle))
+    if (!HasCurrentNativePed() || InVehicle(m_pGamePed) || !DoesExist())
         return FALSE;
     auto* taskManager = Read<void*>(m_pGamePed, 0x47C);
     auto* task = taskManager ? Read<void*>(taskManager, 0x10) : nullptr;
@@ -607,13 +653,13 @@ BOOL CPed::DoesHandsUp() const
 
 void CPed::HoldObject(int model)
 {
-    if (NativeValid(m_pGamePed) && DoesExist() && PedFromHandle(m_handle))
+    if (HasCurrentNativePed() && DoesExist() && PedFromHandle(m_handle))
         reinterpret_cast<void(__thiscall*)(void*, int, int)>(0x5E4390)(m_pGamePed, model, 1);
 }
 
 void CPed::Extinguish()
 {
-    if (!NativeValid(m_pGamePed))
+    if (!HasCurrentNativePed())
         return;
     if (auto* fire = Read<void*>(m_pGamePed, 0x730))
         reinterpret_cast<void(__thiscall*)(void*)>(0x5393F0)(fire);
@@ -628,13 +674,13 @@ void CPed::Extinguish()
 
 void CPed::SetWalkStyle(const char* name)
 {
-    if (NativeValid(m_pGamePed) && name)
+    if (HasCurrentNativePed() && name)
         scm::ProcessCommand(&SET_WALK_STYLE, m_handle, name);
 }
 
 void CPed::SetFightingStyle(int style)
 {
-    if (!NativeValid(m_pGamePed))
+    if (!HasCurrentNativePed())
         return;
 
     // same set the game accepts: standard, boxing, kung fu, knee head, grab kick, elbows
@@ -659,26 +705,149 @@ void CPed::SetFightingStyle(int style)
 
 int CPed::GetFightingStyle() const
 {
-    return NativeValid(m_pGamePed) ? Read<std::uint8_t>(m_pGamePed, 0x72D) : 0;
+    return HasCurrentNativePed() ? Read<std::uint8_t>(m_pGamePed, 0x72D) : 0;
+}
+
+int CPed::GetStuff()
+{
+    return m_stuff.m_nType;
+}
+
+void CPed::DropStuff()
+{
+    if (!m_stuff.m_object && !m_stuff.m_nType)
+        return;
+
+    if (HasCurrentNativePed())
+    {
+        if (m_stuff.m_object)
+            scm::ProcessCommand(&ATTACH_STUFF, m_handle, m_stuff.m_object, 0.0, 0.0, 0.0, 6, 16, "NULL", "NULL", 0);
+        CMatrix matrix = CMatrix::Unity();
+        GetMatrix(&matrix);
+        Teleport(matrix.GetPosition());
+    }
+    m_stuff.m_object = 0;
+    m_stuff.m_nType = 0;
+}
+
+void CPed::GiveStuff(int type)
+{
+    if (!HasCurrentNativePed() || !g_game || type < 1 || type > 4 || IsInVehicle())
+        return;
+
+    constexpr int models[]{0, 1543, 1486, 1546, 1485};
+    const int model = models[type];
+    if (!g_game->IsModelAvailable(model))
+    {
+        g_game->RequestModel(model, 2);
+        g_game->LoadRequestedModels();
+        if (!g_game->IsModelAvailable(model))
+            return;
+    }
+
+    DropStuff();
+    CMatrix matrix = CMatrix::Unity();
+    GetMatrix(&matrix);
+    const auto position = matrix.GetPosition();
+    scm::ProcessCommand(&CREATE_STUFF, model, static_cast<double>(position.x), static_cast<double>(position.y), static_cast<double>(position.z), &m_stuff.m_object);
+    if (!m_stuff.m_object)
+        return;
+
+    const CVector offsets[]{CVector{}, CVector{0.05f, 0.03f, -0.3f}, CVector{0.05f, 0.03f, -0.05f}, CVector{0.04f, 0.1f, -0.02f}, CVector{}};
+    const auto offset = offsets[type];
+    scm::ProcessCommand(&ATTACH_STUFF, m_handle, m_stuff.m_object, static_cast<double>(offset.x), static_cast<double>(offset.y), static_cast<double>(offset.z), 6, 16, "NULL",
+                        "NULL", -1);
+    m_stuff.m_nType = type;
+}
+
+int CPed::ApplyStuff()
+{
+    if (!IsHoldingStuff() || !HasCurrentNativePed() || !DoesExist())
+        return 0;
+    SetArmedWeapon(0);
+    const auto* keys = KeyStuff::GetInternalKeys();
+    if (m_nPlayerNumber || !keys || !keys->NewState.ButtonCircle || PerformingCustomAnimation())
+        return 0;
+
+    if (m_stuff.m_nType == 4)
+        PerformAnimation("smkcig_prtl", "GANGS", 700.0f, 0, 0, 0, 0, 2750);
+    else
+    {
+        const int stat = GetStat();
+        PerformAnimation(stat == 5 || stat == 22 ? "dnk_stndF_loop" : "dnk_stndM_loop", "BAR", 4.0f, 0, 0, 0, 0, -1);
+        if (m_stuff.m_nType != 3)
+            SetDrunkLevel(GetDrunkLevel() + 1250);
+    }
+    return 1;
+}
+
+void CPed::ProcessDrunk()
+{
+    if (m_nPlayerNumber || !HasCurrentNativePed())
+        return;
+    const int level = GetDrunkLevel();
+    const int effect = level > 2000 ? std::clamp(static_cast<int>(level * 0.02f), 0, 250) : 0;
+    scm::ProcessCommand(&SET_DRUNK_VISUALS, 0, effect < 5 ? 0 : effect);
+
+    auto* vehicle = GetVehicle();
+    const auto now = GetTickCount();
+    if (level > 2000 && IsInVehicle() && !IsPassenger() && vehicle && (g_lastDrunkSteer == 0 || now - g_lastDrunkSteer > 200))
+    {
+        const int random = std::rand() % 40;
+        float delta = 0.0f;
+        if (random > 30)
+            delta = level < 5000 ? 0.012f : 0.015f;
+        else if (random >= 20)
+            delta = level < 5000 ? -0.012f : -0.015f;
+        if (std::fabs(Read<float>(vehicle, 0x44)) > 0.05f || std::fabs(Read<float>(vehicle, 0x48)) > 0.05f)
+            Write(vehicle, 0x58, Read<float>(vehicle, 0x58) + delta);
+        g_lastDrunkSteer = now;
+    }
+    if (level > 0)
+        --m_stuff.m_nDrunkLevel;
+}
+
+int CPed::GetDrunkLevel()
+{
+    return m_stuff.m_nDrunkLevel;
+}
+
+void CPed::SetDrunkLevel(int level)
+{
+    m_stuff.m_nDrunkLevel = std::clamp(level, 0, 50000);
 }
 
 void CPed::PerformAnimation(const char* name, const char* file, float frameDelta, int loop, int lockX, int lockY, int lockF, int time)
 {
-    if (!NativeValid(m_pGamePed) || !PedFromHandle(m_handle) || !name || !file)
+    if (!HasCurrentNativePed() || !g_game || !name || !*name || !file || !*file || !std::isfinite(frameDelta))
         return;
-    scm::ProcessCommand(&PERFORM_ANIMATION, m_handle, name, file, static_cast<double>(frameDelta), loop, lockX, lockY, lockF, time);
+
+    if (_stricmp(file, "SEX") != 0 && !g_game->IsAnimationLoaded(file))
+    {
+        g_game->RequestAnimation(file);
+        if (!g_game->IsAnimationLoaded(file))
+        {
+            for (int attempt = 0; attempt < 15 && !g_game->IsAnimationLoaded(file); ++attempt)
+                Sleep(1);
+            if (!g_game->IsAnimationLoaded(file))
+                return;
+        }
+    }
+
+    if (HasCurrentNativePed())
+        scm::ProcessCommand(&PERFORM_ANIMATION, m_handle, name, file, static_cast<double>(frameDelta), loop, lockX, lockY, lockF, time);
 }
 
 void CPed::ClearTasks()
 {
-    if (!NativeValid(m_pGamePed) || !PedFromHandle(m_handle))
+    if (!HasCurrentNativePed())
         return;
     scm::ProcessCommand(&CLEAR_TASKS, m_handle);
 }
 
 void CPed::LinkToInterior(char id, BOOL refresh)
 {
-    if (!NativeValid(m_pGamePed))
+    if (!HasCurrentNativePed())
         return;
     const int interior = static_cast<std::uint8_t>(id);
     if (m_nPlayerNumber == 0)
@@ -700,12 +869,12 @@ void CPed::LinkToInterior(char id, BOOL refresh)
 
 BOOL CPed::IsOnGround() const
 {
-    return NativeValid(m_pGamePed) && (Read<std::uint8_t>(m_pGamePed, 0x46C) & 3) != 0;
+    return HasCurrentNativePed() && (Read<std::uint8_t>(m_pGamePed, 0x46C) & 3) != 0;
 }
 
 void CPed::ResetDamageEntity()
 {
-    if (!NativeValid(m_pGamePed))
+    if (!HasCurrentNativePed())
         return;
     Write<std::uint32_t>(m_pGamePed, 0x764, 0);
     Write<std::uint32_t>(m_pGamePed, 0x760, 0xFF);
@@ -713,17 +882,17 @@ void CPed::ResetDamageEntity()
 
 void* CPed::GetContactEntity() const
 {
-    return NativeValid(m_pGamePed) ? Read<void*>(m_pGamePed, 0x584) : nullptr;
+    return HasCurrentNativePed() ? Read<void*>(m_pGamePed, 0x584) : nullptr;
 }
 
 void* CPed::GetContactVehicle() const
 {
-    return NativeValid(m_pGamePed) ? Read<void*>(m_pGamePed, 0x568) : nullptr;
+    return HasCurrentNativePed() ? Read<void*>(m_pGamePed, 0x568) : nullptr;
 }
 
 int CPed::GetStat() const
 {
-    if (!NativeValid(m_pGamePed))
+    if (!HasCurrentNativePed())
         return -1;
 
     return ModelInfo::GetPedStat(Read<std::uint16_t>(m_pGamePed, 0x22));
@@ -731,7 +900,7 @@ int CPed::GetStat() const
 
 BOOL CPed::PerformingCustomAnimation() const
 {
-    if (!NativeValid(m_pGamePed) || !DoesExist())
+    if (!HasCurrentNativePed() || !DoesExist())
         return FALSE;
     auto* taskManager = Read<void*>(m_pGamePed, 0x47C);
     return taskManager && Read<void*>(taskManager, 0x10) != nullptr;
@@ -743,6 +912,7 @@ void CPed::StartDancing(int style)
         return;
     m_bDoesDancing = TRUE;
     m_nDanceStyle = static_cast<std::uint32_t>(style);
+    m_nLastDanceMove = static_cast<std::uint32_t>(-1);
 
     if (m_nPlayerNumber == 0)
     {
@@ -755,7 +925,8 @@ void CPed::StartDancing(int style)
 void CPed::StopDancing()
 {
     m_bDoesDancing = FALSE;
-    if (NativeValid(m_pGamePed))
+    m_nLastDanceMove = static_cast<std::uint32_t>(-1);
+    if (HasCurrentNativePed())
     {
         CMatrix matrix = CMatrix::Unity();
         GetMatrix(&matrix);
@@ -770,23 +941,79 @@ BOOL CPed::DoesDancing() const
 
 const char* CPed::GetAnimationForDance(int move) const
 {
-    if (!m_bDoesDancing || move < 0 || move > 3)
-        return nullptr;
-    static constexpr const char* animations[] = {"DANCE_B1", "DANCE_B2", "DANCE_B3", "DANCE_B4"};
-    return animations[move];
+    if (!m_bDoesDancing || move < 0 || move >= 16)
+        return "";
+
+    static constexpr const char* danceG[16] = {"DANCE_G1", "DANCE_G2",  "DANCE_G3",  "DANCE_G4",  "DANCE_G5",  "DANCE_G6",  "DANCE_G7",  "DANCE_G8",
+                                               "DANCE_G9", "DANCE_G10", "DANCE_G11", "DANCE_G12", "DANCE_G13", "DANCE_G14", "DANCE_G15", "DANCE_G16"};
+    static constexpr const char* danceB[16] = {"DANCE_B1", "DANCE_B2",  "DANCE_B3",  "DANCE_B4",  "DANCE_B5",  "DANCE_B6",  "DANCE_B7",  "DANCE_B8",
+                                               "DANCE_B9", "DANCE_B10", "DANCE_B11", "DANCE_B12", "DANCE_B13", "DANCE_B14", "DANCE_B15", "DANCE_B16"};
+    static constexpr const char* strip[16] = {"strip_A", "strip_B", "strip_C", "strip_D", "strip_E", "strip_F", "strip_G", "STR_A2B",
+                                              "STR_B2A", "STR_B2C", "STR_C1",  "STR_C2",  "STR_C2B", "STR_A2B", "STR_B2C", "STR_C2"};
+
+    if (m_nDanceStyle == 3)
+        return strip[move];
+    if (m_nDanceStyle > 3)
+        return "";
+
+    bool useG = GetStat() == 22;
+    if (HasCurrentNativePed())
+    {
+        const auto model = Read<std::uint16_t>(m_pGamePed, 0x22);
+        const auto* info = ModelInfo::GetRelocated(model);
+        if (info && Read<std::uintptr_t>(info, 0) == 0x85BDC0)
+            useG |= Read<int>(info, 0x28) == 5;
+    }
+    return useG ? danceG[move] : danceB[move];
 }
 
 void CPed::ProcessDancing()
 {
-    if (!m_bDoesDancing)
+    if (!m_bDoesDancing || m_nPlayerNumber != 0 || !HasCurrentNativePed() || !DoesExist())
         return;
-    if (m_nLastDanceMove > 3)
-        m_nLastDanceMove = 0;
+
+    static constexpr const char* libraries[] = {"WOP", "GFUNK", "RUNNINGMAN", "STRIP"};
+    static constexpr const char* loops[] = {"DANCE_LOOP", "DANCE_LOOP", "DANCE_LOOP", "STR_Loop_B"};
+    if (m_nDanceStyle >= 4)
+        return;
+
+    const auto* pad = KeyStuff::GetInternalKeys();
+    if (!pad)
+        return;
+
+    if (!PerformingCustomAnimation())
+        PerformAnimation(loops[m_nDanceStyle], libraries[m_nDanceStyle], 4.0f, 1, 0, 0, 0, 0);
+
+    const auto horizontal = pad->OldState.LeftStickX;
+    const auto vertical = pad->OldState.LeftStickY;
+    const bool sprint = pad->NewState.ButtonCross != 0;
+
+    int direction = -1;
+    if (vertical > 0)
+        direction = horizontal < 0 ? 4 : horizontal > 0 ? 5 : 0;
+    else if (vertical < 0)
+        direction = horizontal < 0 ? 6 : horizontal > 0 ? 7 : 1;
+    else if (horizontal < 0)
+        direction = 2;
+    else if (horizontal > 0)
+        direction = 3;
+
+    if (direction < 0)
+        return;
+
+    const int move = direction + (sprint ? 8 : 0);
+    if (m_nLastDanceMove == static_cast<std::uint32_t>(move))
+        return;
+
+    m_nLastDanceMove = static_cast<std::uint32_t>(move);
+    const char* animation = GetAnimationForDance(move);
+    if (*animation)
+        PerformAnimation(animation, libraries[m_nDanceStyle], 4.0f, 0, 0, 0, 0, 0);
 }
 
 void CPed::LookAt(const CVector& target)
 {
-    if (!m_pGamePed || !std::isfinite(target.x) || !std::isfinite(target.y) || !std::isfinite(target.z))
+    if (!HasCurrentNativePed() || !std::isfinite(target.x) || !std::isfinite(target.y) || !std::isfinite(target.z))
         return;
     using LookAtFn = void(__thiscall*)(void*, const char*, void*, void*, int, int, const CVector*, bool, float, int, int, bool);
     reinterpret_cast<LookAtFn>(0x618970)(reinterpret_cast<void*>(0xC15448), "FollowPedSA", m_pGamePed, nullptr, 2000, -1, &target, false, 0.1f, 500, 3, false);
@@ -795,6 +1022,8 @@ void CPed::LookAt(const CVector& target)
     if (!intelligence)
         return;
     auto* manager = reinterpret_cast<void*(__thiscall*)(void*, int)>(0x681810)(intelligence + 4, 5);
+    if (!manager)
+        return;
     auto* task = Read<void*>(manager, 8);
     if (!task || Read<std::int8_t>(task, 0x59) > 3)
         return;
@@ -807,6 +1036,8 @@ void CPed::LookAt(const CVector& target)
 
 void CPed::StopLooking()
 {
+    if (!HasCurrentNativePed())
+        return;
     auto* intelligence = Read<std::uint8_t*>(m_pGamePed, 0x47C);
     if (!intelligence)
         return;
@@ -821,7 +1052,7 @@ void CPed::StopLooking()
 
 void CPed::ApplyCommandTask(const char* name, int a3, int a4, int a5, int a6, int a7, int a8, int a9, int a10, int a11)
 {
-    if (!NativeValid(m_pGamePed) || !name || !*name)
+    if (!HasCurrentNativePed() || !name || !*name)
         return;
 
     using ApplyTaskFn = void(__thiscall*)(void*, const char*, void*, int, int, int, int, int, int, int, int, int);
@@ -830,7 +1061,7 @@ void CPed::ApplyCommandTask(const char* name, int a3, int a4, int a5, int a6, in
 
 void CPed::DestroyCommandTask()
 {
-    if (!NativeValid(m_pGamePed))
+    if (!HasCurrentNativePed())
         return;
 
     auto* intelligence = Read<std::uint8_t*>(m_pGamePed, 0x47C);
@@ -848,7 +1079,7 @@ void CPed::DestroyCommandTask()
 
 void CPed::EnableCellphone(BOOL enable)
 {
-    if (!NativeValid(m_pGamePed))
+    if (!HasCurrentNativePed())
         return;
     scm::ProcessCommand(&SET_CELLPHONE, m_handle, enable ? 1 : 0);
     m_bUsingCellphone = enable ? TRUE : FALSE;
@@ -861,7 +1092,7 @@ BOOL CPed::UsingCellphone() const
 
 void CPed::StartUrinating()
 {
-    if (!NativeValid(m_pGamePed) || m_bDoesUrinating)
+    if (!HasCurrentNativePed() || m_bDoesUrinating)
         return;
 
     CVector position{};
@@ -901,7 +1132,7 @@ void CPed::LoadShoppingDataSubsection(const char* name)
 void CPed::CreateArrow(int color)
 {
     DeleteArrow();
-    if (!m_handle)
+    if (!HasCurrentNativePed())
         return;
     scm::ProcessCommand(&CREATE_MARKER_ABOVE_ACTOR, m_handle, &m_arrow);
     if (!m_arrow)
@@ -912,11 +1143,26 @@ void CPed::CreateArrow(int color)
 
 void CPed::SetModelIndex(int model)
 {
-    if (!NativeValid(m_pGamePed) || !PedFromHandle(m_handle))
+    if (!HasCurrentNativePed())
         return;
     auto* info = ModelInfo::GetRelocated(model);
     if (!info || Read<std::uintptr_t>(info, 0) != 0x85BDC0)
         model = 0;
+
+    if (!g_game || !ModelInfo::GetRelocated(model))
+        return;
+    if (!g_game->IsModelAvailable(model))
+    {
+        g_game->RequestModel(model, 2);
+        g_game->LoadRequestedModels();
+        for (int attempt = 0; attempt < 200 && !g_game->IsModelAvailable(model); ++attempt)
+            Sleep(1);
+        if (!g_game->IsModelAvailable(model))
+            return;
+    }
+    if (!HasCurrentNativePed())
+        return;
+
     // keep the assembled CJ template resident even while all players use other skins
     reinterpret_cast<void(__cdecl*)(int, int)>(0x4087E0)(0, 2);
     // r5 disables clothes rebuilding before changing player skins: it replaces
@@ -928,16 +1174,17 @@ void CPed::SetModelIndex(int model)
     }
     DestroyCommandTask();
     CEntity::SetModelIndex(model);
-    reinterpret_cast<void(__thiscall*)(void*, void*)>(0x4E68D0)(static_cast<std::uint8_t*>(m_pGamePed) + 0x294, m_pGamePed);
+    if (HasCurrentNativePed() && GetModelIndex() == model)
+        reinterpret_cast<void(__thiscall*)(void*, void*)>(0x4E68D0)(static_cast<std::uint8_t*>(m_pGamePed) + 0x294, m_pGamePed);
 }
 
 BOOL CPed::CopyAppearanceFrom(const CPed& source)
 {
-    if (!NativeValid(m_pGamePed) || !NativeValid(source.m_pGamePed) || !PedFromHandle(m_handle) || !PedFromHandle(source.m_handle))
+    if (!HasCurrentNativePed() || !source.HasCurrentNativePed())
         return FALSE;
     const int model = source.GetModelIndex();
     SetModelIndex(model);
-    if (GetModelIndex() != model)
+    if (!HasCurrentNativePed() || !source.HasCurrentNativePed() || GetModelIndex() != model)
         return FALSE;
     // native CPed movement animation group and fighting style; never share clump associations or tasks
     Write<std::uint32_t>(m_pGamePed, 0x4D4, Read<std::uint32_t>(source.m_pGamePed, 0x4D4));
@@ -948,15 +1195,20 @@ BOOL CPed::CopyAppearanceFrom(const CPed& source)
 
 void CPed::Destroy()
 {
-    game::players::SetPed(m_nPlayerNumber, nullptr);
+    if (!m_handle && !m_pGamePed)
+        return;
+
+    const auto* nativeBeforeDestroy = m_pGamePed;
 
     DeleteArrow();
     StopUrinating();
+    DropStuff();
     DeleteAllAccessories();
-    DestroyCommandTask();
 
-    if (NativeValid(m_pGamePed) && PedFromHandle(m_handle))
+    // never destroy a different gta ped that reused this pool handle
+    if (m_nPlayerNumber != 0 && HasCurrentNativePed())
     {
+        DestroyCommandTask();
         if (InVehicle(m_pGamePed))
             WarpFromVehicle({100.0f, 100.0f, 10.0f});
 
@@ -972,7 +1224,8 @@ void CPed::Destroy()
     m_pGamePed = nullptr;
     m_pGameEntity = nullptr;
     m_handle = 0;
-    game::players::ReleaseSlot(m_nPlayerNumber);
+    if (m_nPlayerNumber)
+        game::players::ReleaseSlotIfPed(m_nPlayerNumber, nativeBeforeDestroy);
 }
 
 void CPed::SetCameraMode(char mode)
@@ -1000,7 +1253,7 @@ BOOL CPed::HasAccessory() const
 
 void CPed::DeleteAccessory(int slot)
 {
-    if (!ValidAccessorySlot(slot) || m_accessories.m_bNotEmpty[slot] == FALSE)
+    if (!ValidAccessorySlot(slot))
         return;
     auto* object = m_accessories.m_pObject[slot];
     m_accessories.m_pObject[slot] = nullptr;
@@ -1022,41 +1275,41 @@ void CPed::DeleteAllAccessories()
 
 void CPed::AddAccessory(int slot, const Accessory* info)
 {
-    if (!NativeValid(m_pGamePed) || !info || !ValidAccessorySlot(slot) || info->m_nBone <= 0 || info->m_nBone > 18)
+    if (!HasCurrentNativePed() || !info || !ValidAccessorySlot(slot) || info->m_nBone <= 0 || info->m_nBone > 18)
         return;
 
     const Accessory value = *info;
     CMatrix validated = CMatrix::Unity();
     if (!BuildAccessoryMatrix(validated, value, &validated))
         return;
-    DeleteAccessory(slot);
-    m_accessories.m_info[slot] = value;
-    info = &value;
 
     CMatrix matrix = CMatrix::Unity();
     GetMatrix(&matrix);
-    auto* object = new (std::nothrow) CObject(info->m_nModel, matrix.GetPosition(), info->m_rotation, 200.0f, 1, 0, 0);
-    m_accessories.m_pObject[slot] = object;
-    if (!object || !object->IsValid())
+    auto* object = new (std::nothrow) CObject(value.m_nModel, matrix.GetPosition(), value.m_rotation, 200.0f, 1, 0, 0);
+    if (!object)
+        return;
+    if (!object->IsValid())
     {
         delete object;
-        m_accessories.m_pObject[slot] = nullptr;
-        m_accessories.m_info[slot] = {};
         return;
     }
 
-    if (info->m_firstMaterialColor)
-        object->SetMaterial(-1, 0, "", "", info->m_firstMaterialColor);
-    if (info->m_secondMaterialColor)
-        object->SetMaterial(-1, 1, "", "", info->m_secondMaterialColor);
+    if (value.m_firstMaterialColor)
+        object->SetMaterial(-1, 0, "", "", value.m_firstMaterialColor);
+    if (value.m_secondMaterialColor)
+        object->SetMaterial(-1, 1, "", "", value.m_secondMaterialColor);
     object->SetCollisionFlag(FALSE);
     object->SetPoolManaged(true);
+
+    DeleteAccessory(slot);
+    m_accessories.m_info[slot] = value;
+    m_accessories.m_pObject[slot] = object;
     m_accessories.m_bNotEmpty[slot] = TRUE;
 }
 
 bool CPed::GetAccessoryMatrix(int slot, CMatrix* matrix) const
 {
-    if (!matrix || !GetAccessoryState(slot) || !NativeValid(m_pGamePed))
+    if (!matrix || !GetAccessoryState(slot) || !HasCurrentNativePed())
         return false;
     auto* clump = Read<RpClump*>(m_pGamePed, 0x18);
     const auto& info = m_accessories.m_info[slot];
@@ -1098,7 +1351,7 @@ bool CPed::UpdateAccessory(int slot, const Accessory& info)
 
 void CPed::ProcessAccessories()
 {
-    if (!HasAccessory() || !NativeValid(m_pGamePed) || !Read<void*>(m_pGamePed, 0x18))
+    if (!HasAccessory() || !HasCurrentNativePed() || !Read<void*>(m_pGamePed, 0x18))
         return;
     reinterpret_cast<void(__thiscall*)(void*)>(0x532B20)(m_pGamePed);
     for (int slot = 0; slot < static_cast<int>(MAX_ACCESSORIES); ++slot)
@@ -1117,7 +1370,7 @@ void CPed::ProcessAccessories()
 
 CObject* CPed::GetAccessory(int slot) const
 {
-    return ValidAccessorySlot(slot) ? m_accessories.m_pObject[slot] : nullptr;
+    return GetAccessoryState(slot) ? m_accessories.m_pObject[slot] : nullptr;
 }
 
 void CPed::GetBonePosition(unsigned int boneId, CVector* outPosition) const
@@ -1125,21 +1378,22 @@ void CPed::GetBonePosition(unsigned int boneId, CVector* outPosition) const
     if (!outPosition)
         return;
     *outPosition = CVector{};
-    if (!NativeValid(m_pGamePed))
+    if (!HasCurrentNativePed())
         return;
     GetNativeBonePosition(m_pGamePed, outPosition, boneId, false);
 }
 
 void CPed::ClearWeapons()
 {
-    if (IsValid())
+    if (HasCurrentNativePed())
         reinterpret_cast<void(__thiscall*)(void*)>(0x5E6320)(m_pGamePed);
 }
 
 void CPed::GiveWeapon(int weapon, int ammo)
 {
-    static constexpr int models[] = {0, 331, 333, 334, 335, 336, 337, 338, 339, 341, 321, 322, 323, 324, 325, 326, 342, 343, 344, -1, -1, -1, 346, 347, 348, 349, 350, 351, 352, 353, 355, 356, 372, 357, 358, 359, 360, 361, 362, 363, 364, 365, 366, 367, 368, 369, 371};
-    if (!IsValid() || !g_game || weapon < 0 || weapon >= 47 || models[weapon] < 0 || ammo < 0)
+    static constexpr int models[] = {0,   331, 333, 334, 335, 336, 337, 338, 339, 341, 321, 322, 323, 324, 325, 326, 342, 343, 344, -1,  -1,  -1,  346, 347,
+                                     348, 349, 350, 351, 352, 353, 355, 356, 372, 357, 358, 359, 360, 361, 362, 363, 364, 365, 366, 367, 368, 369, 371};
+    if (!HasCurrentNativePed() || !g_game || weapon < 0 || weapon >= 47 || models[weapon] < 0 || ammo < 0)
         return;
     if (models[weapon] > 0)
     {
@@ -1155,7 +1409,7 @@ void CPed::GiveWeapon(int weapon, int ammo)
 
 void CPed::SetWeaponAmmo(int weapon, int ammo)
 {
-    if (!IsValid() || weapon < 0 || weapon > 46 || ammo < 0)
+    if (!HasCurrentNativePed() || weapon < 0 || weapon > 46 || ammo < 0)
         return;
     for (int slot = 0; slot < 13; ++slot)
     {
@@ -1171,7 +1425,7 @@ void CPed::SetWeaponAmmo(int weapon, int ammo)
 
 void CPed::SetArmedWeapon(int weapon)
 {
-    if (!IsValid() || weapon < 0 || weapon > 46)
+    if (!HasCurrentNativePed() || weapon < 0 || weapon > 46)
         return;
     constexpr scm::OpcodeInfo armed{0x01B9, "ii"};
     scm::ProcessCommand(&armed, m_handle, weapon);
@@ -1179,11 +1433,39 @@ void CPed::SetArmedWeapon(int weapon)
 
 std::uint8_t CPed::GetCurrentWeapon() const
 {
-    if (!IsValid())
+    if (!HasCurrentNativePed())
         return 0;
     const auto slot = Read<std::uint8_t>(m_pGamePed, 0x718);
     if (slot >= 13)
         return 0;
     const auto weapon = Read<std::uint32_t>(m_pGamePed, 0x5A0 + slot * 0x1C);
     return weapon <= 63 ? static_cast<std::uint8_t>(weapon) : 0;
+}
+
+std::uint8_t CPed::GetWeaponSlot() const
+{
+    return HasCurrentNativePed() ? Read<std::uint8_t>(m_pGamePed, 0x718) : 0;
+}
+
+bool CPed::GetWeaponData(int slot, int& weapon, std::uint32_t& ammo) const
+{
+    if (!HasCurrentNativePed() || slot < 0 || slot >= 13)
+        return false;
+    weapon = Read<int>(m_pGamePed, 0x5A0 + slot * 0x1C);
+    ammo = Read<std::uint32_t>(m_pGamePed, 0x5AC + slot * 0x1C);
+    return true;
+}
+
+void* CPed::GetTargetEntity() const
+{
+    return HasCurrentNativePed() && Read<void*>(m_pGamePed, 0x18) ? Read<void*>(m_pGamePed, 0x79C) : nullptr;
+}
+
+std::uint8_t CPed::GetDeathReason(void*& source) const
+{
+    source = nullptr;
+    if (!HasCurrentNativePed())
+        return 0xFF;
+    source = Read<void*>(m_pGamePed, 0x764);
+    return Read<std::uint8_t>(m_pGamePed, 0x760);
 }

@@ -81,6 +81,24 @@ namespace
         return aim;
     }
 
+    void ApplyOnfootWeapon(CPed* ped, std::uint8_t packedWeapon)
+    {
+        if (!ped || !ped->HasNativePed())
+            return;
+
+        const int weapon = packedWeapon & 0x3F;
+        if (weapon > 46 || ped->GetCurrentWeapon() == weapon)
+            return;
+
+        ped->SetArmedWeapon(weapon);
+        if (ped->GetCurrentWeapon() != weapon)
+        {
+            ped->GiveWeapon(weapon, 9999);
+            if (ped->GetCurrentWeapon() != weapon)
+                ped->SetArmedWeapon(weapon);
+        }
+    }
+
     void ApplyRemoteWeaponState(CPed* ped, std::uint8_t state)
     {
         auto* nativePed = ped ? static_cast<std::uint8_t*>(ped->GetNativePedHandle()) : nullptr;
@@ -284,16 +302,46 @@ namespace
 
 CRemotePlayer::CRemotePlayer()
 {
-    std::memset(this, 0, sizeof(*this));
-
-    const TICK now = GetTickCount();
+    field_1 = 0;
     m_bDrawLabels = TRUE;
+    m_bHasJetpack = FALSE;
+    m_nSpecialAction = 0;
+    std::memset(pad_2, 0, sizeof(pad_2));
+    m_incarData = {};
+    m_trailerData = {};
+    m_aimData = {};
+    m_passengerData = {};
+    m_onfootData = {};
     m_nTeam = 0xFF;
     m_nState = PLAYER_STATE_NONE;
+    m_nSeatId = 0;
+    field_3 = 0;
+    m_bPassengerDriveBy = FALSE;
+    std::memset(pad_1, 0, sizeof(pad_1));
+    m_positionDifference = CVector{};
+    m_incarTargetRotation = {};
+    m_onfootTargetPosition = CVector{};
+    m_onfootTargetSpeed = CVector{};
+    m_incarTargetPosition = CVector{};
+    m_incarTargetSpeed = CVector{};
+    m_fReportedArmour = 0.0f;
+    m_fReportedHealth = 0.0f;
+    m_animation = {};
+    m_nUpdateType = UPDATE_TYPE_NONE;
+    m_lastTimestamp = 0;
+    m_bPerformingCustomAnimation = FALSE;
+    m_nStatus = 0;
+    m_head = {};
+    m_pPed = nullptr;
+    m_pVehicle = nullptr;
     m_nId = INVALID_ID;
     m_nVehicleId = INVALID_ID;
+    m_bMarkerState = FALSE;
+    m_markerPosition = {};
+    m_marker = 0;
+
+    const TICK now = GetTickCount();
     m_lastUpdate = now;
-    m_lastTimestamp = now;
     m_head.m_lastUpdate = now;
     m_head.m_lastLook = now;
     m_incarTargetRotation.real = 1.0f;
@@ -365,7 +413,11 @@ BOOL CRemotePlayer::SurfingOnObject()
 
 void CRemotePlayer::ProcessSurfing()
 {
-    if (!m_pPed)
+    if (!m_pPed || !m_pPed->HasNativePed() || m_pPed->IsInVehicle())
+        return;
+
+    const CVector offset = m_onfootData.m_surfingOffset;
+    if (!FiniteVector(offset) || std::fabs(offset.x) >= 100.0f || std::fabs(offset.y) >= 100.0f || std::fabs(offset.z) >= 100.0f)
         return;
 
     CEntity* entity = nullptr;
@@ -374,12 +426,12 @@ void CRemotePlayer::ProcessSurfing()
     else if (SurfingOnVehicle())
         entity = ResolveVehicle(m_onfootData.m_nSurfingVehicleId);
 
-    if (!entity)
+    if (!entity || !entity->IsValid())
         return;
 
     CMatrix entityMatrix = CMatrix::Unity();
     entity->GetMatrix(&entityMatrix);
-    const CVector target = entityMatrix.GetPosition() + m_onfootData.m_surfingOffset;
+    const CVector target = entityMatrix.TransformPoint(offset);
     if (!FiniteVector(target))
         return;
 
@@ -427,6 +479,8 @@ void CRemotePlayer::ProcessSpecialAction()
     switch (m_nSpecialAction)
     {
         case SPECIAL_ACTION_NONE:
+            if (m_pPed->IsHoldingStuff())
+                m_pPed->DropStuff();
             if (m_pPed->DoesDancing())
                 m_pPed->StopDancing();
             if (m_pPed->UsingCellphone())
@@ -465,6 +519,17 @@ void CRemotePlayer::ProcessSpecialAction()
                 m_pPed->EnableCellphone(FALSE);
             break;
 
+        case SPECIAL_ACTION_DRINK_BEER:
+        case SPECIAL_ACTION_DRINK_WINE:
+        case SPECIAL_ACTION_DRINK_SPRUNK:
+        case SPECIAL_ACTION_SMOKE_CIGGY:
+        {
+            const auto action = m_nSpecialAction;
+            const int type = action == SPECIAL_ACTION_DRINK_BEER ? 1 : action == SPECIAL_ACTION_DRINK_WINE ? 2 : action == SPECIAL_ACTION_DRINK_SPRUNK ? 3 : 4;
+            if (m_pPed->GetStuff() != type)
+                m_pPed->GiveStuff(type);
+            break;
+        }
         case SPECIAL_ACTION_URINATING:
             if (!m_pPed->DoesUrinating() && !m_pPed->GetVehicle())
                 m_pPed->StartUrinating();
@@ -580,8 +645,7 @@ void CRemotePlayer::UpdateIncarSpeedAndPosition()
 
     const int subtype = m_pVehicle->GetSubtype();
     const float snapZ = subtype == 3 || subtype == 4 || subtype == 5 ? INCAR_AIR_WATER_SNAP_Z : INCAR_SNAP_Z;
-    if (m_positionDifference.x > INCAR_SNAP_XY || m_positionDifference.y > INCAR_SNAP_XY ||
-        m_positionDifference.z > snapZ)
+    if (m_positionDifference.x > INCAR_SNAP_XY || m_positionDifference.y > INCAR_SNAP_XY || m_positionDifference.z > snapZ)
     {
         matrix.GetPosition() = m_incarTargetPosition;
         m_pVehicle->SetMatrix(matrix);
@@ -598,9 +662,7 @@ void CRemotePlayer::UpdateIncarSpeedAndPosition()
     if (m_positionDifference.z > INCAR_EPSILON)
         speed.z += (m_incarTargetPosition.z - current.z) * INCAR_CORRECTION;
 
-    if (FiniteVector(speed) && (Offset(speed.x, 0.0f) > INCAR_MIN_SPEED ||
-                                Offset(speed.y, 0.0f) > INCAR_MIN_SPEED ||
-                                Offset(speed.z, 0.0f) > INCAR_MIN_SPEED))
+    if (FiniteVector(speed) && (Offset(speed.x, 0.0f) > INCAR_MIN_SPEED || Offset(speed.y, 0.0f) > INCAR_MIN_SPEED || Offset(speed.z, 0.0f) > INCAR_MIN_SPEED))
         m_pVehicle->SetSpeed(speed);
 }
 
@@ -695,9 +757,8 @@ void CRemotePlayer::Update(Synchronization::AimData* data)
 
 void CRemotePlayer::Update(Synchronization::UnoccupiedData* data)
 {
-    if (!data || data->m_nVehicleId == 0 || data->m_nVehicleId >= CVehiclePool::MAX_VEHICLES ||
-        !FiniteVector(data->m_roll) || !FiniteVector(data->m_direction) || !FiniteVector(data->m_position) ||
-        !FiniteVector(data->m_speed) || !FiniteVector(data->m_turnSpeed) ||
+    if (!data || data->m_nVehicleId == 0 || data->m_nVehicleId >= CVehiclePool::MAX_VEHICLES || !FiniteVector(data->m_roll) || !FiniteVector(data->m_direction) ||
+        !FiniteVector(data->m_position) || !FiniteVector(data->m_speed) || !FiniteVector(data->m_turnSpeed) ||
         (m_nState == PLAYER_STATE_DRIVER && m_nVehicleId == data->m_nVehicleId))
         return;
 
@@ -751,16 +812,13 @@ void CRemotePlayer::Update(Synchronization::UnoccupiedData* data)
 
 void CRemotePlayer::Update(Synchronization::TrailerData* data)
 {
-    if (!data || data->m_nId == 0 || data->m_nId >= CVehiclePool::MAX_VEHICLES ||
-        m_nState != PLAYER_STATE_DRIVER || m_nVehicleId == INVALID_ID ||
-        !FiniteVector(data->m_position) || !FiniteQuaternion(data->m_fQuaternion) ||
-        !FiniteVector(data->m_speed) || !FiniteVector(data->m_turnSpeed))
+    if (!data || data->m_nId == 0 || data->m_nId >= CVehiclePool::MAX_VEHICLES || m_nState != PLAYER_STATE_DRIVER || m_nVehicleId == INVALID_ID ||
+        !FiniteVector(data->m_position) || !FiniteQuaternion(data->m_fQuaternion) || !FiniteVector(data->m_speed) || !FiniteVector(data->m_turnSpeed))
         return;
 
     CVehicle* tractor = ResolveVehicle(m_nVehicleId);
     CVehicle* trailer = ResolveVehicle(data->m_nId);
-    if (!tractor || !trailer || tractor == trailer || !tractor->DoesExist() || !trailer->DoesExist() ||
-        (!trailer->IsTrailer() && !tractor->IsTowtruck()))
+    if (!tractor || !trailer || tractor == trailer || !tractor->DoesExist() || !trailer->DoesExist() || (!trailer->IsTrailer() && !tractor->IsTowtruck()))
         return;
 
     // reject late packets from an old trailer
@@ -841,6 +899,7 @@ void CRemotePlayer::ResetData()
     m_fReportedHealth = 0.0f;
     m_animation = {};
     m_nUpdateType = UPDATE_TYPE_NONE;
+    m_lastTimestamp = 0;
     m_bPerformingCustomAnimation = FALSE;
     m_nStatus = PLAYER_STATUS_TIMEOUT;
     auto& runtime = Runtime(this);
@@ -920,6 +979,29 @@ void CRemotePlayer::ChangeState(char oldState, char newState)
     if (oldState == newState)
         return;
 
+    if (oldState == PLAYER_STATE_DRIVER && newState == PLAYER_STATE_ONFOOT && m_nVehicleId != INVALID_ID)
+    {
+        CPed* localPed = LocalPed();
+        auto* vehiclePool = g_netGame ? g_netGame->GetVehiclePool() : nullptr;
+        if (localPed && localPed->HasNativePed() && localPed->IsInVehicle() && !localPed->IsPassenger() && vehiclePool)
+        {
+            void* nativeVehicle = localPed->GetVehicle();
+            if (nativeVehicle && vehiclePool->Find(nativeVehicle) == m_nVehicleId)
+            {
+                CMatrix matrix = CMatrix::Unity();
+                localPed->GetMatrix(&matrix);
+                CVector position = matrix.GetPosition();
+                if (FiniteVector(position))
+                {
+                    position.z += 1.0f;
+                    localPed->WarpFromVehicle(position);
+                    if (auto* game = g_game.get())
+                        game->DisplayGameText("~r~Car Jacked~w~!", 1000, 5);
+                }
+            }
+        }
+    }
+
     m_nState = static_cast<unsigned char>(newState);
 }
 
@@ -939,7 +1021,7 @@ void CRemotePlayer::Process()
 {
     m_pVehicle = m_nVehicleId == INVALID_ID ? nullptr : ResolveVehicle(m_nVehicleId);
     ProcessRemoteMarker(*this);
-    if (!m_pPed)
+    if (!m_pPed || !m_pPed->HasNativePed())
         return;
     const TICK now = GetTickCount();
     auto& runtime = Runtime(this);
@@ -978,8 +1060,7 @@ void CRemotePlayer::Process()
     {
         if (m_pVehicle && m_pVehicle->DoesExist())
         {
-            if (!runtime.enteringVehicle &&
-                (m_pPed->GetVehicle() != m_pVehicle->GetNativeVehicleHandle() || m_pPed->GetVehicleSeatIndex() != 0))
+            if (!runtime.enteringVehicle && (m_pPed->GetVehicle() != m_pVehicle->GetNativeVehicleHandle() || m_pPed->GetVehicleSeatIndex() != 0))
                 OnEnterVehicle();
 
             CMatrix target = CMatrix::Unity();
@@ -1030,13 +1111,28 @@ void CRemotePlayer::Process()
         m_nUpdateType = UPDATE_TYPE_NONE;
     }
 
+    // r5 updates pad every frame
+    if (m_pVehicle && m_pVehicle->DoesExist() && m_pPed->GetVehicle() == m_pVehicle->GetNativeVehicleHandle())
+    {
+        const int actualSeat = m_pPed->GetVehicleSeatIndex();
+        if (m_nState == PLAYER_STATE_DRIVER && actualSeat == 0)
+        {
+            const auto& keys = m_incarData.m_controllerState;
+            m_pPed->SetKeys(keys.m_value, keys.m_sLeftStickX, keys.m_sLeftStickY);
+        }
+        else if (m_nState == PLAYER_STATE_PASSENGER && actualSeat == m_nSeatId && actualSeat >= 1 && actualSeat <= 7)
+        {
+            m_pPed->SetKeys(m_passengerData.m_controllerState.m_value, 0, 0);
+        }
+    }
+
     // smooth rotation between packets
-    if (m_nState == PLAYER_STATE_DRIVER && m_pVehicle && m_pVehicle->DoesExist() &&
-        !IsTrainModel(m_pVehicle->GetModelIndex()))
+    if (m_nState == PLAYER_STATE_DRIVER && m_pVehicle && m_pVehicle->DoesExist() && !IsTrainModel(m_pVehicle->GetModelIndex()))
         UpdateIncarRotation();
 
     if (m_nState == PLAYER_STATE_ONFOOT && !m_pPed->IsInVehicle())
     {
+        ApplyOnfootWeapon(m_pPed, m_onfootData.m_nCurrentWeapon);
         UpdateOnfootRotation();
         ProcessSpecialAction();
         ProcessHead();
@@ -1082,11 +1178,14 @@ void CRemotePlayer::Process()
         }
     }
 
+    if (m_nState == PLAYER_STATE_ONFOOT && !m_pPed->IsInVehicle())
+        ProcessSurfing();
+
     if (m_nStatus == PLAYER_STATUS_TIMEOUT && elapsed < IDLE_TIMEOUT_MS)
         m_nStatus = 0;
 
     m_bPerformingCustomAnimation = m_pPed->PerformingCustomAnimation();
-    if (!m_pPed->IsDead())
+    if (m_nState != PLAYER_STATE_WASTED && !m_pPed->IsDead())
         m_pPed->SetHealth(100.0f);
 }
 
@@ -1119,7 +1218,7 @@ BOOL CRemotePlayer::Spawn(int a2, int model, int a4, CVector* position, float ro
     m_pPed->SetFightingStyle(static_cast<std::uint8_t>(fightingStyle));
     m_nState = PLAYER_STATE_SPAWNED;
     m_lastUpdate = GetTickCount();
-    m_lastTimestamp = m_lastUpdate;
+    m_lastTimestamp = 0;
     m_head.m_lastUpdate = m_head.m_lastLook = m_lastUpdate;
     m_nStatus = 0;
     return TRUE;
@@ -1129,7 +1228,7 @@ void CRemotePlayer::Update(Synchronization::OnfootData* data, TICK timestamp)
 {
     if (!data || !FiniteVector(data->m_position) || !FiniteVector(data->m_speed) || !FiniteVector(data->m_surfingOffset) || !FiniteQuaternion(data->m_fQuaternion))
         return;
-    if (timestamp && static_cast<std::int32_t>(timestamp - m_lastTimestamp) < 0)
+    if (timestamp && m_lastTimestamp && static_cast<std::int32_t>(timestamp - m_lastTimestamp) < 0)
         return;
 
     m_onfootData = *data;
@@ -1137,22 +1236,23 @@ void CRemotePlayer::Update(Synchronization::OnfootData* data, TICK timestamp)
     m_fReportedArmour = static_cast<float>(data->m_nArmor);
     m_animation = data->m_animation;
     m_nSpecialAction = data->m_nSpecialAction;
-    m_pVehicle = nullptr;
-    m_nVehicleId = INVALID_ID;
 
     const char oldState = static_cast<char>(m_nState);
+    ChangeState(oldState, PLAYER_STATE_ONFOOT);
+    m_pVehicle = nullptr;
+    m_nVehicleId = INVALID_ID;
     m_nUpdateType = UPDATE_TYPE_ONFOOT;
     m_lastUpdate = GetTickCount();
-    m_lastTimestamp = timestamp;
-    ChangeState(oldState, PLAYER_STATE_ONFOOT);
+    if (timestamp)
+        m_lastTimestamp = timestamp;
 }
 
 void CRemotePlayer::Update(Synchronization::IncarData* data, TICK timestamp)
 {
-    if (!data || data->m_nVehicle >= CVehiclePool::MAX_VEHICLES || !FiniteVector(data->m_position) || !FiniteVector(data->m_speed) ||
-        !FiniteQuaternion(data->m_fQuaternion) || !Finite(data->m_fHealth))
+    if (!data || data->m_nVehicle >= CVehiclePool::MAX_VEHICLES || !FiniteVector(data->m_position) || !FiniteVector(data->m_speed) || !FiniteQuaternion(data->m_fQuaternion) ||
+        !Finite(data->m_fHealth))
         return;
-    if (timestamp && static_cast<std::int32_t>(timestamp - m_lastTimestamp) < 0)
+    if (timestamp && m_lastTimestamp && static_cast<std::int32_t>(timestamp - m_lastTimestamp) < 0)
         return;
 
     m_incarData = *data;
@@ -1172,15 +1272,15 @@ void CRemotePlayer::Update(Synchronization::IncarData* data, TICK timestamp)
     const char oldState = static_cast<char>(m_nState);
     m_nUpdateType = UPDATE_TYPE_INCAR;
     m_lastUpdate = GetTickCount();
-    m_lastTimestamp = timestamp;
+    if (timestamp)
+        m_lastTimestamp = timestamp;
     m_nStatus = 0;
     ChangeState(oldState, PLAYER_STATE_DRIVER);
 }
 
 void CRemotePlayer::Update(Synchronization::PassengerData* data, TICK timestamp)
 {
-    if (!data || data->m_nVehicleId >= CVehiclePool::MAX_VEHICLES || (data->m_nSeatId & 0x3Fu) == 0 ||
-        (data->m_nSeatId & 0x3Fu) > 7 || !FiniteVector(data->m_position))
+    if (!data || data->m_nVehicleId >= CVehiclePool::MAX_VEHICLES || (data->m_nSeatId & 0x3Fu) == 0 || (data->m_nSeatId & 0x3Fu) > 7 || !FiniteVector(data->m_position))
         return;
 
     m_passengerData = *data;
@@ -1194,7 +1294,7 @@ void CRemotePlayer::Update(Synchronization::PassengerData* data, TICK timestamp)
     const char oldState = static_cast<char>(m_nState);
     m_nUpdateType = UPDATE_TYPE_PASSENGER;
     m_lastUpdate = GetTickCount();
-    m_lastTimestamp = timestamp;
+    (void)timestamp;
     m_nStatus = 0;
     ChangeState(oldState, PLAYER_STATE_PASSENGER);
 }
@@ -1212,17 +1312,22 @@ void CRemotePlayer::Remove()
     m_pVehicle = nullptr;
     m_nVehicleId = INVALID_ID;
     m_nState = PLAYER_STATE_NONE;
+    m_bDrawLabels = TRUE;
+    m_bMarkerState = FALSE;
+    m_markerPosition = {};
     ResetData();
 }
 
 void CRemotePlayer::Kill()
 {
-    if (m_pPed)
+    if (m_pPed && m_pPed->HasNativePed())
+    {
+        m_pPed->SetKeys(0, 0, 0);
         m_pPed->SetHealth(0.0f);
+    }
+
     m_nState = PLAYER_STATE_WASTED;
-    m_nUpdateType = UPDATE_TYPE_NONE;
-    m_pVehicle = nullptr;
-    m_nVehicleId = INVALID_ID;
+    ResetData();
 }
 
 void CRemotePlayer::Chat(const char* text)

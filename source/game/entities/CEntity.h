@@ -24,6 +24,7 @@ public:
 
     bool IsValid() const;
     bool IsVisible() const;
+    bool IntersectsCameraRay(const CVector& origin, const CVector& target, float scale) const;
     void GetMatrix(CMatrix* matrix) const;                                                // 0x9EB10
     void SetMatrix(const CMatrix& matrix);                                                // 0x9EBC0
     void GetSpeed(CVector* speed) const;                                                  // 0x9ECE0
