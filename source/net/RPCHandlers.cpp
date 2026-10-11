@@ -3604,11 +3604,7 @@ void RPCHandlers::SetInterior(RPCParameters* pParams)
     if (!ped || !ped->HasNativePed() || !ped->IsValid())
         return;
 
-    auto* pool = g_netGame ? g_netGame->GetPlayerPool() : nullptr;
-    if (auto* local = pool ? pool->GetLocalPlayer() : nullptr)
-        local->ChangeInterior(static_cast<char>(interiorId));
-    else
-        ped->LinkToInterior(static_cast<char>(interiorId), TRUE);
+    ped->LinkToInterior(static_cast<char>(interiorId), TRUE);
 }
 
 // -----------------------------------------------------------------------------

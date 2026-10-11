@@ -1123,9 +1123,8 @@ void CLocalPlayer::RequestClass(int id)
 
 void CLocalPlayer::ChangeInterior(char id)
 {
-    m_nCurrentInterior = id;
-    if (m_pPed)
-        m_pPed->LinkToInterior(id, TRUE);
+    if (g_netGame && g_netGame->InteriorChangeNotification(static_cast<std::uint8_t>(id)))
+        m_nCurrentInterior = id;
 }
 
 void CLocalPlayer::Chat(const char* text)
@@ -1763,4 +1762,10 @@ void CLocalPlayer::Process()
         m_pPed->ApplyStuff();
     UpdateWeapons();
     UpdateCameraTarget();
+    if (g_game)
+    {
+        const char interior = g_game->GetCurrentInterior();
+        if (interior != m_nCurrentInterior)
+            ChangeInterior(interior);
+    }
 }

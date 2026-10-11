@@ -1738,7 +1738,7 @@ bool CNetGame::InteriorChangeNotification(std::uint8_t interiorId)
         return false;
     BitStream bs;
     bs.Write(interiorId);
-    return m_pRakClient->RPC(&g_InteriorChangeNotification, &bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, false);
+    return m_pRakClient->RPC(&g_InteriorChangeNotification, &bs, HIGH_PRIORITY, RELIABLE, 0, false);
 }
 
 // DeathNotification
