@@ -27,6 +27,7 @@ set(RENDERWARE_SOURCES
 
 add_library(samp SHARED
     ${RENDERWARE_SOURCES}
+
     source/archive/bindat.cpp
     source/archive/saa.cpp
     source/archive/saa_crypto.cpp
@@ -42,39 +43,39 @@ add_library(samp SHARED
     source/game/BuildingRemoval.cpp
     source/game/CAudio.cpp
     source/game/CCamera.cpp
-    source/game/Debug.cpp
     source/game/CGame.cpp
     source/game/Cursor.cpp
-    source/game/PlayerSlots.cpp
-    source/game/patch/HudScaleFix.cpp
-    source/game/patch/FrameLimiter.cpp
-    source/game/InputHandler.cpp
-    source/game/ModelInfo.cpp
-    source/game/Scripting.cpp
+    source/game/d3d9hook.cpp
+    source/game/Debug.cpp
     source/game/entities/CActor.cpp
     source/game/entities/CEntity.cpp
     source/game/entities/CObject.cpp
     source/game/entities/CPed.cpp
     source/game/entities/CVehicle.cpp
     source/game/FileSystem.cpp
-    source/game/patch/hooks.cpp
+    source/game/InputHandler.cpp
+    source/game/ModelInfo.cpp
     source/game/patch/base.cpp
+    source/game/patch/FrameLimiter.cpp
+    source/game/patch/hooks.cpp
+    source/game/patch/HudScaleFix.cpp
     source/game/patch/modelinfo.cpp
     source/game/patch/patch.cpp
     source/game/patch/pools.cpp
     source/game/patch/streaming.cpp
-    source/game/render/models.cpp
-    source/game/render/model_preview.cpp
-    source/game/render/textures.cpp
+    source/game/PlayerSlots.cpp
     source/game/render/CLicensePlate.cpp
     source/game/render/CObjectMaterialText.cpp
+    source/game/render/model_preview.cpp
+    source/game/render/models.cpp
+    source/game/render/textures.cpp
+    source/game/Scripting.cpp
     source/gui/CChat.cpp
     source/gui/CChatBubble.cpp
     source/gui/CDeathWindow.cpp
-    source/gui/CDownloadWindow.cpp
     source/gui/CDialog.cpp
+    source/gui/CDownloadWindow.cpp
     source/gui/CGui.cpp
-    source/gui/ime.cpp
     source/gui/CHelpDialog.cpp
     source/gui/CInput.cpp
     source/gui/CLabel.cpp
@@ -87,9 +88,10 @@ add_library(samp SHARED
     source/gui/CSpawnScreen.cpp
     source/gui/CTextDraw.cpp
     source/gui/CTextDrawSelection.cpp
+    source/gui/ime.cpp
     source/main.cpp
-    source/net/CHttpClient.cpp
     source/net/authentication.cpp
+    source/net/CHttpClient.cpp
     source/net/CNetGame.cpp
     source/net/CNetStats.cpp
     source/net/CSrvNetStats.cpp
@@ -109,17 +111,16 @@ add_library(samp SHARED
     source/pools/CVehiclePool.cpp
     source/render/CFonts.cpp
     source/render/CRender.cpp
-    source/render/screenshot.cpp
-    source/game/d3d9hook.cpp
     source/render/render.cpp
-    source/utils/math/CVector.cpp
-    source/utils/math/CVector2D.cpp
+    source/render/screenshot.cpp
+    source/sync/AimStuff.cpp
+    source/sync/KeyStuff.cpp
     source/utils/math/CMatrix.cpp
     source/utils/math/CQuaternion.cpp
     source/utils/math/CRect.cpp
     source/utils/math/CSimpleTransform.cpp
-    source/sync/AimStuff.cpp
-    source/sync/KeyStuff.cpp
+    source/utils/math/CVector.cpp
+    source/utils/math/CVector2D.cpp
 )
 
 target_include_directories(samp PRIVATE
@@ -137,14 +138,16 @@ target_precompile_headers(samp PRIVATE
 )
 
 target_link_libraries(samp PRIVATE
+    bass
     minhook
     raknet
     stb
-    bass
-    ws2_32
+
+    d3d9
+
+    #ws2_32
     imm32
     advapi32
-    d3d9
     gdi32
     windowscodecs
     ole32
@@ -154,7 +157,7 @@ target_link_libraries(samp PRIVATE
 
 add_subdirectory(tools)
 
-add_custom_command(TARGET samp POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_FILE:bass> $<TARGET_FILE_DIR:samp>/bass.dll
-)
+#add_custom_command(TARGET samp POST_BUILD
+#    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+#        $<TARGET_FILE:bass> $<TARGET_FILE_DIR:samp>/bass.dll
+#)
