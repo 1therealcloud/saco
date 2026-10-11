@@ -242,8 +242,8 @@ namespace game::hooks
 {
     bool InstallRenderHooks()
     {
-        return hook::install(0x53E230, &NativeTextHook, &g_text) && hook::install(0x586650, &GangZoneRadarHook) &&
-               hook::install(0x553AA0, &WorldRenderHook, &g_world) && hook::install(0x5531E0, &FadingRenderHook, &g_fading);
+        return hook::install(0x53E230, &NativeTextHook, &g_text) && hook::install(0x586650, &GangZoneRadarHook) && hook::install(0x553AA0, &WorldRenderHook, &g_world) &&
+               hook::install(0x5531E0, &FadingRenderHook, &g_fading);
     }
 
     DrawFn g_world = nullptr, g_fading = nullptr, g_text = nullptr;

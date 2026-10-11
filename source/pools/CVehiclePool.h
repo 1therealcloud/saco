@@ -53,7 +53,7 @@ public:
     WaitingList m_waitingList;
     CVehicle* m_pObject[MAX_VEHICLES];
     BOOL m_bNotEmpty[MAX_VEHICLES];
-    void* m_pGameObject[MAX_VEHICLES];            // GTA CVehicle*
+    void* m_pGameObject[MAX_VEHICLES]; // GTA CVehicle*
     unsigned int pad_6ef4[MAX_VEHICLES];
     ID m_nLastUndrivenId[MAX_VEHICLES];
     TICK m_lastUndrivenProcessTick[MAX_VEHICLES];

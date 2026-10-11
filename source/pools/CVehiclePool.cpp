@@ -72,19 +72,8 @@ namespace
 }
 
 CVehiclePool::CVehiclePool()
-    : m_nCount(0),
-      m_waitingList{},
-      m_pObject{},
-      m_bNotEmpty{},
-      m_pGameObject{},
-      pad_6ef4{},
-      m_nLastUndrivenId{},
-      m_lastUndrivenProcessTick{},
-      m_bIsActive{},
-      m_bIsDestroyed{},
-      m_tickWhenDestroyed{},
-      m_spawnedAt{},
-      m_bNeedsToInitializeLicensePlates(TRUE)
+    : m_nCount(0), m_waitingList{}, m_pObject{}, m_bNotEmpty{}, m_pGameObject{}, pad_6ef4{}, m_nLastUndrivenId{}, m_lastUndrivenProcessTick{}, m_bIsActive{}, m_bIsDestroyed{},
+      m_tickWhenDestroyed{}, m_spawnedAt{}, m_bNeedsToInitializeLicensePlates(TRUE)
 {
     const DWORD now = ::GetTickCount();
     for (std::size_t i = 0; i < MAX_VEHICLES; ++i)
@@ -257,8 +246,7 @@ CVehiclePool::ID CVehiclePool::Find(void* gameObject)
         return INVALID_ID;
     for (int id = 1; id <= m_nCount && id < MAX_VEHICLES; ++id)
     {
-        if (m_bNotEmpty[id] && m_pObject[id] && m_pGameObject[id] == gameObject &&
-            m_pObject[id]->GetNativeVehicleHandle() == gameObject)
+        if (m_bNotEmpty[id] && m_pObject[id] && m_pGameObject[id] == gameObject && m_pObject[id]->GetNativeVehicleHandle() == gameObject)
             return static_cast<ID>(id);
     }
     return INVALID_ID;
@@ -441,8 +429,7 @@ void CVehiclePool::QueueSimpleParams(ID id, bool objective, bool doorsLocked)
 
     auto& state = g_spawnAppearances[this][id];
     // rpc 161 only sets objective when true; false does not clear a previous rpc 24 value
-    const bool hadObjective = state.simpleParams ? state.simpleParams->first :
-        (state.params && state.params->at(6) == 1);
+    const bool hadObjective = state.simpleParams ? state.simpleParams->first : (state.params && state.params->at(6) == 1);
     state.simpleParams = std::make_pair(objective || hadObjective, doorsLocked);
     if (state.params)
     {
@@ -625,11 +612,9 @@ BOOL CVehiclePool::Create(VehicleInfo* info)
                     vehicle->AddComponent(static_cast<std::uint16_t>(999 + mod));
             if (entry->second.paintjob >= 1 && entry->second.paintjob <= 4)
                 vehicle->SetPaintjob(entry->second.paintjob - 1);
-            if (entry->second.bodyColors &&
-                (entry->second.bodyColors->first != 0xFFFFFFFFu || entry->second.bodyColors->second != 0xFFFFFFFFu))
+            if (entry->second.bodyColors && (entry->second.bodyColors->first != 0xFFFFFFFFu || entry->second.bodyColors->second != 0xFFFFFFFFu))
             {
-                vehicle->SetColor(static_cast<unsigned char>(entry->second.bodyColors->first),
-                    static_cast<unsigned char>(entry->second.bodyColors->second));
+                vehicle->SetColor(static_cast<unsigned char>(entry->second.bodyColors->first), static_cast<unsigned char>(entry->second.bodyColors->second));
             }
             if (entry->second.pendingPaintjob)
                 vehicle->SetPaintjob(*entry->second.pendingPaintjob);
@@ -655,9 +640,8 @@ BOOL CVehiclePool::Create(VehicleInfo* info)
             if (state.interior)
                 vehicle->ChangeInterior(*state.interior);
             if (state.panels || state.doors || state.lights)
-                vehicle->UpdateDamage(state.panels.value_or(info->m_nPanelDamageStatus),
-                    state.doors.value_or(info->m_nDoorDamageStatus),
-                    state.lights.value_or(info->m_nLightDamageStatus));
+                vehicle->UpdateDamage(state.panels.value_or(info->m_nPanelDamageStatus), state.doors.value_or(info->m_nDoorDamageStatus),
+                                      state.lights.value_or(info->m_nLightDamageStatus));
             if (state.pendingTires)
                 vehicle->SetTires(*state.pendingTires);
             if (state.simpleParams)
@@ -668,13 +652,20 @@ BOOL CVehiclePool::Create(VehicleInfo* info)
             if (state.params)
             {
                 const auto& p = *state.params;
-                if (p[0] <= 1) vehicle->SetEngineOn(p[0]);
-                if (p[1] <= 1) vehicle->SetLightsOn(p[1]);
-                if (p[2] <= 1) vehicle->SetAlarmState(p[2] != 0);
-                if (p[3] <= 1) vehicle->Lock(p[3] != 0);
-                if (p[4] <= 1) vehicle->SetBonnetState(p[4] != 0);
-                if (p[5] <= 1) vehicle->SetBootState(p[5] != 0);
-                if (p[6] <= 1) vehicle->SetObjective(p[6] != 0);
+                if (p[0] <= 1)
+                    vehicle->SetEngineOn(p[0]);
+                if (p[1] <= 1)
+                    vehicle->SetLightsOn(p[1]);
+                if (p[2] <= 1)
+                    vehicle->SetAlarmState(p[2] != 0);
+                if (p[3] <= 1)
+                    vehicle->Lock(p[3] != 0);
+                if (p[4] <= 1)
+                    vehicle->SetBonnetState(p[4] != 0);
+                if (p[5] <= 1)
+                    vehicle->SetBootState(p[5] != 0);
+                if (p[6] <= 1)
+                    vehicle->SetObjective(p[6] != 0);
                 if (state.effectiveSiren)
                     vehicle->EnableSiren(*state.effectiveSiren);
                 constexpr std::uint8_t windowComponents[]{10, 8, 11, 9};
@@ -754,10 +745,7 @@ BOOL CVehiclePool::CreateWithTrainConsist(VehicleInfo info)
         return FALSE;
     }
 
-    g_trainConsists[this][locomotiveId] = {
-        static_cast<ID>(locomotiveId + 1),
-        static_cast<ID>(locomotiveId + 2),
-        static_cast<ID>(locomotiveId + 3)};
+    g_trainConsists[this][locomotiveId] = {static_cast<ID>(locomotiveId + 1), static_cast<ID>(locomotiveId + 2), static_cast<ID>(locomotiveId + 3)};
     return TRUE;
 }
 
