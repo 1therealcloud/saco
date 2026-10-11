@@ -87,7 +87,7 @@ void CPickupPool::CreateWeapon(int model, CVector position, int ammo, ID exOwner
     m_object[slot] = {model, 4, position};
     m_weapon[slot] = {true, exOwner};
     m_handle[slot] = handle;
-    m_nId[slot] = static_cast<int>(handle & 0xFFFFu);
+    m_nId[slot] = -1;
     m_nTimer[slot] = 0;
     ++m_nCount;
 }
