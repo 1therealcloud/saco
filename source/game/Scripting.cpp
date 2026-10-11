@@ -195,6 +195,8 @@ namespace scm
                 auto* vehicle = vehiclePool->Get(static_cast<CVehiclePool::ID>(id));
                 if (!vehicle || vehicle->m_handle != param1 || !vehicle->DoesExist())
                     continue;
+                if (type >= EventType::Paintjob && type <= EventType::EnterExitModShop)
+                    netGame->ScmEvent(static_cast<std::uint32_t>(id), param2, param3, static_cast<std::uint32_t>(type));
                 if (type == EventType::CarColor)
                     vehicle->SetColor(static_cast<unsigned char>(param2), static_cast<unsigned char>(param3));
                 else if (type == EventType::EnterExitModShop)
@@ -245,7 +247,7 @@ namespace scm
 
             case EventType::EnterExitModShop:
                 Log("[scm:09c6] modshop: vehicle=%u, state=%s, param2=%u, param3=%u", param1, param2 ? "enter" : "exit", param2, param3);
-                // R5 caches the vehicle colors on modshop exit; the render integration callback below owns that cache update.
+                // r5 caches the vehicle colors on modshop exit
                 break;
 
             default:

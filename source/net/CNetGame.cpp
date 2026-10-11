@@ -1684,6 +1684,8 @@ bool CNetGame::VehicleDamaged(std::uint16_t vehicleId, std::uint32_t panels, std
 // ScmEvent
 bool CNetGame::ScmEvent(std::uint32_t vehicleId, std::uint32_t param1, std::uint32_t param2, std::uint32_t eventType)
 {
+    if (vehicleId >= CVehiclePool::MAX_VEHICLES || eventType < 1 || eventType > 4)
+        return false;
     if (!m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
     BitStream bs;
@@ -1691,7 +1693,7 @@ bool CNetGame::ScmEvent(std::uint32_t vehicleId, std::uint32_t param1, std::uint
     bs.Write(param1);
     bs.Write(param2);
     bs.Write(eventType);
-    return m_pRakClient->RPC(&g_ScmEvent, &bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, false);
+    return m_pRakClient->RPC(&g_ScmEvent, &bs, HIGH_PRIORITY, RELIABLE_SEQUENCED, 0, false);
 }
 
 // VehicleDestroyed
