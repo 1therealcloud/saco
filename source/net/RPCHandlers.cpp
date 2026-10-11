@@ -1478,12 +1478,12 @@ void RPCHandlers::InitGame(RPCParameters* pParams)
 
     g_chat->PrintDebug("Connected to {B9C9BF}%.64s", hostName.c_str());
 
-    g_netGame->SpawnScreen();
-
     if (auto* players = g_netGame->GetPlayerPool())
     {
         if (auto* local = players->GetLocalPlayer())
         {
+            if (!local->m_bDoesSpectating)
+                g_netGame->SpawnScreen();
             local->m_classSelection.m_nSelected = 0;
             local->RequestClass(0);
         }

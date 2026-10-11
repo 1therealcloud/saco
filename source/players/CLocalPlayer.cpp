@@ -659,6 +659,8 @@ void CLocalPlayer::EnableSpectating(BOOL enable)
     if (!enable)
         return;
 
+    render::ShowClassSelection(false);
+
     if (m_pPed && m_pPed->HasNativePed())
         m_pPed->SetControllable(FALSE);
 
@@ -1097,6 +1099,16 @@ void CLocalPlayer::ProcessSpectating()
     auto* camera = g_game->GetCamera();
     if (!camera)
         return;
+
+    if (m_pPed && m_pPed->HasNativePed())
+    {
+        CMatrix matrix;
+        camera->GetMatrix(&matrix);
+        auto position = matrix.GetPosition();
+        position.z += 20.0f;
+        m_pPed->SetHealth(100.0f);
+        m_pPed->Teleport(position);
+    }
 
     if (m_spectating.m_bProcessed)
         return;
