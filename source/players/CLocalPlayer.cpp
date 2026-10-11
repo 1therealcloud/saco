@@ -1205,7 +1205,7 @@ void CLocalPlayer::EnterVehicleAsPassenger()
     auto* vehiclePool = pools ? pools->m_pVehicle : nullptr;
 
     auto* menuPool = pools ? pools->m_pMenu : nullptr;
-    if (!m_pPed || !m_pPed->HasNativePed() || m_pPed->IsDead() || m_pPed->GetVehicle() || !vehiclePool || m_bDoesSpectating || m_classSelection.m_bIsActive ||
+    if (!m_pPed || !m_pPed->HasNativePed() || m_pPed->IsDead() || m_pPed->IsInVehicle() || !vehiclePool || m_bDoesSpectating || m_classSelection.m_bIsActive ||
         !(m_bIsActive || g_settings.m_bDebugMode) || game::inputhandler::game_input_blocked() || CGame::IsPaused() ||
         (menuPool && menuPool->m_nCurrent != CMenuPool::INVALID_MENU) || (!g_game || GetForegroundWindow() != static_cast<HWND>(g_game->GetWindowHandle())))
         return;
