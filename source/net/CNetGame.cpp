@@ -869,7 +869,7 @@ void CNetGame::Connect()
     char message[320]{};
     sprintf_s(message, "Connecting to %s:%d...", m_szHostAddress, m_nPort);
     if (g_chat)
-        g_chat->AddMessage(0xFFFFFFFFu, message);
+        g_chat->PrintDebug("%s", message);
 
     // connect to server
     const bool started = m_pRakClient->Connect(m_szHostAddress, static_cast<unsigned short>(m_nPort), 0, 0, 5);
