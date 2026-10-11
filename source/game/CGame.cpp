@@ -1060,9 +1060,6 @@ CPed* CGame::CreatePed(int model, CVector position, float rotation, int, int)
         game::players::ReleaseSlot(static_cast<std::uint8_t>(slot));
         return nullptr;
     }
-    // r5 keeps player models requested; releasing CJ allows streaming to discard
-    // the assembled clothes clump and reload the incomplete base player.dff
-    Log("[game:ped] created: slot=%d, model=%d, ped=%p, native=%p", slot, model, ped, ped->GetNativePedHandle());
     return ped;
 }
 

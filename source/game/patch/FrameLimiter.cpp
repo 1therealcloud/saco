@@ -54,7 +54,6 @@ namespace game::patch::fps
             return false;
 
         g_installed = true;
-        Log("[framelimiter] installed, fpslimit=%u", g_limit);
         return true;
     }
 

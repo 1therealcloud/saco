@@ -69,7 +69,6 @@ bool CMenu::InstallTextHook()
     if (!hook::install(0x6A0050, reinterpret_cast<decltype(game::hooks::g_getText)>(&MenuTextHook), &game::hooks::g_getText))
         return false;
     g_textHookInstalled = true;
-    Log("[menu] text hook installed");
     return true;
 }
 

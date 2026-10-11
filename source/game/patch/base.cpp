@@ -17,7 +17,6 @@ namespace
     constexpr std::uintptr_t kVertexDeclarationInstColor = 0x754AE0;
     using VertexDeclarationInstColorFn = std::int32_t(__cdecl*)(std::uint8_t*, const std::uint8_t*, std::int32_t, std::uint32_t);
     VertexDeclarationInstColorFn g_vertexDeclarationInstColor = nullptr;
-    std::atomic_bool g_reportedInvalidVertexColorBuffer{false};
 
     bool AllowsRead(DWORD protect)
     {
@@ -101,8 +100,6 @@ namespace
 
         if (!ValidateSpan(color, colorBytes, false) || !ValidateSpan(mem, destinationBytes, true))
         {
-            if (!g_reportedInvalidVertexColorBuffer.exchange(true, std::memory_order_relaxed))
-                Log("[game::patch::renderware] blocked invalid vertex color buffer: mem=%p color=%p verts=%d stride=%u", mem, color, numVerts, stride);
             return FALSE;
         }
 

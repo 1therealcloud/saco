@@ -227,7 +227,6 @@ namespace BuildingRemoval
         RemoveFromPool(0xB74498, 0x38, removal);
         RemoveFromPool(0xB744A0, 0x38, removal);
         RemoveFromPool(0xB7449C, 0x19C, removal);
-        Log("[buildingremoval] rules=%zu, hidden=%zu, occluders=%zu", count, hidden.size(), occluders.size());
         return true;
     }
     void RestoreAll()
@@ -254,7 +253,6 @@ namespace BuildingRemoval
             if (saved.index < total)
                 std::memcpy(reinterpret_cast<std::uint8_t*>(0xC73FA0) + 0x12 * saved.index, saved.geometry.data(), 12);
         *reinterpret_cast<std::uint32_t*>(0xC73CC0) = 0;
-        Log("[buildingremoval] restored=%zu, occluders=%zu", restored, occluders.size());
         hidden.clear();
         occluders.clear();
     }
@@ -269,7 +267,6 @@ namespace BuildingRemoval
             !hook::install(0x71DCA0, &OcclusionInitializedHook, &game::hooks::originalOcclusionInit) ||
             !hook::install(0x5519F0, &PoolsShutdownHook, &game::hooks::originalPoolsShutdown))
             return false;
-        Log("[buildingremoval] installed");
         return true;
     }
 }

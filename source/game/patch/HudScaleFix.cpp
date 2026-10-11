@@ -114,14 +114,12 @@ namespace game::patch::hudscalefix
             return false;
 
         installed = true;
-        Log("[game::patch::hudscalefix] installed");
         return true;
     }
 
     void set_enabled(bool enabled)
     {
         g_enabled.store(enabled, std::memory_order_relaxed);
-        Log("[game::patch::hudscalefix] %s", enabled ? "enabled" : "disabled");
     }
 
     bool is_enabled()

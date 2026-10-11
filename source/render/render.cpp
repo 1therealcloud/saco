@@ -91,7 +91,6 @@ namespace render
         if (g_shuttingDown)
             return;
         g_shuttingDown = true;
-        Log("[ui:shutdown] starting before GTA releases native resources");
         g_srvNetStats.reset();
         g_netStats.reset();
         g_textDrawSelection.reset();
@@ -115,7 +114,6 @@ namespace render
         g_licensePlate.reset();
         g_render.reset();
         g_fonts.reset();
-        Log("[ui:shutdown] complete");
     }
 
     void RenderWorldObjects()
@@ -299,7 +297,6 @@ namespace render
                         "SA:MP - GUI Error", MB_OK | MB_ICONERROR);
             ExitProcess(1);
         }
-        Log("[gui] initialized");
         const std::string userDirectory = GetSampUserDirectory();
         if (userDirectory.empty())
         {
@@ -365,7 +362,6 @@ namespace render
                 g_chat->AddMessage(0xFFFFFFFFu, "{FFFFFF}SA-MP {B9C9BF}0.3.7-R5 {FFFFFF}Started.");
             }
         }
-        Log("[ui] fonts, render and chat initialized");
     }
 
     static void ProcessScreenshot(IDirect3DDevice9* device)

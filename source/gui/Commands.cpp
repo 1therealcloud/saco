@@ -183,7 +183,7 @@ namespace Commands
         {
             if (!g_fonts->Reset())
             {
-                ::Log("failed to recreate fonts!");
+                Log("failed to recreate fonts!");
                 ExitProcess(1);
             }
         }

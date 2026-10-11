@@ -2513,7 +2513,6 @@ namespace cgui
         const bool skinOk = CreateTextureFromPng(skinPath.c_str(), &g_skin);
         const bool fontOk = CreateFontAtlas();
         const bool cursorOk = CreateCursorTexture(cursorPath.c_str());
-        Log("[gui] resources: skin=%d, font=%d, cursor=%d", skinOk, fontOk, cursorOk);
         SetupDialogs();
         g_initialized = skinOk && fontOk && cursorOk;
         return g_initialized;

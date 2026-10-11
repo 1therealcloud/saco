@@ -169,7 +169,6 @@ namespace game::players
         if (!patch::write(0x609A4E, animationCall.data(), animationCall.size()))
             return false;
         g_installed = true;
-        Log("[players] native slots installed: first=2, last=209");
         return true;
     }
 
@@ -185,7 +184,6 @@ namespace game::players
                 AimStuff::SetAim(slot, AimStuff::GetAim());
                 AimStuff::SetCameraMode(*AimStuff::RefInternalCameraMode(), static_cast<std::uint8_t>(slot));
                 AimStuff::SetCameraExtZoomAndAspectRatio(static_cast<std::uint8_t>(slot), AimStuff::GetCameraExtZoom(), AimStuff::GetAspectRatio());
-                Log("[players:slot] acquired=%d", slot);
                 return slot;
             }
         return -1;
@@ -204,6 +202,5 @@ namespace game::players
         g_used[slot] = false;
         std::memset(reinterpret_cast<void*>(kPlayerInfo + slot * kPlayerInfoSize), 0, kPlayerInfoSize);
         KeyStuff::ResetKeys(slot);
-        Log("[players:slot] released=%u", slot);
     }
 }

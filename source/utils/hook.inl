@@ -18,8 +18,6 @@ namespace hook
             return false;
         }
 
-        Log("[hook::install] MH_CreateHook succeeded");
-
         const bool result = MH_EnableHook(target) == MH_OK;
 
         Log("[hook::install] MH_EnableHook %s", result ? "success" : "failed");
