@@ -111,7 +111,8 @@ namespace
         // unused streams have zero stride; do not allocate or lock a buffer for them
         return hook::install(kVertexDeclarationInstColor, &VertexDeclarationInstColorHook, &g_vertexDeclarationInstColor) &&
                ::patch::jump(0x757C3C, reinterpret_cast<const void*>(&EmptyVertexStreamAllocateHook), 6) &&
-               ::patch::jump(0x757D5C, reinterpret_cast<const void*>(&EmptyVertexStreamLockHook), 6);
+               ::patch::jump(0x757D5C, reinterpret_cast<const void*>(&EmptyVertexStreamLockHook), 6) &&
+               ::patch::jump(0x757DBB, reinterpret_cast<const void*>(&EmptyVertexStreamRelockHook), 6);
     }
 
     const Entry kSinglePlayer[] = {
@@ -192,7 +193,7 @@ namespace
         {0x439AF0, RET}, // disables cheat processing
         {0x438370, RET}, // disables cheat toggles
 
-        {0x4E8410, RET}, // disables CAERadioTrackManager::CheckForMissionStatsChanges
+        {0x4E8410, RET},                            // disables CAERadioTrackManager::CheckForMissionStatsChanges
         {0x50547A, {0xE9, 0x13, 0x01, 0x00, 0x00}}, // skips both ambient wind sounds in CAEWeatherAudioEntity::Service
     };
 }

@@ -424,6 +424,22 @@ __declspec(naked) void EmptyVertexStreamLockHook()
     }
 }
 
+__declspec(naked) void EmptyVertexStreamRelockHook()
+{
+    __asm
+    {
+        mov ecx, [eax + 8]
+        test ecx, ecx
+        jz empty_stream
+        mov bl, [eax + 0Eh]
+        push 757DC1h
+        ret
+    empty_stream:
+        push 757DFBh
+        ret
+    }
+}
+
 bool __fastcall UsesSirenHook(void* vehicle, void*)
 {
     using namespace game::patch::vehicle::detail;

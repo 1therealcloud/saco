@@ -56,6 +56,12 @@ namespace game::render::model_preview
             D3DMATRIX view{}, projection{};
             std::array<std::uintptr_t, 32> states{};
             std::array<bool, 32> present{};
+            std::array<std::uint8_t, 8 * 24> textureStates{};
+            std::array<std::uint32_t, 210> nativeStates{};
+            std::array<std::array<std::uint32_t, 33>, 8> stageStates{};
+            std::array<std::array<std::uint32_t, 14>, 8> samplerStates{};
+            D3DMATERIAL9 material{};
+            D3DMATRIX world{};
             bool valid = false;
             explicit DeviceState(IDirect3DDevice9* value) : device(value)
             {
@@ -63,6 +69,18 @@ namespace game::render::model_preview
                     FAILED(device->GetTransform(D3DTS_VIEW, &view)) || FAILED(device->GetTransform(D3DTS_PROJECTION, &projection)))
                     return;
                 device->GetDepthStencilSurface(&depth);
+                device->GetMaterial(&material);
+                device->GetTransform(D3DTS_WORLD, &world);
+                for (std::size_t i = 0; i < nativeStates.size(); ++i)
+                    RwD3D9GetRenderState(static_cast<RwUInt32>(i), &nativeStates[i]);
+                for (RwUInt32 stage = 0; stage < 8; ++stage)
+                {
+                    for (RwUInt32 i = 0; i < 33; ++i)
+                        RwD3D9GetTextureStageState(stage, i, &stageStates[stage][i]);
+                    for (RwUInt32 i = 0; i < 14; ++i)
+                        RwD3D9GetSamplerState(stage, i, &samplerStates[stage][i]);
+                }
+                std::memcpy(textureStates.data(), reinterpret_cast<void*>(0xC9A508), textureStates.size());
                 for (int i = 1; i < 32; ++i)
                     present[i] = RwRenderStateGet(static_cast<RwRenderState>(i), &states[i]) != FALSE;
                 valid = true;
@@ -80,12 +98,34 @@ namespace game::render::model_preview
                 if (valid)
                 {
                     device->SetRenderTarget(0, target);
+                    *reinterpret_cast<IDirect3DSurface9**>(0xC98090) = target;
                     device->SetDepthStencilSurface(depth);
+                    *reinterpret_cast<IDirect3DSurface9**>(0xC9808C) = depth;
+                    for (std::size_t i = 0; i < nativeStates.size(); ++i)
+                        RwD3D9SetRenderState(static_cast<RwUInt32>(i), nativeStates[i]);
+                    for (RwUInt32 stage = 0; stage < 8; ++stage)
+                    {
+                        for (RwUInt32 i = 0; i < 33; ++i)
+                            RwD3D9SetTextureStageState(stage, i, stageStates[stage][i]);
+                        for (RwUInt32 i = 1; i < 14; ++i)
+                            RwD3D9SetSamplerState(stage, i, samplerStates[stage][i]);
+                    }
+                    _rwD3D9RenderStateFlushCache();
+                    RwD3D9SetMaterial(&material);
                     block->Apply();
                     device->SetViewport(&viewport);
                     // explicit calls also restore the matrices cached by our D3D hooks
                     device->SetTransform(D3DTS_VIEW, &view);
                     device->SetTransform(D3DTS_PROJECTION, &projection);
+                    RwD3D9SetTransform(D3DTS_VIEW, &view);
+                    RwD3D9SetTransform(D3DTS_PROJECTION, &projection);
+                    RwD3D9SetTransform(D3DTS_WORLD, &world);
+                    // Apply bypasses RW's binding caches; force the next pipeline to bind its own resources.
+                    std::memset(reinterpret_cast<void*>(0x8E2440), 0xFF, 5 * sizeof(std::uint32_t));
+                    for (int stream = 0; stream < 2; ++stream)
+                        *reinterpret_cast<std::uint32_t*>(0xC97BD8 + stream * 16) = 0xFFFFFFFFu;
+                    // RW also reads these cached raster pointers when saving render states.
+                    std::memcpy(reinterpret_cast<void*>(0xC9A508), textureStates.data(), textureStates.size());
                 }
                 if (depth)
                     depth->Release();
@@ -137,13 +177,18 @@ namespace game::render::model_preview
             std::array<std::uint8_t, 4> current{}, model{};
             void Set(void* vehicleInfo, int color1, int color2)
             {
-                if (color1 < 0 || color1 > 255 || color2 < 0 || color2 > 255)
-                    return;
                 info = vehicleInfo;
                 std::memcpy(current.data(), reinterpret_cast<void*>(0xB4E3F0), 4);
                 std::memcpy(model.data(), static_cast<std::uint8_t*>(info) + 0x2D2, 4);
-                reinterpret_cast<void(__thiscall*)(void*, std::uint8_t, std::uint8_t, std::uint8_t, std::uint8_t)>(0x4C84B0)(info, static_cast<std::uint8_t>(color1),
-                                                                                                                             static_cast<std::uint8_t>(color2), 0, 0);
+                std::array<std::uint8_t, 4> selected{};
+                reinterpret_cast<void(__thiscall*)(void*, std::uint8_t&, std::uint8_t&, std::uint8_t&, std::uint8_t&, int)>(0x4C8500)(info, selected[0], selected[1], selected[2],
+                                                                                                                                      selected[3], 1);
+                if (color1 >= 0 && color1 <= 255)
+                    selected[0] = static_cast<std::uint8_t>(color1);
+                if (color2 >= 0 && color2 <= 255)
+                    selected[1] = static_cast<std::uint8_t>(color2);
+                reinterpret_cast<void(__thiscall*)(void*, std::uint8_t, std::uint8_t, std::uint8_t, std::uint8_t)>(0x4C84B0)(info, selected[0], selected[1], selected[2],
+                                                                                                                             selected[3]);
             }
             ~VehicleColors()
             {
@@ -157,6 +202,12 @@ namespace game::render::model_preview
 
         RpAtomic* PrepareAtomic(RpAtomic* atomic, void*)
         {
+            const auto callback = reinterpret_cast<std::uintptr_t>(RpAtomicGetRenderCallBack(atomic));
+            if (callback == 0x7331E0 || callback == 0x732820 || callback == 0x7334F0)
+            {
+                RpAtomicSetFlags(atomic, RpAtomicGetFlags(atomic) & ~rpATOMICRENDER);
+                return atomic;
+            }
             // use the regular RenderWare callback instead of world/vehicle visibility callbacks
             RpAtomicSetRenderCallBack(atomic, nullptr);
             if (auto* hierarchy = RpSkinAtomicGetHAnimHierarchy(atomic))
@@ -220,16 +271,24 @@ namespace game::render::model_preview
         VehicleColors colors;
         if (type == 6)
             colors.Set(info, color1, color2);
+        if (type == 7 && instance.object->type == rpCLUMP)
+        {
+            auto* clump = reinterpret_cast<RpClump*>(instance.object);
+            reinterpret_cast<void(__cdecl*)(RpClump*)>(0x4D6720)(clump);
+            reinterpret_cast<void*(__cdecl*)(RpClump*, int, int, float)>(0x4D4610)(clump, 0, 3, 1000.0f);
+            reinterpret_cast<void(__cdecl*)(RpClump*, float, bool)>(0x4D34F0)(clump, 0.02f, true);
+        }
 
         // R5's preview camera sits at z=50 and looks along -Y
         const RwV3d xAxis{1, 0, 0}, yAxis{0, 1, 0}, zAxis{0, 0, 1};
         const RwV3d cameraPosition{0, 0, 50};
         RwFrameRotate(modelFrame, &xAxis, rotation.x, rwCOMBINEREPLACE);
-        RwFrameRotate(modelFrame, &yAxis, rotation.y, rwCOMBINEPOSTCONCAT);
-        RwFrameRotate(modelFrame, &zAxis, rotation.z, rwCOMBINEPOSTCONCAT);
+        RwFrameRotate(modelFrame, &yAxis, rotation.y, rwCOMBINEPRECONCAT);
+        RwFrameRotate(modelFrame, &zAxis, rotation.z, rwCOMBINEPRECONCAT);
         const float distance = (0.1f + 2.25f * radius) * zoom;
         const RwV3d position{-center.x, -distance - center.y, 50 - center.z};
         RwFrameTranslate(modelFrame, &position, rwCOMBINEPOSTCONCAT);
+        RwFrameUpdateObjects(modelFrame);
         if (instance.object->type == rpCLUMP)
             RpClumpForAllAtomics(reinterpret_cast<RpClump*>(instance.object), PrepareAtomic, nullptr);
         else
@@ -264,12 +323,31 @@ namespace game::render::model_preview
         scene.lightAdded = true;
         RwRGBA clear{};
         std::memcpy(&clear, &background, sizeof(clear));
-        RwCameraClear(scene.camera, &clear, rwCAMERACLEARIMAGE | rwCAMERACLEARZ);
         if (!RwCameraBeginUpdate(scene.camera))
             return {};
         scene.updating = true;
+        // isolate the off-screen model pass from GUI blend, alpha-test and scissor states
+        auto* device = deviceState.device;
+        device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+        device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+        device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+        if (!RwCameraClear(scene.camera, &clear, rwCAMERACLEARIMAGE | rwCAMERACLEARZ))
+        {
+            deviceState.RestoreRenderWare();
+            return {};
+        }
+        device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, TRUE);
+        device->SetRenderState(D3DRS_SRCBLENDALPHA, D3DBLEND_ONE);
+        device->SetRenderState(D3DRS_DESTBLENDALPHA, D3DBLEND_INVSRCALPHA);
+        device->SetRenderState(D3DRS_BLENDOPALPHA, D3DBLENDOP_ADD);
         RwRenderStateSet(rwRENDERSTATEZTESTENABLE, reinterpret_cast<void*>(TRUE));
         RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, reinterpret_cast<void*>(TRUE));
+        RwRenderStateSet(rwRENDERSTATESHADEMODE, reinterpret_cast<void*>(rwSHADEMODEGOURAUD));
+        RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, nullptr);
+        RwRenderStateSet(rwRENDERSTATESRCBLEND, reinterpret_cast<void*>(rwBLENDSRCALPHA));
+        RwRenderStateSet(rwRENDERSTATEDESTBLEND, reinterpret_cast<void*>(rwBLENDINVSRCALPHA));
+        RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION, reinterpret_cast<void*>(rwALPHATESTFUNCTIONALWAYS));
+        RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF, nullptr);
         RwRenderStateSet(rwRENDERSTATEFOGENABLE, nullptr);
         RwRenderStateSet(rwRENDERSTATECULLMODE, reinterpret_cast<void*>(rwCULLMODECULLNONE));
         const bool vehicle = type == 6 && instance.object->type == rpCLUMP;
