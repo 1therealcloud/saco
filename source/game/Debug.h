@@ -2,7 +2,7 @@
 
 namespace Debug
 {
-    void DebugProcess();
+    bool Initialize();
 
 #ifdef _DEBUG
     namespace Script

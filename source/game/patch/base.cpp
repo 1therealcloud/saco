@@ -183,7 +183,9 @@ namespace
     const Entry kMisc[] = {
         {0x86D1EC, {0x00}},                                                       // r5: prevents loading the single-player playidles animation block
         {0x53EA08, {0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90}}, // r5: disables ped shadows, which crash with multiple player peds
-        {0x442AD0, RET},                                                          // disables CGameLogic::Update
+        {0x4090A0, RET},                                                          // r5: disables interior streaming during resurrection
+        {0x441482, {0x90, 0x90, 0x90, 0x90, 0x90}},                               // r5: skips scene loading during resurrection
+        {0x56E5AD, {0x90, 0x90, 0x90, 0x90, 0x90}},                               // r5: suppresses gta's wasted message
 
         {0x460500, RET}, // disables CReplay::Update
         {0x460390, RET}, // disables CReplay::PlayReplayFromHD
@@ -204,6 +206,10 @@ namespace game::patch::base
     {
         // skips the intro game-state reset
         if (!::patch::nop(0x747483, 6))
+            return false;
+
+        // skip the intro states immediately, as in r5, before installing the remaining hooks
+        if (!::patch::write<std::uint32_t>(0xC8D4C0, 5))
             return false;
 
         constexpr char title[10] = {'t', 'i', 't', 'l', 'e'};
@@ -227,6 +233,10 @@ namespace game::patch::base
             return false;
 
         if (!::patch::apply(kStats))
+            return false;
+
+        // keep sub-threshold gun movement between frames; resetting it prevents aiming movement at high fps
+        if (!::patch::nop(0x61E5E4, 6))
             return false;
 
         if (!::patch::apply(kMapReveal))

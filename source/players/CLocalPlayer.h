@@ -216,6 +216,7 @@ public:
     void ProcessClassSelection();
 
     void UpdateWeapons();
+    void SendBulletData(CVector origin, CVector target, void* entity);
     void SendTakeDamage(int id, float damage, int type, int bodyPart);
     void SendGiveDamage(int id, float damage, int type, int bodyPart);
 

@@ -2,6 +2,7 @@
 
 #include "patch.h"
 #include "game/PlayerSlots.h"
+#include "game/BulletSync.h"
 
 #include <chrono>
 #include <thread>
@@ -67,6 +68,9 @@ namespace game::patch
         }
 
         if (!game::players::Install())
+            return false;
+
+        if (!game::bullets::Install())
             return false;
 
         if (!vehicle::install())

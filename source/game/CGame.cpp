@@ -17,6 +17,7 @@
 #include "entities/CVehicle.h"
 #include "render/render.h"
 #include "game/RenderWare/RenderWare.h"
+#include "sync/AimStuff.h"
 
 #include <algorithm>
 #include <array>
@@ -206,6 +207,8 @@ void CGame::OnGameplayReady()
 
     if (!m_bGameplayAssetsRequested)
     {
+        AimStuff::Initialize();
+        AimStuff::ResetPlayerStats();
         bool disableHeadMove = false;
         g_config.GetParam(CConfig::PARAM_DISABLE_HEAD_MOVE, disableHeadMove);
         SetHeadMoves(disableHeadMove ? FALSE : TRUE);

@@ -320,6 +320,16 @@ BOOL CPed::IsDead() const
     return !HasCurrentNativePed() || GetHealth() <= 0.0f;
 }
 
+BOOL CPed::RestoreAfterDeath(const CVector& position, float rotation)
+{
+    if (!HasCurrentNativePed())
+        return FALSE;
+    using RestorePlayerFn = void(__cdecl*)(void*, CVector, float);
+    reinterpret_cast<RestorePlayerFn>(0x442060)(GetNativePedHandle(), position, rotation);
+    ResetPointers();
+    return HasCurrentNativePed() && IsValid() && !IsDead();
+}
+
 char CPed::GetState() const
 {
     return HasCurrentNativePed() ? Read<char>(m_pGamePed, 0x530) : 0;

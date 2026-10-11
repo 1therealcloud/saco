@@ -41,6 +41,7 @@ add_library(samp SHARED
     source/exceptbox.rc
     source/exceptions.cpp
     source/game/BuildingRemoval.cpp
+    source/game/BulletSync.cpp
     source/game/CAudio.cpp
     source/game/CCamera.cpp
     source/game/CGame.cpp

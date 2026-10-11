@@ -7,6 +7,7 @@
 #include "CRemotePlayer.h"
 
 #include "game/CCamera.h"
+#include "game/BulletSync.h"
 #include "game/CAudio.h"
 #include "gui/CDialog.h"
 #include "game/CGame.h"
@@ -546,13 +547,10 @@ BOOL CLocalPlayer::Spawn()
     if (!ped->HasNativePed() || !ped->IsValid())
         return FALSE;
 
-    // gta's automatic resurrection is disabled with CGameLogic::Update.
+    // server-forced spawning can arrive before gta finishes resurrection
     if (ped->IsDead())
     {
-        using RestorePlayerFn = void(__cdecl*)(void*, CVector, float);
-        reinterpret_cast<RestorePlayerFn>(0x442060)(ped->GetNativePedHandle(), position, rotation);
-        ped->ResetPointers();
-        if (!ped->HasNativePed() || !ped->IsValid() || ped->IsDead())
+        if (!ped->RestoreAfterDeath(position, rotation))
             return FALSE;
     }
 
@@ -1280,6 +1278,49 @@ void CLocalPlayer::ProcessClassSelection()
         NextClass();
 }
 
+void CLocalPlayer::SendBulletData(CVector origin, CVector target, void* entity)
+{
+    if (!m_bIsActive || m_bIsWasted || m_bDoesSpectating || !m_pPed || !m_pPed->HasNativePed() || !FiniteVector(origin) || !FiniteVector(target))
+        return;
+    const auto weapon = m_pPed->GetCurrentWeapon();
+    if (weapon < 22 || weapon > 34 || !g_netGame)
+        return;
+    auto* pools = g_netGame->m_pPools;
+    if (!pools || (weapon == 34 && !entity))
+        return;
+    Synchronization::BulletData data{};
+    data.m_nTargetId = INVALID_ID;
+    data.m_origin = origin;
+    data.m_target = target;
+    data.m_nWeapon = weapon;
+    if (entity)
+    {
+        auto id = pools->m_pPlayer ? pools->m_pPlayer->Find(entity) : INVALID_ID;
+        if (id != INVALID_ID)
+        {
+            data.m_nTargetType = 1;
+            data.m_nTargetId = id;
+        }
+        else if ((id = pools->m_pVehicle ? pools->m_pVehicle->Find(entity) : INVALID_ID) != INVALID_ID)
+        {
+            data.m_nTargetType = 2;
+            data.m_nTargetId = id;
+        }
+        else
+        {
+            const auto object = pools->m_pObject ? pools->m_pObject->GetId(entity) : -1;
+            if (object >= 0 && object < CObjectPool::MAX_OBJECTS)
+            {
+                data.m_nTargetType = 3;
+                data.m_nTargetId = static_cast<ID>(object);
+            }
+        }
+        data.m_center = game::bullets::HitOffset(entity, target, CNetGame::RefLagCompMode());
+    }
+    if (FiniteVector(data.m_center))
+        SendSyncPacket(ID_BULLET_SYNC, data);
+}
+
 void CLocalPlayer::UpdateWeapons()
 {
     if (!g_netGame || !m_pPed || !m_pPed->HasNativePed() || g_netGame->GetState() != CNetGame::GAME_MODE_CONNECTED)
@@ -1617,13 +1658,34 @@ void CLocalPlayer::Process()
         return;
     }
 
+    if (m_bIsWasted)
+    {
+        // r5 waits for gta to finish death and resurrection before spawning
+        if (m_pPed->GetState() == 54 || m_pPed->GetState() == 55)
+            return;
+
+        if (m_bClearedToSpawn && !m_classSelection.m_bEnableAfterDeath && g_netGame && g_netGame->GetState() == CNetGame::GAME_MODE_CONNECTED)
+        {
+            if (m_pPed->GetHealth() > 0.0f)
+                Spawn();
+        }
+        else if (g_netGame)
+        {
+            m_bIsWasted = FALSE;
+            m_classSelection.m_bEnableAfterDeath = FALSE;
+            g_netGame->SpawnScreen();
+            RequestClass(m_classSelection.m_nSelected);
+        }
+        return;
+    }
+
     if (!m_bIsActive)
     {
         ProcessClassSelection();
         return;
     }
 
-    if (m_pPed->IsDead())
+    if (m_pPed->IsDead() || m_pPed->GetState() == 54)
     {
         if (!m_bIsWasted)
         {

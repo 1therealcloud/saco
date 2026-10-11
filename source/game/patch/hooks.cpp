@@ -21,6 +21,9 @@
 #include "render/render.h"
 #include "sync/AimStuff.h"
 #include "sync/KeyStuff.h"
+#include "players/CLocalPlayer.h"
+#include "game/entities/CPed.h"
+#include <intrin.h>
 
 using namespace game::patch::fps;
 using namespace game::players::detail;
@@ -196,6 +199,26 @@ void __fastcall ProcessControlHook(void* ped, void*)
     current = 0;
     KeyStuff::ApplyKeys();
     AimStuff::ApplyAim();
+}
+
+std::uint32_t __fastcall WeaponSkillHook(void* ped, void*)
+{
+    const int slot = FindSlot(ped);
+    const bool switchStats = slot && *reinterpret_cast<const std::uint8_t*>(0xB7CD74) == 0;
+    if (switchStats)
+    {
+        AimStuff::UpdatePlayerStats();
+        AimStuff::ApplyPlayerStats(static_cast<std::uint8_t>(slot));
+    }
+
+    const auto* native = static_cast<const std::uint8_t*>(ped);
+    const auto weaponSlot = *reinterpret_cast<const std::int8_t*>(native + 0x718);
+    const auto weapon = *reinterpret_cast<const int*>(native + 0x5A0 + weaponSlot * 0x1C);
+    const auto skill = reinterpret_cast<std::uint8_t(__thiscall*)(void*, int)>(0x5E3B60)(ped, weapon);
+
+    if (switchStats)
+        AimStuff::ApplyPlayerStats();
+    return skill;
 }
 
 void __cdecl DrawRadarHook()
@@ -469,4 +492,82 @@ void __fastcall TrailerProcessHook(void* vehicle, void*)
             if (!wrapper->DriverIsPlayerPed() && wrapper->m_pTrailer)
                 return;
     reinterpret_cast<void(__thiscall*)(void*)>(0x6A4400)(vehicle);
+}
+
+bool __fastcall FireInstantHitHook(void* weapon, void*, void* owner, CVector* origin, CVector* muzzle, void* target, CVector* targetPosition, CVector* driveBy, bool crosshair,
+                                   int extra)
+{
+    using namespace game::bullets::detail;
+    if (FindSlot(owner) && !remoteShot)
+        return false;
+    void* previous = shooter;
+    shooter = owner;
+    const bool result = instant(weapon, owner, origin, muzzle, target, targetPosition, driveBy, crosshair, extra);
+    shooter = previous;
+    return result;
+}
+
+bool __fastcall FireSniperHook(void* weapon, void*, void* owner, void* target, CVector* targetPosition)
+{
+    using namespace game::bullets::detail;
+    if (FindSlot(owner) && !remoteShot)
+        return false;
+    void* previous = shooter;
+    shooter = owner;
+    const bool result = sniper(weapon, owner, target, targetPosition);
+    shooter = previous;
+    return result;
+}
+
+void __cdecl SniperBulletHook(void* owner, int weapon, CVector position, CVector velocity)
+{
+    // r5 resolves sniper bullets immediately, while the shot and aim context are still active
+    velocity *= 50.0f;
+    reinterpret_cast<bool(__cdecl*)(void*, int, CVector, CVector)>(0x736010)(owner, weapon, position, velocity);
+    reinterpret_cast<void(__cdecl*)()>(0x7360D0)();
+}
+
+bool __cdecl BulletTraceHook(const CVector& origin, const CVector& target, void* point, void** entity, bool buildings, bool vehicles, bool peds, bool objects, bool dummies,
+                             bool seeThrough, bool cameraIgnore, bool shootThrough)
+{
+    using namespace game::bullets::detail;
+    const auto caller = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    if (!shooter || caller < 0x730000 || caller >= 0x744000)
+        return trace(origin, target, point, entity, buildings, vehicles, peds, objects, dummies, seeThrough, cameraIgnore, shootThrough);
+    CVector end = target;
+    if (remoteShot)
+    {
+        end = remoteShot->target;
+        if (remoteShot->entity && lagCompMode != 2)
+        {
+            const auto* native = static_cast<const std::uint8_t*>(remoteShot->entity);
+            const auto* matrix = *reinterpret_cast<const CMatrix* const*>(native + 0x14);
+            if (matrix)
+            {
+                const auto hit = lagCompMode == 0 ? matrix->TransformPoint(remoteShot->center) : matrix->GetPosition() + remoteShot->center;
+                end = hit * 2.0f - origin;
+            }
+        }
+    }
+    const bool hit = trace(origin, end, point, entity, buildings, vehicles, peds, objects, dummies, seeThrough, cameraIgnore, shootThrough);
+    if (!shooter || !point || !entity)
+        return hit;
+    auto* localNative = *reinterpret_cast<void**>(0xB7CD98);
+    if (remoteShot)
+    {
+        if (lagCompMode != 2 && !remoteShot->entity && (*entity == localNative || (g_game && g_game->GetPlayerPed() && *entity == g_game->GetPlayerPed()->GetVehicle())))
+        {
+            *entity = nullptr;
+            return false;
+        }
+        return hit;
+    }
+    if (shooter == localNative)
+    {
+        auto* pool = g_netGame ? g_netGame->GetPlayerPool() : nullptr;
+        auto* local = pool ? pool->GetLocalPlayer() : nullptr;
+        if (local)
+            local->SendBulletData(origin, hit ? *reinterpret_cast<const CVector*>(point) : end, hit ? *entity : nullptr);
+    }
+    return hit;
 }

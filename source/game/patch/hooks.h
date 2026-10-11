@@ -1,5 +1,7 @@
 #pragma once
 
+#include "game/BulletSync.h"
+
 #include "game/RenderWare/rw/skeleton.h"
 
 using EventHandlerFn = RsEventStatus(__cdecl*)(RsEvent, void*);
@@ -12,6 +14,7 @@ void MovementAnimationHook();
 void* __fastcall PlayerInfoHook(void* ped, void*);
 void* __fastcall ShadowHook(void* manager, void*, void* ped);
 void __fastcall ProcessControlHook(void* ped, void*);
+std::uint32_t __fastcall WeaponSkillHook(void* ped, void*);
 void __cdecl DrawRadarHook();
 void __cdecl DrawCrossHairsHook();
 
@@ -55,3 +58,10 @@ void EmptyVertexStreamRelockHook();
 bool __fastcall UsesSirenHook(void* vehicle, void*);
 void __fastcall TrailerProcessHook(void* vehicle, void*);
 void __fastcall VehicleAudioHook(void* audio, void*);
+
+bool __fastcall FireInstantHitHook(void* weapon, void*, void* owner, CVector* origin, CVector* muzzle, void* target, CVector* targetPosition, CVector* driveBy, bool crosshair,
+                                   int extra);
+bool __fastcall FireSniperHook(void* weapon, void*, void* owner, void* target, CVector* targetPosition);
+void __cdecl SniperBulletHook(void* owner, int weapon, CVector position, CVector velocity);
+bool __cdecl BulletTraceHook(const CVector& origin, const CVector& target, void* point, void** entity, bool buildings, bool vehicles, bool peds, bool objects, bool dummies,
+                             bool seeThrough, bool cameraIgnore, bool shootThrough);

@@ -23,6 +23,7 @@
 #include "pools/CObjectPool.h"
 #include "pools/CVehiclePool.h"
 #include "players/CRemotePlayer.h"
+#include "sync/AimStuff.h"
 #include "pools/CMenuPool.h"
 #include "audio/CAudioStream.h"
 #include "game/CGame.h"
@@ -161,16 +162,15 @@ void RPCHandlers::SetPlayerSkillLevel(RPCParameters* pParams)
         return;
 
     auto* pool = g_netGame ? g_netGame->GetPlayerPool() : nullptr;
-    if (!pool || playerId >= CPlayerPool::MAX_PLAYERS)
+    if (!pool || playerId >= CPlayerPool::MAX_PLAYERS || skillId >= AimStuff::PLAYER_STAT_COUNT)
         return;
-    CPed* ped = nullptr;
     if (playerId == pool->m_localInfo.m_nId)
-        ped = g_game ? g_game->GetPlayerPed() : nullptr;
-    else if (auto* remote = pool->GetPlayer(playerId))
-        ped = remote->m_pPed;
-    if (ped && ped->IsValid())
-        if (skillId < 11)
-            ped->SetPlayerStat(static_cast<int>(skillId), level);
+    {
+        AimStuff::SetLocalPlayerStat(static_cast<int>(skillId), level);
+        Log("[rpc:skill] local player=%u, skill=%u, level=%u", playerId, skillId, level);
+    }
+    else if (auto* remote = pool->GetPlayer(playerId); remote && remote->m_pPed)
+        remote->m_pPed->SetPlayerStat(static_cast<int>(skillId), level);
 }
 
 // -----------------------------------------------------------------------------
@@ -869,9 +869,11 @@ void RPCHandlers::WorldPlayerAdd(RPCParameters* pParams)
 
     playerPool->SetTeam(playerId, team);
 
-    // custom skins and skill levels need their game-side implementations
+    for (std::size_t skill = 0; skill < skillLevels.size(); ++skill)
+        player->m_pPed->SetPlayerStat(static_cast<int>(skill), skillLevels[skill]);
+
+    // custom skins need their game-side implementation
     (void)customSkinId;
-    (void)skillLevels;
 }
 
 // -----------------------------------------------------------------------------

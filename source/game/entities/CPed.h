@@ -129,6 +129,7 @@ public:
     int GetFlags() const;
     void SetFlags(int value);
     BOOL IsDead() const;
+    BOOL RestoreAfterDeath(const CVector& position, float rotation);
     char GetState() const;
     void SetState(char value);
 

@@ -129,37 +129,40 @@ bool InstallGameLoopHook()
     return hook::install(target, &EventHandlerHook, &g_eventHandler);
 }
 
-// calls once in first render loop frame
+// initializes resources once, then waits for the debug scene to be ready
 static bool InitializeGameplay(IDirect3DDevice9* device)
 {
-    // init ui
-    // InitializeUi must be BEFORE
-    render::InitializeUi(device);
+    static std::once_flag resourcesOnce;
+    std::call_once(resourcesOnce, [&] {
+        // init ui
+        // InitializeUi must be BEFORE
+        render::InitializeUi(device);
 
-    g_game->OnGameplayReady();
+        g_game->OnGameplayReady();
 
-    if (!g_settings.m_bDebugMode)
-    {
-        g_netGame = std::make_unique<CNetGame>(g_settings.m_szHost, std::atoi(g_settings.m_szPort), g_settings.m_szNick, g_settings.m_szPass);
-        bool hideNametagStatus = false;
-        g_config.GetParam(CConfig::PARAM_NO_NAMETAG_STATUS, hideNametagStatus);
-        g_netGame->m_bNametagStatus = !hideNametagStatus;
-    }
-    g_audio = g_game->GetAudio();
+        if (!g_settings.m_bDebugMode)
+        {
+            g_netGame = std::make_unique<CNetGame>(g_settings.m_szHost, std::atoi(g_settings.m_szPort), g_settings.m_szNick, g_settings.m_szPass);
+            bool hideNametagStatus = false;
+            g_config.GetParam(CConfig::PARAM_NO_NAMETAG_STATUS, hideNametagStatus);
+            g_netGame->m_bNametagStatus = !hideNametagStatus;
+        }
+        g_audio = g_game->GetAudio();
 
-    g_audioStream = new CAudioStream(&g_config, g_chat.get(), g_fonts.get());
-    g_audioStream->Reset();
+        g_audioStream = new CAudioStream(&g_config, g_chat.get(), g_fonts.get());
+        g_audioStream->Reset();
 
-    Commands::Setup();
+        Commands::Setup();
 
-    if (!game::inputhandler::install())
-    {
-        Log("failed to install input handler!");
-        return false;
-    }
-    Log("[inputhandler] installed");
+        if (!game::inputhandler::install())
+        {
+            Log("failed to install input handler!");
+            ExitProcess(1);
+        }
+        Log("[inputhandler] installed");
+    });
 
-    return true;
+    return !g_settings.m_bDebugMode || Debug::Initialize();
 }
 
 // game loop
@@ -220,7 +223,7 @@ void Process()
             CGame::SetRadarState(1);
 
             auto* ped = g_game->GetPlayerPed();
-            if (!ped || !ped->HasNativePed())
+            if (!ped || !ped->HasNativePed() || (local && local->m_bIsWasted) || ped->IsDead())
                 lockedLocalPed = nullptr;
             else
             {
@@ -240,11 +243,7 @@ void Process()
 
     // debug mode
     if (g_settings.m_bDebugMode)
-    {
-        Debug::DebugProcess();
-
         return;
-    }
 
     CObject::ProcessAll(CGame::FrameSeconds());
 }
@@ -259,12 +258,13 @@ void Frame(IDirect3DDevice9* device)
     if (!device || CGame::GetState() != 9 || FAILED(device->TestCooperativeLevel()))
         return;
 
-    // gameplay is initialized once, on the first frame in the playing state
-    static std::once_flag gameplayOnce;
-    std::call_once(gameplayOnce, [&] {
-        if (!InitializeGameplay(device))
-            ExitProcess(1);
-    });
+    static bool gameplayInitialized = false;
+    if (!gameplayInitialized)
+    {
+        gameplayInitialized = InitializeGameplay(device);
+        if (!gameplayInitialized)
+            return;
+    }
 
     render::RenderUi(device);
 }

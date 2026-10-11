@@ -7,6 +7,7 @@
 
 #include "CLocalPlayer.h"
 #include "game/CGame.h"
+#include "game/BulletSync.h"
 #include "game/SpecialAction.h"
 #include "game/entities/CObject.h"
 #include "game/entities/CPed.h"
@@ -1012,9 +1013,40 @@ int CRemotePlayer::GetStatus()
 
 void CRemotePlayer::Update(Synchronization::BulletData* data)
 {
-    // CLocalPlayer keeps combat-specific networking opaque as well. Preserve
-    // the R5 method on the ABI surface until that subsystem is implemented.
-    (void)data;
+    if (!data || !m_pPed || !m_pPed->HasNativePed() || !g_netGame || data->m_nWeapon < 22 || data->m_nWeapon > 34 || data->m_nTargetType > 4)
+        return;
+    auto finite = [](const CVector& value) {
+        return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+    };
+    if (!finite(data->m_origin) || !finite(data->m_target) || !finite(data->m_center))
+        return;
+    if (data->m_nTargetType && (std::abs(data->m_center.x) > 300.0f || std::abs(data->m_center.y) > 300.0f || std::abs(data->m_center.z) > 300.0f))
+        return;
+    game::bullets::Shot shot{data->m_origin, data->m_target, data->m_center};
+    if (data->m_nTargetType == 1)
+    {
+        if (data->m_nTargetId == m_nId)
+            return;
+        auto* players = g_netGame->GetPlayerPool();
+        if (players && data->m_nTargetId == players->m_localInfo.m_nId)
+            shot.entity = CPed::GetLocalPedHandle();
+        else if (auto* player = players ? players->GetPlayer(data->m_nTargetId) : nullptr; player && player->m_pPed)
+            shot.entity = player->m_pPed->GetNativePedHandle();
+    }
+    else if (data->m_nTargetType == 2)
+    {
+        auto* vehicles = g_netGame->GetVehiclePool();
+        auto* vehicle = vehicles ? vehicles->Get(data->m_nTargetId) : nullptr;
+        if (vehicle && vehicle->HasNativeVehicle())
+            shot.entity = vehicle->GetNativeVehicleHandle();
+    }
+    if (m_pPed->GetCurrentWeapon() != data->m_nWeapon)
+    {
+        m_pPed->GiveWeapon(data->m_nWeapon, 9999);
+        m_pPed->SetArmedWeapon(data->m_nWeapon);
+    }
+    if (m_pPed->GetCurrentWeapon() == data->m_nWeapon)
+        game::bullets::Fire(*m_pPed, shot, CNetGame::RefLagCompMode());
 }
 
 void CRemotePlayer::Process()

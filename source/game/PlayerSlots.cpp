@@ -187,6 +187,9 @@ namespace game::players
         const auto controlHook = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&ProcessControlHook));
         if (!patch::write(kProcessControlVtable, controlHook))
             return false;
+        // r5 also selects remote weapon skills outside ProcessControl
+        if (!patch::call(0x7330A2, reinterpret_cast<const void*>(&WeaponSkillHook)))
+            return false;
         DisableLocalCameraRotation();
         std::array<std::uint8_t, 6> animationCall{0xE8, 0, 0, 0, 0, 0x90};
         const auto relative = static_cast<std::int32_t>(reinterpret_cast<std::uintptr_t>(&MovementAnimationHook) - 0x609A4E - 5);

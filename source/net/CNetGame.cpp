@@ -1098,8 +1098,16 @@ void CNetGame::Packet_UnoccupiedSync(Packet* packet)
 // bullet sync
 void CNetGame::Packet_BulletSync(Packet* packet)
 {
-    // needs the separate combat event implementation
-    (void)packet;
+    if (m_nGameState != GAME_MODE_CONNECTED || !packet || !packet->data)
+        return;
+    BitStream bs(packet->data, packet->length, false);
+    std::uint32_t timestamp{};
+    ID playerId{};
+    Synchronization::BulletData data{};
+    if (!ReadSyncHeader(bs, ID_BULLET_SYNC, timestamp) || !bs.Read(playerId) || !ReadSyncBody(bs, data))
+        return;
+    if (auto* player = ResolveRemote(this, playerId); player && player->DoesExist())
+        player->Update(&data);
 }
 
 // aim sync
