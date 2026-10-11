@@ -54,6 +54,27 @@ namespace
     constexpr std::uint32_t STATS_UPDATE_MS = 1000;
     constexpr std::uint32_t SURFING_REACQUIRE_MS = 2000;
 
+    struct SelectionKeyState
+    {
+        const CLocalPlayer* player = nullptr;
+        bool active = false;
+        bool shift = false;
+        bool left = false;
+        bool right = false;
+    };
+
+    SelectionKeyState g_selectionKeys{};
+
+    bool IsKeyHeld(int key)
+    {
+        return (GetAsyncKeyState(key) & 0x8000) != 0;
+    }
+
+    void CaptureSelectionKeys(const CLocalPlayer* player, bool active)
+    {
+        g_selectionKeys = {player, active, IsKeyHeld(VK_SHIFT), IsKeyHeld(VK_LEFT), IsKeyHeld(VK_RIGHT)};
+    }
+
     bool FiniteVector(const CVector& v)
     {
         return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
@@ -225,6 +246,8 @@ void CLocalPlayer::ResetData()
     m_classSelection.m_bEnableAfterDeath = FALSE;
     m_classSelection.m_bIsActive = FALSE;
     m_classSelection.m_bWaitingForSpawnRequestReply = FALSE;
+    if (g_selectionKeys.player == this)
+        g_selectionKeys = {};
     m_nCurrentInterior = 0;
     m_nLastVehicle = INVALID_ID;
     m_nCurrentVehicle = INVALID_ID;
@@ -601,6 +624,8 @@ BOOL CLocalPlayer::Spawn()
     m_bIsWasted = FALSE;
     m_bIsActive = TRUE;
     m_classSelection.m_bIsActive = FALSE;
+    if (g_selectionKeys.player == this)
+        g_selectionKeys = {};
     m_classSelection.m_bWaitingForSpawnRequestReply = FALSE;
     m_classSelection.m_bEnableAfterDeath = FALSE;
     m_zoneDisplayingEnd = GetTickCount() + 1000;
@@ -683,6 +708,7 @@ void CLocalPlayer::PrepareForClassSelection()
     }
     m_initialSelectionTick = GetTickCount();
     m_lastSelectionTick = GetTickCount();
+    CaptureSelectionKeys(this, true);
 }
 
 void CLocalPlayer::PrepareForClassSelection_Outcome(BOOL outcome)
@@ -1227,8 +1253,7 @@ void CLocalPlayer::UpdateVehicleDamage(ID vehicleId)
 
 void CLocalPlayer::NextClass()
 {
-    if (!g_game || !g_netGame || !g_netGame->m_nClassesAvailable || !m_classSelection.m_bIsActive || !m_bClearedToSpawn || m_classSelection.m_bWaitingForSpawnRequestReply ||
-        GetTickCount() - m_initialSelectionTick < 2000 || GetTickCount() - m_lastSelectionTick <= 250)
+    if (!g_game || !g_netGame || !g_netGame->m_nClassesAvailable || !m_classSelection.m_bIsActive || !m_bClearedToSpawn || m_classSelection.m_bWaitingForSpawnRequestReply)
         return;
     const int next = (m_classSelection.m_nSelected + 1) % static_cast<int>(g_netGame->m_nClassesAvailable);
     if (!g_netGame->RequestClass(next))
@@ -1245,8 +1270,7 @@ void CLocalPlayer::NextClass()
 
 void CLocalPlayer::PrevClass()
 {
-    if (!g_game || !g_netGame || !g_netGame->m_nClassesAvailable || !m_classSelection.m_bIsActive || !m_bClearedToSpawn || m_classSelection.m_bWaitingForSpawnRequestReply ||
-        GetTickCount() - m_initialSelectionTick < 2000 || GetTickCount() - m_lastSelectionTick <= 250)
+    if (!g_game || !g_netGame || !g_netGame->m_nClassesAvailable || !m_classSelection.m_bIsActive || !m_bClearedToSpawn || m_classSelection.m_bWaitingForSpawnRequestReply)
         return;
     const int previous = m_classSelection.m_nSelected <= 0 ? static_cast<int>(g_netGame->m_nClassesAvailable) - 1 : m_classSelection.m_nSelected - 1;
     if (!g_netGame->RequestClass(previous))
@@ -1263,17 +1287,39 @@ void CLocalPlayer::PrevClass()
 
 void CLocalPlayer::ProcessClassSelection()
 {
-    if (!m_classSelection.m_bIsActive)
+    const bool active = m_classSelection.m_bIsActive != FALSE;
+    if (g_selectionKeys.player != this || g_selectionKeys.active != active)
+    {
+        CaptureSelectionKeys(this, active);
         return;
+    }
+
+    const bool shift = IsKeyHeld(VK_SHIFT);
+    const bool left = IsKeyHeld(VK_LEFT);
+    const bool right = IsKeyHeld(VK_RIGHT);
+
+    const bool shiftPressed = shift && !g_selectionKeys.shift;
+    const bool leftPressed = left && !g_selectionKeys.left;
+    const bool rightPressed = right && !g_selectionKeys.right;
+
+    g_selectionKeys.shift = shift;
+    g_selectionKeys.left = left;
+    g_selectionKeys.right = right;
+
+    if (!active)
+        return;
+
     if (GetTickCount() - m_lastSelectionTick > 1000 && m_classSelection.m_bWaitingForSpawnRequestReply)
         m_classSelection.m_bWaitingForSpawnRequestReply = FALSE;
-    if (!g_game || CGame::IsPaused() || GetTickCount() - m_initialSelectionTick < 2000 || (g_input && g_input->IsEnabled()) || (g_dialog && g_dialog->IsActive()))
+
+    if (!g_game || CGame::IsPaused() || (g_input && g_input->IsEnabled()) || (g_dialog && g_dialog->IsActive()))
         return;
-    if (GetAsyncKeyState(VK_SHIFT) & 0x8000)
+
+    if (shiftPressed)
         RequestSpawn();
-    else if (GetAsyncKeyState(VK_LEFT) & 0x8000)
+    else if (leftPressed)
         PrevClass();
-    else if (GetAsyncKeyState(VK_RIGHT) & 0x8000)
+    else if (rightPressed)
         NextClass();
 }
 
