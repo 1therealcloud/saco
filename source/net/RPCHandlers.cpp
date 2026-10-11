@@ -146,7 +146,17 @@ void RPCHandlers::SetPlayerSkillLevel(RPCParameters* pParams)
     if (!bs.Read(level))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    auto* pool = g_netGame ? g_netGame->GetPlayerPool() : nullptr;
+    if (!pool || playerId >= CPlayerPool::MAX_PLAYERS)
+        return;
+    CPed* ped = nullptr;
+    if (playerId == pool->m_localInfo.m_nId)
+        ped = g_game ? g_game->GetPlayerPed() : nullptr;
+    else if (auto* remote = pool->GetPlayer(playerId))
+        ped = remote->m_pPed;
+    if (ped && ped->IsValid())
+        if (skillId < 11)
+            ped->SetPlayerStat(static_cast<int>(skillId), level);
 }
 
 // -----------------------------------------------------------------------------
@@ -1831,7 +1841,8 @@ void RPCHandlers::SetWeaponAmmo(RPCParameters* pParams)
     if (!bs.Read(ammo))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (auto* ped = g_game ? g_game->GetPlayerPed() : nullptr)
+        ped->SetWeaponAmmo(weaponId, ammo);
 }
 
 // -----------------------------------------------------------------------------
@@ -2529,7 +2540,8 @@ void RPCHandlers::SetPlayerWantedLevel(RPCParameters* pParams)
     if (!bs.Read(wantedLevel))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (g_game && wantedLevel <= 6)
+        g_game->SetWantedLevel(static_cast<char>(wantedLevel));
 }
 
 // -----------------------------------------------------------------------------
@@ -2798,7 +2810,16 @@ void RPCHandlers::ClearPlayerAnimation(RPCParameters* pParams)
     if (!bs.Read(playerId))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    auto* pool = g_netGame ? g_netGame->GetPlayerPool() : nullptr;
+    if (!pool || playerId >= CPlayerPool::MAX_PLAYERS)
+        return;
+    CPed* ped = nullptr;
+    if (playerId == pool->m_localInfo.m_nId)
+        ped = g_game ? g_game->GetPlayerPed() : nullptr;
+    else if (auto* remote = pool->GetPlayer(playerId))
+        ped = remote->m_pPed;
+    if (ped && ped->IsValid())
+        ped->ClearTasks();
 }
 
 // -----------------------------------------------------------------------------
@@ -2817,7 +2838,9 @@ void RPCHandlers::SetPlayerSpecialAction(RPCParameters* pParams)
     if (!bs.Read(actionId))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (auto* pool = g_netGame ? g_netGame->GetPlayerPool() : nullptr)
+        if (auto* local = pool->GetLocalPlayer())
+            local->SetSpecialAction(static_cast<char>(actionId));
 }
 
 // -----------------------------------------------------------------------------
@@ -2836,7 +2859,8 @@ void RPCHandlers::EnableStuntBonus(RPCParameters* pParams)
     if (!bs.Read(enabled))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (g_game)
+        g_game->EnableStuntBonus(enabled != 0);
 }
 
 // -----------------------------------------------------------------------------
@@ -2859,7 +2883,16 @@ void RPCHandlers::SetPlayerFightingStyle(RPCParameters* pParams)
     if (!bs.Read(styleId))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    auto* pool = g_netGame ? g_netGame->GetPlayerPool() : nullptr;
+    if (!pool || playerId >= CPlayerPool::MAX_PLAYERS)
+        return;
+    CPed* ped = nullptr;
+    if (playerId == pool->m_localInfo.m_nId)
+        ped = g_game ? g_game->GetPlayerPed() : nullptr;
+    else if (auto* remote = pool->GetPlayer(playerId))
+        ped = remote->m_pPed;
+    if (ped && ped->IsValid())
+        ped->SetFightingStyle(styleId);
 }
 
 // -----------------------------------------------------------------------------
@@ -2886,7 +2919,9 @@ void RPCHandlers::SetPlayerVelocity(RPCParameters* pParams)
     if (!bs.Read(z))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (std::isfinite(x) && std::isfinite(y) && std::isfinite(z))
+        if (auto* ped = g_game ? g_game->GetPlayerPed() : nullptr)
+            ped->SetSpeed(CVector{x, y, z});
 }
 
 // -----------------------------------------------------------------------------
@@ -3078,7 +3113,9 @@ void RPCHandlers::SetPlayerTeam(RPCParameters* pParams)
     if (!bs.Read(teamId))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (auto* pool = g_netGame ? g_netGame->GetPlayerPool() : nullptr)
+        if (playerId < CPlayerPool::MAX_PLAYERS)
+            pool->SetTeam(playerId, teamId);
 }
 
 // -----------------------------------------------------------------------------
@@ -3168,7 +3205,9 @@ void RPCHandlers::SetPlayerName(RPCParameters* pParams)
     if ((nameLength && !bs.Read(name.data(), nameLength)) || !bs.Read(success))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (auto* pool = g_netGame ? g_netGame->GetPlayerPool() : nullptr)
+        if (success && playerId < CPlayerPool::MAX_PLAYERS && name.find('\0') == std::string::npos)
+            pool->SetName(playerId, name.c_str());
 }
 
 // -----------------------------------------------------------------------------
@@ -3557,7 +3596,8 @@ void RPCHandlers::TogglePlayerControllable(RPCParameters* pParams)
     if (!bs.Read(moveable))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (auto* ped = g_game ? g_game->GetPlayerPed() : nullptr)
+        ped->SetControllable(moveable != 0);
 }
 
 // -----------------------------------------------------------------------------
@@ -3639,7 +3679,8 @@ void RPCHandlers::GivePlayerMoney(RPCParameters* pParams)
     if (!bs.Read(money))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (g_game)
+        g_game->IncreasePlayerMoney(money);
 }
 
 // -----------------------------------------------------------------------------
@@ -3677,7 +3718,8 @@ void RPCHandlers::ResetPlayerMoney(RPCParameters* pParams)
     BitStream bs;
     (void)bs;
 
-    // TODO: apply decoded RPC to the game state.
+    if (g_game)
+        g_game->ResetMoney();
 }
 
 // -----------------------------------------------------------------------------
@@ -3692,7 +3734,8 @@ void RPCHandlers::ResetPlayerWeapons(RPCParameters* pParams)
     BitStream bs;
     (void)bs;
 
-    // TODO: apply decoded RPC to the game state.
+    if (auto* ped = g_game ? g_game->GetPlayerPed() : nullptr)
+        ped->ClearWeapons();
 }
 
 // -----------------------------------------------------------------------------
@@ -3715,7 +3758,9 @@ void RPCHandlers::GivePlayerWeapon(RPCParameters* pParams)
     if (!bs.Read(ammo))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (weaponId <= 46 && ammo <= INT_MAX)
+        if (auto* ped = g_game ? g_game->GetPlayerPed() : nullptr)
+            ped->GiveWeapon(static_cast<int>(weaponId), static_cast<int>(ammo));
 }
 
 // -----------------------------------------------------------------------------
@@ -3757,7 +3802,9 @@ void RPCHandlers::SetPlayerArmour(RPCParameters* pParams)
     if (!bs.Read(armor))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (std::isfinite(armor))
+        if (auto* ped = g_game ? g_game->GetPlayerPed() : nullptr)
+            ped->SetArmour(armor);
 }
 
 // -----------------------------------------------------------------------------
@@ -3854,7 +3901,9 @@ void RPCHandlers::SetArmedWeapon(RPCParameters* pParams)
     if (!bs.Read(weaponId))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (weaponId <= 46)
+        if (auto* ped = g_game ? g_game->GetPlayerPed() : nullptr)
+            ped->SetArmedWeapon(static_cast<int>(weaponId));
 }
 
 // -----------------------------------------------------------------------------

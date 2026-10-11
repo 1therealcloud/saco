@@ -1,6 +1,8 @@
 #include <stdafx.h>
 
 #include "CPed.h"
+#include "game/CGame.h"
+#include "main.h"
 #include "game/PlayerSlots.h"
 #include "sync/ControllerState.h"
 #include "sync/KeyStuff.h"
@@ -1126,4 +1128,51 @@ void CPed::GetBonePosition(unsigned int boneId, CVector* outPosition) const
     if (!NativeValid(m_pGamePed))
         return;
     GetNativeBonePosition(m_pGamePed, outPosition, boneId, false);
+}
+
+void CPed::ClearWeapons()
+{
+    if (IsValid())
+        reinterpret_cast<void(__thiscall*)(void*)>(0x5E6320)(m_pGamePed);
+}
+
+void CPed::GiveWeapon(int weapon, int ammo)
+{
+    static constexpr int models[] = {0, 331, 333, 334, 335, 336, 337, 338, 339, 341, 321, 322, 323, 324, 325, 326, 342, 343, 344, -1, -1, -1, 346, 347, 348, 349, 350, 351, 352, 353, 355, 356, 372, 357, 358, 359, 360, 361, 362, 363, 364, 365, 366, 367, 368, 369, 371};
+    if (!IsValid() || !g_game || weapon < 0 || weapon >= 47 || models[weapon] < 0 || ammo < 0)
+        return;
+    if (models[weapon] > 0)
+    {
+        g_game->RequestModel(models[weapon]);
+        g_game->LoadRequestedModels();
+        if (!g_game->IsModelAvailable(models[weapon]))
+            return;
+    }
+    constexpr scm::OpcodeInfo give{0x01B2, "iii"};
+    scm::ProcessCommand(&give, m_handle, weapon, ammo);
+    SetArmedWeapon(weapon);
+}
+
+void CPed::SetWeaponAmmo(int weapon, int ammo)
+{
+    if (!IsValid() || weapon < 0 || weapon > 46 || ammo < 0)
+        return;
+    for (int slot = 0; slot < 13; ++slot)
+    {
+        auto* entry = static_cast<std::uint8_t*>(m_pGamePed) + 0x5A0 + slot * 0x1C;
+        if (Read<int>(entry, 0) != weapon)
+            continue;
+        Write(entry, 0x0C, ammo);
+        if (Read<int>(entry, 0x08) > ammo)
+            Write(entry, 0x08, ammo);
+        return;
+    }
+}
+
+void CPed::SetArmedWeapon(int weapon)
+{
+    if (!IsValid() || weapon < 0 || weapon > 46)
+        return;
+    constexpr scm::OpcodeInfo armed{0x01B9, "ii"};
+    scm::ProcessCommand(&armed, m_handle, weapon);
 }

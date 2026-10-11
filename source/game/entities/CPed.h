@@ -163,14 +163,10 @@ public:
     void SetDrunkLevel(int level);
     // END TODO
 
-    // TODO
-
-    // ClearWeapons
-    // GiveWeapon
-    // SetWeaponAmmo
-    // SetArmedWeapon
-
-    // END TODO
+    void ClearWeapons();
+    void GiveWeapon(int weapon, int ammo);
+    void SetWeaponAmmo(int weapon, int ammo);
+    void SetArmedWeapon(int weapon);
 
     void PerformAnimation(const char* name, const char* file, float frameDelta, int loop, int lockX, int lockY, int lockF, int time);
     void ClearTasks();
