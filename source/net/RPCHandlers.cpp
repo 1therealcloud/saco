@@ -32,6 +32,7 @@
 #include "pools/CPlayerPool.h"
 
 #include <BitStream.h>
+#include <RakClientInterface.h>
 #include <StringCompressor.h>
 
 #include <cmath>
@@ -503,7 +504,7 @@ void RPCHandlers::GameModeRestart(RPCParameters* pParams)
 //   uint8 reason - Connection rejection reason code.
 void RPCHandlers::ConnectionRejected(RPCParameters* pParams)
 {
-    if (!pParams || !pParams->input)
+    if (!pParams || !pParams->input || pParams->numberOfBitsOfData < 8)
         return;
 
     BitStream bs(pParams->input, BITS_TO_BYTES(pParams->numberOfBitsOfData), false);
@@ -513,7 +514,32 @@ void RPCHandlers::ConnectionRejected(RPCParameters* pParams)
     if (!bs.Read(reason))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (g_chat)
+    {
+        switch (reason)
+        {
+            case 1:
+                g_chat->PrintInfo("CONNECTION REJECTED: Incorrect Version.");
+                break;
+            case 2:
+                g_chat->PrintInfo("CONNECTION REJECTED: Unacceptable NickName");
+                g_chat->PrintInfo("Please choose another nick between and 3-20 characters");
+                g_chat->PrintInfo("Please use only a-z, A-Z, 0-9");
+                g_chat->PrintInfo("Use /quit to exit or press ESC and select Quit Game");
+                break;
+            case 3:
+                g_chat->PrintInfo("CONNECTION REJECTED: Bad mod version.");
+                break;
+            case 4:
+                g_chat->PrintInfo("CONNECTION REJECTED: Unable to allocate a player slot.");
+                break;
+            default:
+                break;
+        }
+    }
+
+    if (auto* client = g_netGame ? g_netGame->GetRakClient() : nullptr)
+        client->Disconnect(500);
 }
 
 // -----------------------------------------------------------------------------
