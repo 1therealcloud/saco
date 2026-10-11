@@ -124,6 +124,11 @@ namespace render
         if (auto* game = g_game.get())
             if (auto* ped = game->GetPlayerPed())
                 ped->ProcessAccessories();
+        if (auto* players = pools ? pools->m_pPlayer : nullptr)
+            for (int id = 0; id <= players->m_nLargestId && id < CPlayerPool::MAX_PLAYERS; ++id)
+                if (auto* remote = players->GetPlayer(static_cast<CPlayerPool::ID>(id)))
+                    if (auto* ped = remote->m_pPed)
+                        ped->ProcessAccessories();
         if (objectPool)
             objectPool->Draw();
     }

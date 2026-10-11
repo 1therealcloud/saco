@@ -3880,67 +3880,45 @@ void RPCHandlers::SetArmedWeapon(RPCParameters* pParams)
 // Note: DL-specific modelId is signed int32.
 void RPCHandlers::SetPlayerAttachedObject(RPCParameters* pParams)
 {
-    if (!pParams || !pParams->input)
+    auto* players = g_netGame ? g_netGame->GetPlayerPool() : nullptr;
+    if (!players || !pParams || !pParams->input)
         return;
 
     BitStream bs(pParams->input, BITS_TO_BYTES(pParams->numberOfBitsOfData), false);
-
     std::uint16_t playerId{};
     std::uint32_t index{};
     bool create{};
-    std::int32_t modelId{};
-    std::uint32_t bone{};
-    float offsetX{};
-    float offsetY{};
-    float offsetZ{};
-    float rotX{};
-    float rotY{};
-    float rotZ{};
-    float scaleX{};
-    float scaleY{};
-    float scaleZ{};
-    std::uint32_t materialColor1{};
-    std::uint32_t materialColor2{};
+    if (!bs.Read(playerId) || !bs.Read(index) || !bs.Read(create) || playerId >= CPlayerPool::MAX_PLAYERS || index >= CPed::MAX_ACCESSORIES)
+        return;
 
-    if (!bs.Read(playerId))
+    CPed* ped = nullptr;
+    if (playerId == players->m_localInfo.m_nId)
+    {
+        if (auto* local = players->GetLocalPlayer())
+            ped = local->GetPed();
+    }
+    else if (auto* remote = players->GetPlayer(playerId))
+    {
+        ped = remote->m_pPed;
+    }
+    if (!ped || !ped->IsValid())
         return;
-    if (!bs.Read(index))
-        return;
-    if (!bs.Read(create))
-        return;
+
     if (!create)
     {
-        // TODO: remove the attached object.
+        ped->DeleteAccessory(static_cast<int>(index));
         return;
     }
-    if (!bs.Read(modelId))
-        return;
-    if (!bs.Read(bone))
-        return;
-    if (!bs.Read(offsetX))
-        return;
-    if (!bs.Read(offsetY))
-        return;
-    if (!bs.Read(offsetZ))
-        return;
-    if (!bs.Read(rotX))
-        return;
-    if (!bs.Read(rotY))
-        return;
-    if (!bs.Read(rotZ))
-        return;
-    if (!bs.Read(scaleX))
-        return;
-    if (!bs.Read(scaleY))
-        return;
-    if (!bs.Read(scaleZ))
-        return;
-    if (!bs.Read(materialColor1))
-        return;
-    if (!bs.Read(materialColor2))
+
+    CPed::Accessory info{};
+    if (!bs.Read(info.m_nModel) || !bs.Read(info.m_nBone) ||
+        !bs.Read(info.m_offset.x) || !bs.Read(info.m_offset.y) || !bs.Read(info.m_offset.z) ||
+        !bs.Read(info.m_rotation.x) || !bs.Read(info.m_rotation.y) || !bs.Read(info.m_rotation.z) ||
+        !bs.Read(info.m_scale.x) || !bs.Read(info.m_scale.y) || !bs.Read(info.m_scale.z) ||
+        !bs.Read(info.m_firstMaterialColor) || !bs.Read(info.m_secondMaterialColor))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    ped->AddAccessory(static_cast<int>(index), &info);
 }
 
 // -----------------------------------------------------------------------------
