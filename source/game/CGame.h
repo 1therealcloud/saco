@@ -136,6 +136,7 @@ public:
     void SetMapIcon(std::uint8_t id, CVector position, int icon, int color, int type);
     void RemoveMapIcon(std::uint8_t id);
     void ResetMapIcons();
+    static bool GetMapClickPosition(CVector& position);
     void LoadAnimationsAndModels();                       // 0xA18A0
     void LoadCollisionFile(const char* file);             // 0xA1B80
     void LoadCullZone(const char* line);                  // 0xA1BA0

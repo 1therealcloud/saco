@@ -1202,3 +1202,27 @@ void* CGame::TraceObjectRay(const CVector& origin, const CVector& target)
         return nullptr;
     return entity;
 }
+
+bool CGame::GetMapClickPosition(CVector& position)
+{
+    static bool rightButtonDown = false;
+    const bool down = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+    const bool pressed = down && !rightButtonDown;
+    rightButtonDown = down;
+    if (!pressed || !IsPlaying() || !IsPaused() || !Mem<std::uint32_t>(0xBA6774) || Mem<std::uint8_t>(0xBA8298))
+        return false;
+
+    // r5 finds the active destination blip in gta's radar trace array
+    for (std::uintptr_t entry = 0xBA8718; entry < 0xBA8718 + 175 * 0x28; entry += 0x28)
+    {
+        if (Mem<std::uint16_t>(entry + 0x25) != 0x1203)
+            continue;
+        position.x = Mem<float>(entry + 8);
+        position.y = Mem<float>(entry + 12);
+        if (!std::isfinite(position.x) || !std::isfinite(position.y))
+            return false;
+        position.z = reinterpret_cast<float(__cdecl*)(float, float)>(0x569660)(position.x, position.y) + 2.0f;
+        return std::isfinite(position.z);
+    }
+    return false;
+}

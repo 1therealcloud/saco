@@ -251,6 +251,10 @@ void Process()
 // render loop
 void Frame(IDirect3DDevice9* device)
 {
+    CVector mapPosition{};
+    if (CGame::GetMapClickPosition(mapPosition) && g_netGame && g_netGame->GetState() == CNetGame::GAME_MODE_CONNECTED)
+        g_netGame->MapMarker(mapPosition.x, mapPosition.y, mapPosition.z);
+
     // radio control runs every present, before the playing-state gate (as before the refactor)
     if (g_audioStream && g_audioStream->IsPlaying())
         g_audioStream->ControlGameRadio();
