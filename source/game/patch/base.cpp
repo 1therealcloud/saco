@@ -193,6 +193,7 @@ namespace
         {0x438370, RET}, // disables cheat toggles
 
         {0x4E8410, RET}, // disables CAERadioTrackManager::CheckForMissionStatsChanges
+        {0x50547A, {0xE9, 0x13, 0x01, 0x00, 0x00}}, // skips both ambient wind sounds in CAEWeatherAudioEntity::Service
     };
 }
 
