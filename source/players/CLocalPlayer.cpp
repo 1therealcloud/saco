@@ -1463,13 +1463,13 @@ void CLocalPlayer::ProcessSpectating()
 void CLocalPlayer::SendTakeDamage(int id, float damage, int type, int bodyPart)
 {
     if (g_netGame && id >= 0 && id <= INVALID_ID && std::isfinite(damage) && damage >= 0.0f && type >= 0 && bodyPart >= 0)
-        g_netGame->GiveTakeDamage(true, static_cast<ID>(id), damage, static_cast<std::uint32_t>(type), static_cast<std::uint32_t>(bodyPart));
+        g_netGame->GiveTakeDamage(true, static_cast<ID>(id), damage * 0.33f, static_cast<std::uint32_t>(type), static_cast<std::uint32_t>(bodyPart));
 }
 
 void CLocalPlayer::SendGiveDamage(int id, float damage, int type, int bodyPart)
 {
     if (g_netGame && id >= 0 && id <= INVALID_ID && std::isfinite(damage) && damage >= 0.0f && type >= 0 && bodyPart >= 0)
-        g_netGame->GiveTakeDamage(false, static_cast<ID>(id), damage, static_cast<std::uint32_t>(type), static_cast<std::uint32_t>(bodyPart));
+        g_netGame->GiveTakeDamage(false, static_cast<ID>(id), damage * 0.33f, static_cast<std::uint32_t>(type), static_cast<std::uint32_t>(bodyPart));
 }
 
 bool CLocalPlayer::ProcessUnoccupiedSync(ID vehicleId, CVehicle* vehicle)

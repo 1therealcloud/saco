@@ -23,6 +23,9 @@
 #include "sync/KeyStuff.h"
 #include "players/CLocalPlayer.h"
 #include "game/entities/CPed.h"
+#include "pools/CActorPool.h"
+#include "pools/CVehiclePool.h"
+#include "players/CRemotePlayer.h"
 #include <intrin.h>
 
 using namespace game::patch::fps;
@@ -570,4 +573,64 @@ bool __cdecl BulletTraceHook(const CVector& origin, const CVector& target, void*
             local->SendBulletData(origin, hit ? *reinterpret_cast<const CVector*>(point) : end, hit ? *entity : nullptr);
     }
     return hit;
+}
+
+void __fastcall ComputeDamageResponseHook(game::bullets::detail::DamageCalculator* calculator, void*, void* victim, void* response, bool speak)
+{
+    auto* pools = g_netGame ? g_netGame->m_pPools : nullptr;
+    auto* players = pools ? pools->m_pPlayer : nullptr;
+    auto* local = players ? players->GetLocalPlayer() : nullptr;
+    auto* ped = local ? local->m_pPed : nullptr;
+    if (!calculator || !victim || !ped || !ped->HasNativePed() || g_netGame->GetState() != CNetGame::GAME_MODE_CONNECTED)
+    {
+        game::bullets::detail::damage(calculator, victim, response, speak);
+        return;
+    }
+    auto* localNative = ped->GetNativePedHandle();
+    auto* damager = calculator->damager;
+    // r5 excludes damage to ordinary GTA peds from non-local sources
+    if (damager != localNative && *static_cast<const std::uintptr_t*>(victim) == 0x86C0A8)
+        return;
+    const bool taking = victim == localNative;
+    if (taking || damager == localNative)
+    {
+        if (taking && ((damager && ped->GetVehicle() == damager) || calculator->weapon == 54))
+            return;
+        const auto findPlayer = [&](void* entity) {
+            auto id = players->Find(entity);
+            if (id != CPlayerPool::INVALID_ID || !entity || !pools->m_pVehicle)
+                return id;
+            const auto vehicle = pools->m_pVehicle->Find(entity);
+            if (vehicle != CVehiclePool::INVALID_ID)
+                for (int i = 0; i <= players->m_nLargestId; ++i)
+                    if (auto* remote = players->GetPlayer(static_cast<CPlayerPool::ID>(i)))
+                        if (remote->m_pPed && remote->m_nVehicleId == vehicle)
+                            return static_cast<CPlayerPool::ID>(i);
+            return CPlayerPool::INVALID_ID;
+        };
+        const auto id = findPlayer(taking ? damager : victim);
+        if (taking)
+            local->SendTakeDamage(id, calculator->damage, calculator->weapon, calculator->bodyPart);
+        else if (id != CPlayerPool::INVALID_ID)
+        {
+            local->SendGiveDamage(id, calculator->damage, calculator->weapon, calculator->bodyPart);
+            if (auto* remote = players->GetPlayer(id))
+                if (remote->field_3)
+                    return;
+        }
+        else if (pools->m_pActor)
+        {
+            const auto actor = pools->m_pActor->Find(victim);
+            if (actor != CActorPool::INVALID_ID)
+            {
+                g_netGame->GiveActorDamage(false, actor, calculator->damage, calculator->weapon, calculator->bodyPart);
+                return;
+            }
+        }
+        if (g_netGame->m_pSettings && g_netGame->m_pSettings->m_bFriendlyFire && local->m_nTeam != 255)
+            if (auto* remote = players->GetPlayer(id))
+                if (remote->m_nTeam == local->m_nTeam)
+                    return;
+    }
+    game::bullets::detail::damage(calculator, victim, response, speak);
 }

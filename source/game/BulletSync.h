@@ -23,6 +23,17 @@ namespace game::bullets
         using InstantFn = bool(__thiscall*)(void*, void*, CVector*, CVector*, void*, CVector*, CVector*, bool, int);
         using SniperFn = bool(__thiscall*)(void*, void*, void*, CVector*);
         using TraceFn = bool(__cdecl*)(const CVector&, const CVector&, void*, void**, bool, bool, bool, bool, bool, bool, bool, bool);
+        struct DamageCalculator
+        {
+            void* damager;
+            float damage;
+            std::uint32_t bodyPart;
+            int weapon;
+            bool speak;
+        };
+        static_assert(sizeof(DamageCalculator) == 20);
+        using DamageFn = void(__thiscall*)(DamageCalculator*, void*, void*, bool);
+        extern DamageFn damage;
         extern InstantFn instant;
         extern SniperFn sniper;
         extern TraceFn trace;

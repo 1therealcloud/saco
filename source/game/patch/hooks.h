@@ -65,3 +65,5 @@ bool __fastcall FireSniperHook(void* weapon, void*, void* owner, void* target, C
 void __cdecl SniperBulletHook(void* owner, int weapon, CVector position, CVector velocity);
 bool __cdecl BulletTraceHook(const CVector& origin, const CVector& target, void* point, void** entity, bool buildings, bool vehicles, bool peds, bool objects, bool dummies,
                              bool seeThrough, bool cameraIgnore, bool shootThrough);
+
+void __fastcall ComputeDamageResponseHook(game::bullets::detail::DamageCalculator* calculator, void*, void* victim, void* response, bool speak);

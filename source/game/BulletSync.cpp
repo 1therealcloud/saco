@@ -10,6 +10,7 @@ namespace game::bullets
 {
     namespace detail
     {
+        DamageFn damage = nullptr;
         InstantFn instant = nullptr;
         SniperFn sniper = nullptr;
         TraceFn trace = nullptr;
@@ -22,7 +23,8 @@ namespace game::bullets
     {
         return ::patch::call(0x73AC4B, reinterpret_cast<const void*>(&SniperBulletHook)) &&
                hook::install(0x73FB10, reinterpret_cast<detail::InstantFn>(&FireInstantHitHook), &detail::instant) &&
-               hook::install(0x73AAC0, reinterpret_cast<detail::SniperFn>(&FireSniperHook), &detail::sniper) && hook::install(0x56BA00, &BulletTraceHook, &detail::trace);
+               hook::install(0x73AAC0, reinterpret_cast<detail::SniperFn>(&FireSniperHook), &detail::sniper) && hook::install(0x56BA00, &BulletTraceHook, &detail::trace) &&
+               hook::install(0x4B5AC0, reinterpret_cast<detail::DamageFn>(&ComputeDamageResponseHook), &detail::damage);
     }
 
     CVector HitOffset(void* entity, CVector point, unsigned lagCompMode)
