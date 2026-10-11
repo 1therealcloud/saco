@@ -7,3 +7,6 @@
 [submodule "third-party/raknet"]
 	path = third-party/raknet
 	url = https://github.com/1therealcloud/RakNet
+[submodule "third-party/directxmath"]
+	path = third-party/directxmath
+	url = https://github.com/microsoft/DirectXMath.git

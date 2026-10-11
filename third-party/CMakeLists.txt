@@ -1,3 +1,5 @@
+add_subdirectory(directxmath EXCLUDE_FROM_ALL)
+
 add_subdirectory(minhook)
 
 add_subdirectory(raknet)

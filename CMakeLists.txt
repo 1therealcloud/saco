@@ -1,6 +1,6 @@
 # cmake -B build -A Win32; cmake --build build --config Release
 
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.21)
 project(saco LANGUAGES CXX)
 
 # only Win32 is supported
@@ -139,6 +139,7 @@ target_precompile_headers(samp PRIVATE
 )
 
 target_link_libraries(samp PRIVATE
+    DirectXMath
     bass
     minhook
     raknet
