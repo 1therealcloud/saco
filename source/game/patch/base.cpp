@@ -1,0 +1,284 @@
+#include <stdafx.h>
+
+#include "patch.h"
+#include "game/patch/HudScaleFix.h"
+#include "hooks.h"
+
+#include <atomic>
+#include <limits>
+
+namespace
+{
+    using ::patch::Entry;
+    using ::patch::JMP_SHORT;
+    using ::patch::RET;
+    using ::patch::RET_ZERO;
+
+    constexpr std::uintptr_t kVertexDeclarationInstColor = 0x754AE0;
+    using VertexDeclarationInstColorFn = std::int32_t(__cdecl*)(std::uint8_t*, const std::uint8_t*, std::int32_t, std::uint32_t);
+    VertexDeclarationInstColorFn g_vertexDeclarationInstColor = nullptr;
+    std::atomic_bool g_reportedInvalidVertexColorBuffer{false};
+
+    bool AllowsRead(DWORD protect)
+    {
+        if (protect & (PAGE_GUARD | PAGE_NOACCESS))
+            return false;
+        switch (protect & 0xFF)
+        {
+            case PAGE_READONLY:
+            case PAGE_READWRITE:
+            case PAGE_WRITECOPY:
+            case PAGE_EXECUTE_READ:
+            case PAGE_EXECUTE_READWRITE:
+            case PAGE_EXECUTE_WRITECOPY:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    bool AllowsWrite(DWORD protect)
+    {
+        if (protect & (PAGE_GUARD | PAGE_NOACCESS))
+            return false;
+        switch (protect & 0xFF)
+        {
+            case PAGE_READWRITE:
+            case PAGE_WRITECOPY:
+            case PAGE_EXECUTE_READWRITE:
+            case PAGE_EXECUTE_WRITECOPY:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    bool ValidateSpan(const void* data, std::size_t size, bool write)
+    {
+        if (!size)
+            return true;
+        if (!data)
+            return false;
+
+        const auto begin = reinterpret_cast<std::uintptr_t>(data);
+        if (size - 1 > std::numeric_limits<std::uintptr_t>::max() - begin)
+            return false;
+        const auto end = begin + size;
+
+        for (auto cursor = begin; cursor < end;)
+        {
+            MEMORY_BASIC_INFORMATION info{};
+            if (VirtualQuery(reinterpret_cast<const void*>(cursor), &info, sizeof(info)) != sizeof(info) || info.State != MEM_COMMIT ||
+                !(write ? AllowsWrite(info.Protect) : AllowsRead(info.Protect)))
+                return false;
+
+            const auto region = reinterpret_cast<std::uintptr_t>(info.BaseAddress);
+            if (info.RegionSize > std::numeric_limits<std::uintptr_t>::max() - region)
+                return false;
+            const auto regionEnd = region + info.RegionSize;
+            if (regionEnd <= cursor)
+                return false;
+            cursor = regionEnd < end ? regionEnd : end;
+        }
+        return true;
+    }
+
+    std::int32_t __cdecl VertexDeclarationInstColorHook(std::uint8_t* mem, const std::uint8_t* color, std::int32_t numVerts, std::uint32_t stride)
+    {
+        if (numVerts <= 0)
+            return FALSE;
+
+        constexpr std::size_t kColorSize = 4;
+        const auto count = static_cast<std::size_t>(numVerts);
+        if (count > std::numeric_limits<std::size_t>::max() / kColorSize)
+            return FALSE;
+        const auto colorBytes = count * kColorSize;
+
+        const auto lastVertex = count - 1;
+        if (stride && lastVertex > (std::numeric_limits<std::size_t>::max() - kColorSize) / stride)
+            return FALSE;
+        const auto destinationBytes = lastVertex * static_cast<std::size_t>(stride) + kColorSize;
+
+        if (!ValidateSpan(color, colorBytes, false) || !ValidateSpan(mem, destinationBytes, true))
+        {
+            if (!g_reportedInvalidVertexColorBuffer.exchange(true, std::memory_order_relaxed))
+                Log("[game::patch::renderware] blocked invalid vertex color buffer: mem=%p color=%p verts=%d stride=%u", mem, color, numVerts, stride);
+            return FALSE;
+        }
+
+        return g_vertexDeclarationInstColor(mem, color, numVerts, stride);
+    }
+
+    bool InstallRenderWareCrashFix()
+    {
+        // unused streams have zero stride; do not allocate or lock a buffer for them
+        return hook::install(kVertexDeclarationInstColor, &VertexDeclarationInstColorHook, &g_vertexDeclarationInstColor) &&
+               ::patch::jump(0x757C3C, reinterpret_cast<const void*>(&EmptyVertexStreamAllocateHook), 6) &&
+               ::patch::jump(0x757D5C, reinterpret_cast<const void*>(&EmptyVertexStreamLockHook), 6);
+    }
+
+    const Entry kSinglePlayer[] = {
+        {0x605A30, RET}, // disables CInterestingEvents::ScanForNearbyEntities
+        {0x446610, RET}, // disables CGangWars::Update
+        {0x43C590, RET}, // disables CConversations::Update
+        {0x43B0F0, RET}, // disables CPedToPlayerConversations::Update
+    };
+
+    const Entry kPopulation[] = {
+        {0x612710, RET_ZERO},           // makes CPopulation::AddPed return null
+        {0x610F20, RET},                // disables CPopulation::RemovePed
+        {0x614720, {0x32, 0xC0, 0xC3}}, // makes CPopulation::AddToPopulation return false
+        {0x611FC0, RET},                // disables CPopulation::ManagePed
+        {0x616470, RET},                // disables interior population, which dereferences the disabled AddPed result
+        {0x616698, {0x5E, 0xC3}},       // stops CPopulation::Update after ManagePopulation
+
+        {0x4322B0, RET}, // disables CCarCtrl::RemoveCarsIfThePoolGetsFull
+    };
+
+    const Entry kTrafficAndStreaming[] = {
+        {0x4341C0, RET}, // disables CCarCtrl::GenerateRandomCars
+        {0x4629E0, RET}, // disables CRoadBlocks::GenerateRoadblocks
+
+        {0x40E7DF, JMP_SHORT}, // skips ambient vehicle/ped streaming in CStreaming::Update
+        {0x40B650, RET},       // disables CStreaming::StreamVehiclesAndPeds_Always
+
+        {0x6F7900, RET},                            // disables autogenerated trains
+        {0x6F7865, JMP_SHORT},                      // skips ped creation for trains
+        {0x6F8E7B, {0xE9, 0x09, 0x01, 0x00, 0x00}}, // keeps trains from derailing
+        {0x6F8E80, {0x90}},                         // keeps trains from derailing
+
+        {0x6CD2F0, RET}, // disables plane generation
+        {0x42B7D0, RET}, // disables CCarCtrl::GenerateOneEmergencyServicesCar
+        {0x6F3F40, RET}, // disables car generators
+    };
+
+    const Entry kWantedAndCrime[] = {
+        {0x58DB5F, {0xBD, 0x00, 0x00, 0x00, 0x00, 0x90, 0x90, 0x90, 0x90}}, // r5 hud wanted level: mov ebp, 0
+        {0x72DF0D, JMP_SHORT},                                              // skips military-zone wanted checks
+        {0x441770, RET},                                                    // disables CGameLogic::SetPlayerWantedLevelForForbiddenTerritories
+        {0x532010, RET},                                                    // disables CCrime::ReportCrime
+
+        {0x561FA4, {0x90}}, // disables wanted helis
+        {0x561FA5, {0x90}}, // disables wanted helis
+
+        {0x53BFF6, {0x90, 0x90, 0x90, 0x90, 0x90}}, // skips CWanted::UpdateEachFrame
+        {0x60EBCC, {0x90, 0x90, 0x90, 0x90, 0x90}}, // skips CWanted::Update
+    };
+
+    const Entry kStats[] = {
+        {0x589650, {0xE9, 0xDB, 0x0C, 0x00, 0x00}}, // redirects CHud::DrawVitalStats to CHud::DrawRadar
+        {0x55C180, RET},                            // disables CStats::IncrementStat
+
+        {0x559FD5, {0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90}}, // disables stat decrement path
+        {0x559FEB, {0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90}}, // disables stat decrement path
+
+        {0x55B980, RET}, // disables CStats::DisplayScriptStatUpdateMessage
+        {0x559760, RET}, // disables CStats::CheckForStatsMessage
+    };
+
+    const Entry kMapReveal[] = {
+        {0x5759F4, {0xE9, 0x39, 0x01, 0x00, 0x00, 0x90}}, // skips unrevealed-zone fog in CMenuManager::PrintMap
+        {0x575E2E, JMP_SHORT},                            // shows zone names regardless of exploration
+        {0x583B13, JMP_SHORT},                            // reveals short-range blips in CRadar::HasThisBlipBeenRevealed
+    };
+
+    const Entry kMisc[] = {
+        {0x86D1EC, {0x00}},                                                       // r5: prevents loading the single-player playidles animation block
+        {0x53EA08, {0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90}}, // r5: disables ped shadows, which crash with multiple player peds
+        {0x442AD0, RET},                                                          // disables CGameLogic::Update
+
+        {0x460500, RET}, // disables CReplay::Update
+        {0x460390, RET}, // disables CReplay::PlayReplayFromHD
+        {0x4600F0, RET}, // disables CReplay::TriggerPlayback
+        {0x45F050, RET}, // disables CReplay::FinishPlayback
+
+        {0x439AF0, RET}, // disables cheat processing
+        {0x438370, RET}, // disables cheat toggles
+
+        {0x4E8410, RET}, // disables CAERadioTrackManager::CheckForMissionStatsChanges
+    };
+}
+
+namespace game::patch::base
+{
+    bool install()
+    {
+        // skips the intro game-state reset
+        if (!::patch::nop(0x747483, 6))
+            return false;
+
+        constexpr char title[10] = {'t', 'i', 't', 'l', 'e'};
+
+        if (!::patch::write(0x866CD8, title, sizeof(title)))
+            return false;
+
+        if (!::patch::write(0x866CCC, title, sizeof(title)))
+            return false;
+
+        if (!::patch::apply(kSinglePlayer))
+            return false;
+
+        if (!::patch::apply(kPopulation))
+            return false;
+
+        if (!::patch::apply(kTrafficAndStreaming))
+            return false;
+
+        if (!::patch::apply(kWantedAndCrime))
+            return false;
+
+        if (!::patch::apply(kStats))
+            return false;
+
+        if (!::patch::apply(kMapReveal))
+            return false;
+
+        // compact the native pause menu: resume, map, options, quit
+        constexpr std::uintptr_t pauseMenuItems = 0x8D0444;
+        constexpr std::size_t menuItemSize = 0x12;
+        std::array<std::uint8_t, menuItemSize * 12> pauseItems{};
+        constexpr std::size_t keepItems[] = {0, 2, 5, 6};
+        for (std::size_t i = 0; i < std::size(keepItems); ++i)
+        {
+            std::memcpy(pauseItems.data() + i * menuItemSize, reinterpret_cast<const void*>(pauseMenuItems + keepItems[i] * menuItemSize), menuItemSize);
+            const std::uint16_t position[] = {320, static_cast<std::uint16_t>(170 + i * 30)};
+            std::memcpy(pauseItems.data() + i * menuItemSize + 12, position, sizeof(position));
+        }
+        if (!::patch::write(pauseMenuItems, pauseItems.data(), pauseItems.size()))
+            return false;
+        // select the matching compacted item when returning from a submenu
+        const Entry pauseReturnItems[] = {
+            {0x8CE47B, {1}}, // map
+            {0x8CFD33, {2}}, // options
+            {0x8CFEF7, {3}}, // quit confirmation
+        };
+        if (!::patch::apply(pauseReturnItems))
+            return false;
+
+        // r5 disables CClock::Update and clears the hud clock format
+        constexpr std::uint8_t clockUpdate = 0x56;
+        constexpr std::uint8_t disabledClock = 0xC3;
+        constexpr char clockFormat[] = "%02d:%02d";
+        constexpr char hiddenClock[sizeof(clockFormat)]{};
+        if ((!::patch::expect(0x52CF10, clockUpdate) && !::patch::expect(0x52CF10, disabledClock)) ||
+            (!::patch::expect(0x859A6C, clockFormat) && !::patch::expect(0x859A6C, hiddenClock)))
+            return false;
+        if (!::patch::write(0x52CF10, disabledClock) || !::patch::write(0x859A6C, hiddenClock))
+            return false;
+
+        if (!::patch::apply(kMisc))
+            return false;
+
+        if (!InstallRenderWareCrashFix())
+            return false;
+
+        // notify the server when GTA collects a pickup, including persistent types
+        if (!::patch::jump(0x4579C6, reinterpret_cast<const void*>(&PickupCollectedHook)))
+            return false;
+
+        if (!game::patch::hudscalefix::install())
+            return false;
+
+        return true;
+    }
+}

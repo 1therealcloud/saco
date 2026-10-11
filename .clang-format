@@ -1,0 +1,78 @@
+---
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++20
+
+IndentWidth: 4
+IndentPPDirectives: AfterHash
+PPIndentWidth: 3
+TabWidth: 4
+UseTab: Never
+
+ColumnLimit: 180
+BreakConstructorInitializers: BeforeColon
+PackConstructorInitializers: BinPack
+ConstructorInitializerIndentWidth: 4
+BinPackArguments: true
+BinPackParameters: true
+ReflowComments: false
+MaxEmptyLinesToKeep: 1
+InsertNewlineAtEOF: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+
+# allman
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterCaseLabel: true
+  AfterClass: true
+  AfterControlStatement: Always
+  AfterEnum: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterStruct: true
+  AfterUnion: true
+  AfterExternBlock: true
+  BeforeCatch: true
+  BeforeElse: true
+  BeforeWhile: true # do {} \n while ()
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: false
+
+NamespaceIndentation: All
+IndentCaseLabels: true
+IndentCaseBlocks: false
+AccessModifierOffset: -4
+
+# const std::uint8_t* data
+PointerAlignment: Left
+DerivePointerAlignment: false
+ReferenceAlignment: Pointer
+
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+AllowShortLambdasOnASingleLine: Empty
+
+AlwaysBreakTemplateDeclarations: Yes
+SpaceAfterTemplateKeyword: true
+BreakBeforeBinaryOperators: None
+AlignOperands: Align
+AlignAfterOpenBracket: Align
+AlignTrailingComments: true
+
+# OpenFile{data, size, 0}
+Cpp11BracedListStyle: true
+SpaceBeforeCpp11BracedList: false
+SpaceBeforeParens: ControlStatements
+SpacesInParentheses: false
+SpacesInAngles: false
+SpaceAfterCStyleCast: false
+
+# stdafx.h must stay first, so don't touch the order
+SortIncludes: false
+IncludeBlocks: Preserve
+FixNamespaceComments: false
