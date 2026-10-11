@@ -1,0 +1,9 @@
+[submodule "third-party/minhook"]
+	path = third-party/minhook
+	url = https://github.com/TsudaKageyu/minhook.git
+[submodule "third-party/stb"]
+	path = third-party/stb
+	url = https://github.com/nothings/stb.git
+[submodule "third-party/raknet"]
+	path = third-party/raknet
+	url = https://github.com/1therealcloud/RakNet
