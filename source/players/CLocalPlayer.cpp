@@ -7,6 +7,8 @@
 #include "CRemotePlayer.h"
 
 #include "game/CCamera.h"
+#include "game/CAudio.h"
+#include "gui/CDialog.h"
 #include "game/CGame.h"
 #include "game/InputHandler.h"
 #include "gui/CInput.h"
@@ -925,16 +927,40 @@ void CLocalPlayer::UpdateVehicleDamage(ID vehicle)
 
 void CLocalPlayer::NextClass()
 {
-    ++m_classSelection.m_nSelected;
-    RequestClass(m_classSelection.m_nSelected);
+    if (!g_game || !g_netGame || !g_netGame->m_nClassesAvailable || !m_classSelection.m_bIsActive ||
+        !m_bClearedToSpawn || m_classSelection.m_bWaitingForSpawnRequestReply || GetTickCount() - m_initialSelectionTick < 2000 ||
+        GetTickCount() - m_lastSelectionTick <= 250)
+        return;
+    const int next = (m_classSelection.m_nSelected + 1) % static_cast<int>(g_netGame->m_nClassesAvailable);
+    if (!g_netGame->RequestClass(static_cast<std::uint16_t>(next)))
+        return;
+    m_classSelection.m_nSelected = next;
+    m_bClearedToSpawn = FALSE;
     m_lastSelectionTick = GetTickCount();
+    CMatrix matrix = CMatrix::Unity();
+    if (m_pPed)
+        m_pPed->GetMatrix(&matrix);
+    if (auto* audio = g_game->GetAudio())
+        audio->Play(1052, matrix.GetPosition());
 }
 
 void CLocalPlayer::PrevClass()
 {
-    --m_classSelection.m_nSelected;
-    RequestClass(m_classSelection.m_nSelected);
+    if (!g_game || !g_netGame || !g_netGame->m_nClassesAvailable || !m_classSelection.m_bIsActive ||
+        !m_bClearedToSpawn || m_classSelection.m_bWaitingForSpawnRequestReply || GetTickCount() - m_initialSelectionTick < 2000 ||
+        GetTickCount() - m_lastSelectionTick <= 250)
+        return;
+    const int previous = m_classSelection.m_nSelected <= 0 ? static_cast<int>(g_netGame->m_nClassesAvailable) - 1 : m_classSelection.m_nSelected - 1;
+    if (!g_netGame->RequestClass(static_cast<std::uint16_t>(previous)))
+        return;
+    m_classSelection.m_nSelected = previous;
+    m_bClearedToSpawn = FALSE;
     m_lastSelectionTick = GetTickCount();
+    CMatrix matrix = CMatrix::Unity();
+    if (m_pPed)
+        m_pPed->GetMatrix(&matrix);
+    if (auto* audio = g_game->GetAudio())
+        audio->Play(1053, matrix.GetPosition());
 }
 
 void CLocalPlayer::ProcessClassSelection()
@@ -943,6 +969,15 @@ void CLocalPlayer::ProcessClassSelection()
         return;
     if (GetTickCount() - m_lastSelectionTick > 1000 && m_classSelection.m_bWaitingForSpawnRequestReply)
         m_classSelection.m_bWaitingForSpawnRequestReply = FALSE;
+    if (!g_game || CGame::IsPaused() || GetTickCount() - m_initialSelectionTick < 2000 ||
+        (g_input && g_input->IsEnabled()) || (g_dialog && g_dialog->IsActive()))
+        return;
+    if (GetAsyncKeyState(VK_SHIFT) & 0x8000)
+        RequestSpawn();
+    else if (GetAsyncKeyState(VK_LEFT) & 0x8000)
+        PrevClass();
+    else if (GetAsyncKeyState(VK_RIGHT) & 0x8000)
+        NextClass();
 }
 
 void CLocalPlayer::UpdateWeapons()

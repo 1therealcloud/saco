@@ -1313,6 +1313,7 @@ void RPCHandlers::InitGame(RPCParameters* pParams)
     settings.m_bNoNametagsBehindWalls = true;
     settings.m_bManualVehicleEngineAndLight = manualVehicleEngineAndLights;
     settings.m_bClassesAvailable = spawnsAvailable != 0;
+    g_netGame->m_nClassesAvailable = spawnsAvailable;
     settings.m_bNameTags = showNameTags;
     Log("[nametags] enabled=%d, walls=%d, wire walls=%d, distance=%.1f", showNameTags, settings.m_bNoNametagsBehindWalls, nameTagLos, nameTagDistance);
     settings.m_nPlayerMarkersMode = static_cast<int>(showPlayerMarkers);
