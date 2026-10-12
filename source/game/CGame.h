@@ -120,20 +120,21 @@ public:
     ::CWeaponInfo* GetWeaponInfo(int weapon, int skill);              // 0xA13E0
 
     GTAREF CreatePickup(int model, int type, CVector position, GTAREF* handle); // 0xA11F0
-    IDirect3DDevice9* GetDevice();                                              // 0xA1370
-    void Restart();                                                             // 0xA13B0
-    void SetWorldGravity(float value);                                          // 0xA1400
-    void SetWantedLevel(char level);                                            // 0xA1420
-    void SetNumberOfIntroTextLinesThisFrame(unsigned short value);              // 0xA1430
-    void DrawGangZone(float* position, std::uint32_t color);                    // 0xA1440
-    void EnableZoneDisplaying(bool enable);                                     // 0xA1520
-    void EnableStuntBonus(bool enable);                                         // 0xA1540
-    void LoadScene(const char* file);                                           // 0xA15B0
-    int GetUsedMemory();                                                        // 0xA15D0
-    int GetStreamingMemory();                                                   // 0xA15E0
-    void SetRequiredVehicleModels(unsigned char* modelCount);                   // 0xA1610
-    int GetTimer();                                                             // 0xA1770
-    void SetTimer(int value);                                                   // 0xA1750
+    static bool IsPickupCollected(GTAREF handle);
+    IDirect3DDevice9* GetDevice();                                 // 0xA1370
+    void Restart();                                                // 0xA13B0
+    void SetWorldGravity(float value);                             // 0xA1400
+    void SetWantedLevel(char level);                               // 0xA1420
+    void SetNumberOfIntroTextLinesThisFrame(unsigned short value); // 0xA1430
+    void DrawGangZone(float* position, std::uint32_t color);       // 0xA1440
+    void EnableZoneDisplaying(bool enable);                        // 0xA1520
+    void EnableStuntBonus(bool enable);                            // 0xA1540
+    void LoadScene(const char* file);                              // 0xA15B0
+    int GetUsedMemory();                                           // 0xA15D0
+    int GetStreamingMemory();                                      // 0xA15E0
+    void SetRequiredVehicleModels(unsigned char* modelCount);      // 0xA1610
+    int GetTimer();                                                // 0xA1770
+    void SetTimer(int value);                                      // 0xA1750
     void SetMapIcon(std::uint8_t id, CVector position, int icon, int color, int type);
     void RemoveMapIcon(std::uint8_t id);
     void ResetMapIcons();

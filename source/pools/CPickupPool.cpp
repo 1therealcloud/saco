@@ -170,8 +170,8 @@ void CPickupPool::Process()
 {
     ZoneScoped;
     PROFILE_SCOPE(Pickups);
-    // Опкод 0x0214 (has_pickup_been_collected): перевіряє, чи підібрав гравець пікап
-    constexpr scm::OpcodeInfo opHasCollected{0x0214, "i"};
+    if (m_nCount <= 0)
+        return;
 
     for (int i = 0; i < MAX_PICKUPS; ++i)
     {
@@ -183,7 +183,7 @@ void CPickupPool::Process()
         // because other clients may keep the pickup in a different slot
         if (m_weapon[i].m_bExists)
         {
-            if (scm::ProcessCommand(&opHasCollected, handle) == 0)
+            if (!CGame::IsPickupCollected(handle))
                 continue;
             if (auto* netGame = g_netGame.get())
                 netGame->DestroyWeaponPickup(m_weapon[i].m_nExOwner);
@@ -197,7 +197,7 @@ void CPickupPool::Process()
             continue;
         }
 
-        if (scm::ProcessCommand(&opHasCollected, handle) == 0)
+        if (!CGame::IsPickupCollected(handle))
             continue;
         if (auto* netGame = g_netGame.get())
             netGame->PickedUpPickup(static_cast<std::uint32_t>(i), CNetGame::PickupSendMode::Process);

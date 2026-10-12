@@ -41,7 +41,6 @@ namespace
     constexpr scm::OpcodeInfo LOAD_REQUESTED_MODELS{0x038B, ""};
     constexpr scm::OpcodeInfo MODEL_AVAILABLE{0x0248, "i"};
     constexpr scm::OpcodeInfo RELEASE_MODEL{0x0249, "i"};
-    constexpr scm::OpcodeInfo SET_TIME{0x00C0, "ii"};
     constexpr scm::OpcodeInfo TOGGLE_WIDESCREEN{0x02A3, "i"};
     constexpr scm::OpcodeInfo CREATE_EXPLOSION{0x0948, "fffif"};
     constexpr scm::OpcodeInfo TRAIN_TRAFFIC{0x06D7, "i"};
@@ -62,7 +61,6 @@ namespace
     constexpr scm::OpcodeInfo ADD_MONEY{0x0109, "ii"};
     constexpr scm::OpcodeInfo CREATE_PICKUP{0x0213, "iifffv"};
     constexpr scm::OpcodeInfo CREATE_PICKUP_WITH_AMMO{0x032B, "iiifffv"};
-    constexpr scm::OpcodeInfo ZONE_DISPLAY{0x09BA, "i"};
     constexpr scm::OpcodeInfo CREATE_RACING_CHECKPOINT{0x06D5, "ifffffffv"};
     constexpr scm::OpcodeInfo DELETE_RACING_CHECKPOINT{0x06D6, "i"};
     constexpr scm::OpcodeInfo IS_PED_NEAR_POINT{0x00FE, "iffffffi"};
@@ -281,7 +279,7 @@ void CGame::SetWorldTime(char hour, char minute)
 {
     Mem<std::uint8_t>(0xB70152) = static_cast<std::uint8_t>(minute);
     Mem<std::uint8_t>(0xB70153) = static_cast<std::uint8_t>(hour);
-    scm::ProcessCommand(&SET_TIME, static_cast<int>(hour), static_cast<int>(minute));
+    reinterpret_cast<void(__cdecl*)(std::uint8_t, std::uint8_t, std::uint8_t)>(0x52D150)(static_cast<std::uint8_t>(hour), static_cast<std::uint8_t>(minute), 0);
 }
 
 void CGame::GetWorldTime(char* hour, char* minute)
@@ -717,9 +715,15 @@ void CGame::Restart()
     Mem<std::uint8_t>(0xBA6831) = 1;
 }
 
+bool CGame::IsPickupCollected(GTAREF handle)
+{
+    return handle && reinterpret_cast<bool(__cdecl*)(GTAREF)>(0x454B40)(handle);
+}
+
 void CGame::SetWorldGravity(float value)
 {
-    patch::write(0x863984, value);
+    if (Mem<float>(0x863984) != value)
+        patch::write(0x863984, value);
 }
 
 void CGame::SetWantedLevel(char level)
@@ -743,7 +747,7 @@ void CGame::DrawGangZone(float* position, std::uint32_t color)
 
 void CGame::EnableZoneDisplaying(bool enable)
 {
-    scm::ProcessCommand(&ZONE_DISPLAY, enable ? 1 : 0);
+    Mem<std::uint8_t>(0xBAA3F8) = enable ? 0 : 1;
 }
 
 void CGame::EnableStuntBonus(bool enable)
