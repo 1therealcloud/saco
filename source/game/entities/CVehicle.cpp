@@ -30,12 +30,11 @@ namespace
     constexpr scm::OpcodeInfo SET_MARKER_SCALE{0x0168, "ii"};
     constexpr scm::OpcodeInfo IS_CAR_SUNK{0x02BF, "i"};
     constexpr scm::OpcodeInfo IS_CAR_WRECKED{0x0119, "i"};
-    constexpr scm::OpcodeInfo SET_CAR_PROOFS{0x02AC, "iiiiii"};
     constexpr scm::OpcodeInfo WARP_CHAR_FROM_CAR_TO_COORD{0x0362, "ifff"};
     constexpr scm::OpcodeInfo CREATE_TRAIN{0x06D8, "ifffiv"};
     constexpr scm::OpcodeInfo DESTROY_TRAIN{0x07BD, "i"};
     constexpr scm::OpcodeInfo SET_CAR_LOCKED{0x0519, "ii"};
-    constexpr scm::OpcodeInfo SET_CAR_DAMAGEABLE{0x053F, "ii"};
+    constexpr scm::OpcodeInfo SET_CAR_TYRES_CAN_BURST{0x053F, "ii"};
     constexpr scm::OpcodeInfo CHANGE_CAR_INTERIOR{0x0840, "ii"};
     constexpr scm::OpcodeInfo ATTACH_TRAILER_TO_CAB{0x0893, "ii"};
     constexpr scm::OpcodeInfo DETACH_TRAILER_FROM_CAB{0x07AC, "ii"};
@@ -257,7 +256,7 @@ CVehicle::CVehicle(int model, CVector position, float rotation, BOOL keepModelLo
         scm::ProcessCommand(&SET_CAR_Z_ANGLE, m_handle, static_cast<double>(rotation));
         scm::ProcessCommand(&VEHICLE_CTOR_09C4, m_handle, 0);
         scm::ProcessCommand(&VEHICLE_CTOR_07FF, m_handle, 0);
-        scm::ProcessCommand(&SET_CAR_DAMAGEABLE, m_handle, 0);
+        scm::ProcessCommand(&SET_CAR_TYRES_CAN_BURST, m_handle, 0);
 
         m_pGameVehicle = VehicleFromHandle(m_handle);
         m_pGameEntity = m_pGameVehicle;
@@ -465,13 +464,14 @@ void CVehicle::SetInvulnerable(BOOL invulnerable)
 
     PROFILE_SCOPE(VehicleProofs);
     constexpr std::uint32_t proofMask = (1u << 18) | (1u << 19) | (1u << 20) | (1u << 21) | (1u << 23);
-    const int value = invulnerable ? 1 : 0;
-    const auto proofs = Read<std::uint32_t>(m_pGameVehicle, 0x40) & proofMask;
-    if (proofs != (invulnerable ? proofMask : 0u))
-        scm::ProcessCommand(&SET_CAR_PROOFS, m_handle, value, value, value, value, value);
-    const bool damageable = (Read<unsigned char>(m_pGameVehicle, 0x42A) & 0x20) != 0;
-    if (damageable == (invulnerable != FALSE))
-        scm::ProcessCommand(&SET_CAR_DAMAGEABLE, m_handle, invulnerable ? 0 : 1);
+    // 02AC only changes these five CPhysical flags; avoid SCM dispatch in the pool's per-frame path.
+    const auto physicalFlags = Read<std::uint32_t>(m_pGameVehicle, 0x40);
+    const auto updatedFlags = (physicalFlags & ~proofMask) | (invulnerable ? proofMask : 0u);
+    if (physicalFlags != updatedFlags)
+        Write<std::uint32_t>(m_pGameVehicle, 0x40, updatedFlags);
+    const bool tyresProtected = (Read<unsigned char>(m_pGameVehicle, 0x42B) & 0x80) != 0;
+    if (tyresProtected != (invulnerable != FALSE))
+        scm::ProcessCommand(&SET_CAR_TYRES_CAN_BURST, m_handle, invulnerable ? 0 : 1);
     m_bIsInvulnerable = invulnerable ? TRUE : FALSE;
 }
 
