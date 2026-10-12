@@ -28,6 +28,8 @@ namespace
         cgui::Static* caption = nullptr;
         int captionHeight = 0;
         int nextRow = 0;
+        std::array<int, 10> layout{};
+        bool layoutValid = false;
     };
 
     std::unordered_map<CDownloadWindow*, RuntimeState> g_runtime;
@@ -310,6 +312,7 @@ void CDownloadWindow::ResetDialogControl(cgui::Dialog* dialog)
 {
     m_pDialog = dialog;
     m_pListbox = nullptr;
+    State(this).layoutValid = false;
 
     if (!m_pDialog)
         return;
@@ -468,32 +471,20 @@ void CDownloadWindow::UpdateRects()
     if (!m_pDialog)
         return;
 
+    const RECT client = CGui::GetClientRect();
+
+    RuntimeState& state = State(this);
+    const std::array<int, 10> layout{client.left,     client.top,         client.right,      client.bottom,         m_nWindowWidth,
+                                     m_nWindowHeight, GetCaptionHeight(), GetLittleHeight(), m_nSpaceSizeForIdText, m_nSpaceSizeForProgressText};
+    if (state.layoutValid && state.layout == layout)
+        return;
+    state.layout = layout;
+    state.layoutValid = true;
     m_pDialog->SetSize(m_nWindowWidth, m_nWindowHeight);
-
-    RECT client{0, 0, 640, 480};
-    if (m_pDevice)
-    {
-        D3DDEVICE_CREATION_PARAMETERS parameters{};
-        if (SUCCEEDED(m_pDevice->GetCreationParameters(&parameters)) && parameters.hFocusWindow)
-            GetClientRect(parameters.hFocusWindow, &client);
-        else
-        {
-            D3DVIEWPORT9 viewport{};
-            if (SUCCEEDED(m_pDevice->GetViewport(&viewport)))
-            {
-                client.left = static_cast<LONG>(viewport.X);
-                client.top = static_cast<LONG>(viewport.Y);
-                client.right = static_cast<LONG>(viewport.X + viewport.Width);
-                client.bottom = static_cast<LONG>(viewport.Y + viewport.Height);
-            }
-        }
-    }
-
     m_position[0] = static_cast<unsigned int>(client.left + (client.right - client.left - m_nWindowWidth) / 2);
     m_position[1] = static_cast<unsigned int>(client.top + (client.bottom - client.top - m_nWindowHeight) / 2);
     m_pDialog->SetLocation(static_cast<int>(m_position[0]), static_cast<int>(m_position[1]));
 
-    RuntimeState& state = State(this);
     state.captionHeight = GetCaptionHeight();
     field_24 = m_nWindowHeight - state.captionHeight;
 

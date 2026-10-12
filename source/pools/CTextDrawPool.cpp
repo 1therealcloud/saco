@@ -50,21 +50,26 @@ void CTextDrawPool::Delete(std::uint16_t id)
 
     m_pObject[id] = nullptr;
     m_bNotEmpty[id] = FALSE;
+    const auto it = std::lower_bound(m_activeIds.begin(), m_activeIds.end(), id);
+    if (it != m_activeIds.end() && *it == id)
+        m_activeIds.erase(it);
 }
 
 void CTextDrawPool::Draw()
 {
-    for (std::size_t i = 0; i < MAX_SLOTS; ++i)
+    for (const auto i : m_activeIds)
         if (m_pObject[i])
             m_pObject[i]->m_data.m_bDrawnThisFrame = 0;
     if (g_drawBlockState && *g_drawBlockState != 0)
         return;
 
-    for (std::size_t i = 0; i < MAX_SLOTS; ++i)
+    CTextDraw::BeginDrawPass();
+    for (const auto i : m_activeIds)
     {
         if (m_bNotEmpty[i])
             m_pObject[i]->Draw();
     }
+    CTextDraw::EndDrawPass();
 }
 
 CTextDraw* CTextDrawPool::Create(int id, const CTextDraw::Transmit* transmit, const char* text)
@@ -80,12 +85,13 @@ CTextDraw* CTextDrawPool::Create(int id, const CTextDraw::Transmit* transmit, co
 
     m_pObject[index] = object;
     m_bNotEmpty[index] = TRUE;
+    m_activeIds.insert(std::lower_bound(m_activeIds.begin(), m_activeIds.end(), index), index);
     return object;
 }
 
 void CTextDrawPool::LoadPreviews()
 {
-    for (std::size_t i = 0; i < MAX_SLOTS; ++i)
+    for (const auto i : m_activeIds)
     {
         if (m_bNotEmpty[i])
             m_pObject[i]->LoadPreview();
@@ -94,7 +100,7 @@ void CTextDrawPool::LoadPreviews()
 
 void CTextDrawPool::UnloadPreviews()
 {
-    for (std::size_t i = 0; i < MAX_SLOTS; ++i)
+    for (const auto i : m_activeIds)
     {
         if (m_bNotEmpty[i])
             m_pObject[i]->UnloadPreview();

@@ -13,6 +13,9 @@
 
 namespace
 {
+    unsigned int g_drawDepth = 0;
+    int g_screenWidth = 0, g_screenHeight = 0;
+    float g_scaleX = 0, g_scaleY = 0;
 
     template <typename T>
     T GameFunction(std::uintptr_t address)
@@ -21,22 +24,22 @@ namespace
     }
     int ScreenWidth()
     {
-        return CGame::ScreenWidth();
+        return g_drawDepth ? g_screenWidth : CGame::ScreenWidth();
     }
 
     int ScreenHeight()
     {
-        return CGame::ScreenHeight();
+        return g_drawDepth ? g_screenHeight : CGame::ScreenHeight();
     }
 
     float HudScaleX()
     {
-        return CGame::HudScaleX();
+        return g_drawDepth ? g_scaleX : CGame::HudScaleX();
     }
 
     float HudScaleY()
     {
-        return CGame::HudScaleY();
+        return g_drawDepth ? g_scaleY : CGame::HudScaleY();
     }
 
     std::int32_t FloatToInt(float value)
@@ -365,6 +368,7 @@ CTextDraw::~CTextDraw()
 
 void CTextDraw::SetText(const char* text)
 {
+    m_szString[0] = '\0';
     std::memset(m_szText, 0, sizeof(m_szText));
     m_data.m_bTextContainsKeys = 0;
     m_data.m_bDrawnThisFrame = 0;
@@ -397,12 +401,29 @@ void CTextDraw::SetText(const char* text)
         m_data.m_bTextContainsKeys = 0;
     }
 
+    std::strcpy(m_szString, m_szText);
     if (m_data.m_nStyle == 4)
     {
         ReleaseResource();
         m_data.m_nIndex = AcquireResource();
         LoadTexture();
     }
+}
+
+void CTextDraw::BeginDrawPass()
+{
+    if (!g_drawDepth++)
+    {
+        g_screenWidth = CGame::ScreenWidth();
+        g_screenHeight = CGame::ScreenHeight();
+        g_scaleX = CGame::HudScaleX();
+        g_scaleY = CGame::HudScaleY();
+    }
+}
+void CTextDraw::EndDrawPass()
+{
+    if (g_drawDepth)
+        --g_drawDepth;
 }
 
 void CTextDraw::Draw()
@@ -447,7 +468,8 @@ void CTextDraw::DrawText()
     if (!m_szText[0])
         return;
 
-    std::strcpy(m_szString, m_szText);
+    if (m_data.m_bTextContainsKeys)
+        std::strcpy(m_szString, m_szText);
 
     const float screenWidth = static_cast<float>(ScreenWidth());
     const float screenHeight = static_cast<float>(ScreenHeight());

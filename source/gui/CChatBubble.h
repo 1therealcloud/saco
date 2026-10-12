@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 #include "utils/math/CVector.h"
 
@@ -41,4 +42,7 @@ public:
 
     void Add(ID player, const char* text, D3DCOLOR color, float drawDistance, int lifeSpan);
     void Draw();
+
+private:
+    std::vector<ID> m_activeIds;
 };

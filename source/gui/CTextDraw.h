@@ -112,6 +112,8 @@ public:
 
     // only after all textdraws have been destroyed
     static void ResetResourcePool();
+    static void BeginDrawPass();
+    static void EndDrawPass();
 
 private:
     void DrawText();

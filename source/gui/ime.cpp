@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include "game/Profiler.h"
 
 #include "ime.h"
 #include "CGui.h"
@@ -261,8 +262,11 @@ namespace cgui::ime
                 row.first = first;
                 row.width = Measure(dc, text);
                 row.source = RECT{0, atlasY, row.width, atlasY + g_lineHeight};
-                for (std::size_t i = 0; i <= text.size(); ++i)
-                    row.positions.push_back(Measure(dc, text, i));
+                row.positions.resize(text.size() + 1);
+                SIZE extent{};
+                if (!text.empty() && !GetTextExtentExPointW(dc, text.data(), static_cast<int>(text.size()), 0, nullptr, row.positions.data() + 1, &extent))
+                    for (std::size_t i = 1; i <= text.size(); ++i)
+                        row.positions[i] = Measure(dc, text, i);
                 g_width = std::max(g_width, row.width);
                 atlasY += g_lineHeight;
                 rows.push_back(std::move(row));
@@ -270,15 +274,33 @@ namespace cgui::ime
             // r5: composition starts at the caret and moves below the line only on overflow
             for (std::size_t first = 0; first < g_composition.size();)
             {
+                int fit = 0;
+                SIZE extent{};
+                const int remaining = static_cast<int>(g_composition.size() - first);
                 std::size_t last = first;
-                while (last < g_composition.size())
+                if (GetTextExtentExPointW(dc, g_composition.data() + first, remaining, g_textWidth, &fit, nullptr, &extent))
                 {
-                    std::size_t next = last + 1;
-                    if (g_composition[last] >= 0xD800 && g_composition[last] <= 0xDBFF && next < g_composition.size())
-                        ++next;
-                    if (last > first && Measure(dc, g_composition.substr(first, next - first)) > g_textWidth)
-                        break;
-                    last = next;
+                    last += fit;
+                    if (last > first && last < g_composition.size() && g_composition[last - 1] >= 0xD800 && g_composition[last - 1] <= 0xDBFF)
+                        --last;
+                    if (last == first)
+                    {
+                        ++last;
+                        if (g_composition[first] >= 0xD800 && g_composition[first] <= 0xDBFF && last < g_composition.size())
+                            ++last;
+                    }
+                }
+                else
+                {
+                    while (last < g_composition.size())
+                    {
+                        std::size_t next = last + 1;
+                        if (g_composition[last] >= 0xD800 && g_composition[last] <= 0xDBFF && next < g_composition.size())
+                            ++next;
+                        if (last > first && Measure(dc, g_composition.substr(first, next - first)) > g_textWidth)
+                            break;
+                        last = next;
+                    }
                 }
                 addRow(g_compositionRows, g_composition.substr(first, last - first), first);
                 first = last;
@@ -382,6 +404,7 @@ namespace cgui::ime
             device->SetTextureStageState(0, D3DTSS_ALPHAOP, texture ? D3DTOP_MODULATE : D3DTOP_SELECTARG1);
             device->SetTextureStageState(0, D3DTSS_ALPHAARG1, texture ? D3DTA_TEXTURE : D3DTA_DIFFUSE);
             device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, vertices, sizeof(Vertex));
+            PROFILE_ADD(ImeDraws, 1);
         }
 
         RECT IndicatorRect()
@@ -650,6 +673,7 @@ namespace cgui::ime
 
     void Render(IDirect3DDevice9* device, const char* face, int height, int weight)
     {
+        PROFILE_SCOPE(Ime);
         RefreshFocus();
         if (!device || !g_edit || !g_enabled || !g_attached || !g_edit->IsVisible() || !g_edit->IsEnabled() || (g_edit->GetDialog() && !g_edit->GetDialog()->IsVisible()))
             return;

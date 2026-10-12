@@ -9,11 +9,11 @@
 #include "render/CRender.h"
 
 #include <cmath>
-#include <memory>
+#include <optional>
 
 namespace
 {
-    std::unique_ptr<CFont::Batch> g_labelBatch;
+    std::optional<CFont::Batch> g_labelBatch;
 
     constexpr float kTagDistanceScale = 0.0475f;
     constexpr float kTagBaseHeight = 0.2f;
@@ -45,7 +45,8 @@ namespace
         return true;
     }
 
-    void DrawBar(CRender* render, float x, float y, float value, D3DCOLOR background, D3DCOLOR fill)
+    template <class Renderer>
+    void DrawBar(Renderer* render, float x, float y, float value, D3DCOLOR background, D3DCOLOR fill)
     {
         if (!render || !std::isfinite(value))
             return;
@@ -82,9 +83,6 @@ void CPlayerTags::EndHealthBar()
 {
     if (g_render)
         g_render->EndRender();
-
-    if (m_pStates)
-        m_pStates->Apply();
 }
 
 void CPlayerTags::BeginLabel()
@@ -92,12 +90,35 @@ void CPlayerTags::BeginLabel()
     if (g_labelBatch || !g_fonts || !g_fonts->GetLittleFont())
         return;
 
-    g_labelBatch = std::make_unique<CFont::Batch>(g_fonts->GetLittleFont());
+    g_labelBatch.emplace(g_fonts->GetLittleFont());
 }
 
 void CPlayerTags::EndLabel()
 {
     g_labelBatch.reset();
+}
+
+void CPlayerTags::DrawTag(CVector* position, const char* text, D3DCOLOR color, float health, float armour, float distanceToCamera, bool drawStatus, int status)
+{
+    LONG x = 0, y = 0;
+    if (!position || !text || !*text || !g_fonts || !g_render || !ProjectTagPoint(m_pDevice, g_render.get(), *position, distanceToCamera, x, y))
+        return;
+    const bool ownedBatch = !g_labelBatch;
+    const bool statusIcon = drawStatus && status == 2 && g_deathWindow;
+    // Auxiliary icons use a different atlas; finish previous tags before that ordered boundary.
+    if (statusIcon)
+        EndLabel();
+    BeginLabel();
+    DrawLabelAt(x, y, text, color, drawStatus, status);
+    if (statusIcon)
+    {
+        EndLabel();
+        BeginLabel();
+    }
+    if (health > 0)
+        DrawHealthBarAt(x, y, health, armour, true);
+    if (ownedBatch)
+        EndLabel();
 }
 
 void CPlayerTags::DrawLabel(CVector* position, const char* text, D3DCOLOR color, float distanceToCamera, bool drawStatus, int status)
@@ -110,6 +131,11 @@ void CPlayerTags::DrawLabel(CVector* position, const char* text, D3DCOLOR color,
     if (!ProjectTagPoint(m_pDevice, g_render.get(), *position, distanceToCamera, x, y))
         return;
 
+    DrawLabelAt(x, y, text, color, drawStatus, status);
+}
+
+void CPlayerTags::DrawLabelAt(LONG x, LONG y, const char* text, D3DCOLOR color, bool drawStatus, int status)
+{
     SIZE size{};
     g_fonts->GetLittleTextScreenSize(&size, text, 0);
 
@@ -122,7 +148,7 @@ void CPlayerTags::DrawLabel(CVector* position, const char* text, D3DCOLOR color,
     // Original: format 0x100 (DT_NOCLIP), always with the SA-MP text shadow.
     g_fonts->DrawLittleText(text, rect, DT_NOCLIP, color, true);
 
-    if (!drawStatus || !g_deathWindow)
+    if (!drawStatus || status != 2 || !g_deathWindow)
         return;
 
     if (!g_deathWindow->m_bAuxFontInitialized)
@@ -138,9 +164,6 @@ void CPlayerTags::DrawLabel(CVector* position, const char* text, D3DCOLOR color,
     const SIZE glyph = aux2->GetTextSize("C", DT_CENTER | DT_VCENTER | DT_NOCLIP);
     const LONG left = x - 22 - glyph.cx / 2;
     const LONG top = y + 17 + glyph.cy / 2;
-
-    if (status != 2)
-        return;
 
     RECT iconRect{left, top, left + 1, top + 2};
     constexpr DWORD format = DT_CENTER | DT_VCENTER | DT_NOCLIP;
@@ -161,16 +184,29 @@ void CPlayerTags::DrawHealthBar(CVector* position, float health, float armour, f
     if (!ProjectTagPoint(m_pDevice, g_render.get(), *position, distanceToCamera, x, y))
         return;
 
+    DrawHealthBarAt(x, y, health, armour);
+}
+
+void CPlayerTags::DrawHealthBarAt(LONG x, LONG y, float health, float armour, bool fontBars)
+{
     const bool hasArmour = armour > 0.0f;
     const float baseY = static_cast<float>(y + 18);
     const float healthY = baseY + (hasArmour ? 8.0f : 0.0f);
 
     // R5 draws health first. When armour is present, health is moved down by
     // eight pixels and the armour strip occupies the original health position.
-    DrawBar(g_render.get(), static_cast<float>(x), healthY, health, kHealthBackground, kHealthColor);
+    if (fontBars)
+        DrawBar(g_fonts->GetLittleFont(), static_cast<float>(x), healthY, health, kHealthBackground, kHealthColor);
+    else
+        DrawBar(g_render.get(), static_cast<float>(x), healthY, health, kHealthBackground, kHealthColor);
 
     if (hasArmour)
-        DrawBar(g_render.get(), static_cast<float>(x), baseY, armour, kArmourBackground, kArmourColor);
+    {
+        if (fontBars)
+            DrawBar(g_fonts->GetLittleFont(), static_cast<float>(x), baseY, armour, kArmourBackground, kArmourColor);
+        else
+            DrawBar(g_render.get(), static_cast<float>(x), baseY, armour, kArmourBackground, kArmourColor);
+    }
 }
 
 void CPlayerTags::OnLostDevice()
@@ -189,22 +225,13 @@ void CPlayerTags::OnLostDevice()
 
 void CPlayerTags::OnResetDevice()
 {
-    // Original calls ID3DXSprite::OnResetDevice(), then recreates the all-state
-    // state block when it was released by OnLostDevice().
-    if (!m_pStates && m_pDevice)
-        m_pDevice->CreateStateBlock(D3DSBT_ALL, &m_pStates);
+    // CRender restores the healthbar state; CFonts owns the text resources.
 }
 
 void CPlayerTags::BeginHealthBar()
 {
     if (!m_pDevice || !g_render)
         return;
-
-    if (!m_pStates)
-        m_pDevice->CreateStateBlock(D3DSBT_ALL, &m_pStates);
-
-    if (m_pStates)
-        m_pStates->Capture();
 
     g_render->BeginRender();
 }

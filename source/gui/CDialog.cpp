@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include "game/Profiler.h"
 
 #include "CDialog.h"
 
@@ -505,6 +506,7 @@ void CDialog::Close(char processButton)
 
 void CDialog::Draw()
 {
+    PROFILE_SCOPE(Dialog);
     if (!m_bIsActive || !m_pDialog || !m_pDialog->IsVisible())
         return;
     ui::OpacityScope fade(m_pDialog->GetOpacity());

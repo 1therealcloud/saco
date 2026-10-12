@@ -10,11 +10,11 @@
 #include "render/CRender.h"
 
 #include <cmath>
-#include <memory>
+#include <optional>
 
 namespace
 {
-    std::unique_ptr<CFont::Batch> g_batch;
+    std::optional<CFont::Batch> g_batch;
 
     // 06BD: is_line_of_sight_clear
     // R5 passes: buildings=1, cars=0, chars=0, objects=1, particles=0.
@@ -55,7 +55,7 @@ void CLabel::Begin()
     if (g_batch || !g_fonts || !g_fonts->GetFont())
         return;
 
-    g_batch = std::make_unique<CFont::Batch>(g_fonts->GetFont());
+    g_batch.emplace(g_fonts->GetFont());
 }
 
 void CLabel::End()

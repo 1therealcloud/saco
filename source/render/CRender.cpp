@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include "game/Profiler.h"
 
 #include "CRender.h"
 #include "game/d3d9hook.h"
@@ -349,7 +350,11 @@ HRESULT CRender::Flush()
     if (SUCCEEDED(result))
         result = m_device->SetFVF(FVF);
     if (SUCCEEDED(result))
+    {
         result = m_device->DrawPrimitive(D3DPT_TRIANGLELIST, 0, static_cast<UINT>(m_vertices.size() / 3));
+        PROFILE_ADD(SolidDraws, 1);
+        PROFILE_ADD(SolidVertices, m_vertices.size());
+    }
 
     m_vertices.clear();
     return result;

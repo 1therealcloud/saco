@@ -6,6 +6,7 @@
 
 #include "CFonts.h"
 #include "gui/CGui.h"
+#include "game/Profiler.h"
 
 #if defined(SACO_BUILD)
 #   include "config/CConfig.h"
@@ -186,6 +187,9 @@ wchar_t CFont::ByteToWide(unsigned char value) const
 
 bool CFont::CreateAtlas()
 {
+    m_textCache.clear();
+    m_textCacheOrder.clear();
+    m_textCacheBytes = 0;
     if (!m_dc || !m_font || !m_device)
         return false;
 
@@ -263,7 +267,8 @@ bool CFont::CreateAtlas()
         return false;
 
     UINT x = kGlyphPadding;
-    UINT y = kGlyphPadding;
+    // Keep the solid texel away from default (0,0) UVs and every glyph's filtering border.
+    UINT y = 4 + kGlyphPadding;
     UINT rowHeight = 0;
     UINT requiredHeight = 1;
 
@@ -316,6 +321,9 @@ bool CFont::CreateAtlas()
         std::memset(static_cast<std::uint8_t*>(locked.pBits) + row * locked.Pitch, 0, atlasWidth * sizeof(std::uint32_t));
     }
 
+    // A texel outside the padded glyphs lets solid rectangles share the ordered font batch.
+    *(reinterpret_cast<std::uint32_t*>(static_cast<std::uint8_t*>(locked.pBits) + locked.Pitch) + 1) = 0xFFFFFFFFu;
+
     for (unsigned i = 0; i < rasters.size(); ++i)
     {
         const RasterGlyph& raster = rasters[i];
@@ -323,8 +331,8 @@ bool CFont::CreateAtlas()
 
         glyph = {};
         glyph.valid = raster.valid;
-        glyph.width = raster.width;
-        glyph.height = raster.height;
+        glyph.width = raster.bitmap.empty() ? 0 : raster.width;
+        glyph.height = raster.bitmap.empty() ? 0 : raster.height;
         glyph.originX = raster.originX;
         glyph.originY = raster.originY;
         glyph.advance = raster.advance;
@@ -538,6 +546,8 @@ void CFont::BuildLines(const std::vector<StyledChar>& text, float maxWidth, DWOR
 
     std::size_t lineStart = 0;
     std::size_t i = 0;
+    float runningWidth = 0.0f;
+    unsigned char previous = 0;
 
     while (i < text.size())
     {
@@ -551,6 +561,8 @@ void CFont::BuildLines(const std::vector<StyledChar>& text, float maxWidth, DWOR
 
             ++i;
             lineStart = i;
+            runningWidth = 0.0f;
+            previous = 0;
             continue;
         }
 
@@ -562,7 +574,19 @@ void CFont::BuildLines(const std::vector<StyledChar>& text, float maxWidth, DWOR
 
         if (wordBreak)
         {
-            const float width = MeasureRange(text, lineStart, i + 1, format);
+            const unsigned char value = text[i].value;
+            if (value == '\t')
+            {
+                const int tabWidth = std::max(1, m_spaceAdvance * kTabSpaces);
+                runningWidth = static_cast<float>((static_cast<int>(std::floor(runningWidth)) / tabWidth + 1) * tabWidth);
+                previous = 0;
+            }
+            else if (m_glyphs[value].valid)
+            {
+                runningWidth += static_cast<float>((previous ? GetKerning(previous, value) : 0) + m_glyphs[value].advance);
+                previous = value;
+            }
+            const float width = std::max(0.0f, runningWidth);
 
             if (width > maxWidth && i > lineStart)
             {
@@ -591,6 +615,8 @@ void CFont::BuildLines(const std::vector<StyledChar>& text, float maxWidth, DWOR
                     ++lineStart;
 
                 i = lineStart;
+                runningWidth = 0.0f;
+                previous = 0;
                 continue;
             }
         }
@@ -607,6 +633,52 @@ void CFont::BuildLines(const std::vector<StyledChar>& text, float maxWidth, DWOR
 
 int CFont::BuildVertices(const char* text, int count, RECT rect, DWORD format, D3DCOLOR color, bool useColorTags, float offsetX, float offsetY, std::vector<Vertex>& vertices,
                          SIZE* measured) const
+{
+    if (!text || std::strlen(text) > kMaxTextLength)
+        return BuildVerticesUncached(text, count, rect, format, color, useColorTags, offsetX, offsetY, vertices, measured);
+    const auto length = count < 0 ? std::strlen(text) : std::min<std::size_t>(count, std::strlen(text));
+    std::string key(text, length);
+    const std::array<std::uint32_t, 5> properties{static_cast<std::uint32_t>(rect.right - rect.left), static_cast<std::uint32_t>(rect.bottom - rect.top), format, color,
+                                                  useColorTags ? 1u : 0u};
+    key.append(reinterpret_cast<const char*>(properties.data()), sizeof(properties));
+    auto found = m_textCache.find(key);
+    PROFILE_ADD(CacheHits, found != m_textCache.end());
+    PROFILE_ADD(CacheMisses, found == m_textCache.end());
+    if (found == m_textCache.end())
+    {
+        CachedText entry;
+        const RECT local{0, 0, rect.right - rect.left, rect.bottom - rect.top};
+        entry.height = BuildVerticesUncached(text, static_cast<int>(length), local, format, color, useColorTags, 0, 0, entry.vertices, &entry.size);
+        const auto bytes = entry.vertices.size() * sizeof(Vertex) + key.size();
+        constexpr std::size_t budget = 4 * 1024 * 1024;
+        if (bytes > budget)
+            return BuildVerticesUncached(text, count, rect, format, color, useColorTags, offsetX, offsetY, vertices, measured);
+        while (!m_textCacheOrder.empty() && (m_textCache.size() >= 1024 || m_textCacheBytes + bytes > budget))
+        {
+            auto oldest = m_textCache.find(m_textCacheOrder.front());
+            m_textCacheBytes -= oldest->second.vertices.size() * sizeof(Vertex) + oldest->first.size();
+            m_textCache.erase(oldest);
+            m_textCacheOrder.pop_front();
+        }
+        m_textCacheOrder.push_back(key);
+        m_textCacheBytes += bytes;
+        found = m_textCache.emplace(std::move(key), std::move(entry)).first;
+    }
+    const auto& cached = found->second;
+    if (measured)
+        *measured = cached.size;
+    vertices.reserve(vertices.size() + cached.vertices.size());
+    for (auto vertex : cached.vertices)
+    {
+        vertex.x += static_cast<float>(rect.left) + offsetX;
+        vertex.y += static_cast<float>(rect.top) + offsetY;
+        vertices.push_back(vertex);
+    }
+    return cached.height;
+}
+
+int CFont::BuildVerticesUncached(const char* text, int count, RECT rect, DWORD format, D3DCOLOR color, bool useColorTags, float offsetX, float offsetY,
+                                 std::vector<Vertex>& vertices, SIZE* measured) const
 {
     auto& styled = m_styledText;
     BuildStyledText(text, count, color, useColorTags, styled);
@@ -786,6 +858,8 @@ void CFont::SaveState(SavedState& state) const
     m_device->GetVertexDeclaration(&state.declaration);
     m_device->GetFVF(&state.fvf);
 
+    m_device->GetRenderState(D3DRS_BLENDOP, &state.blendOp);
+    m_device->GetRenderState(D3DRS_COLORWRITEENABLE, &state.colorWriteEnable);
     m_device->GetRenderState(D3DRS_ALPHABLENDENABLE, &state.alphaBlendEnable);
     m_device->GetRenderState(D3DRS_SRCBLEND, &state.srcBlend);
     m_device->GetRenderState(D3DRS_DESTBLEND, &state.destBlend);
@@ -822,6 +896,8 @@ void CFont::ApplyFontState(const RECT* clipRect, bool clip, D3DBLEND destBlend) 
     m_device->SetTexture(0, m_atlas);
     m_device->SetTexture(1, nullptr);
 
+    m_device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+    m_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0x0F);
     m_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
     m_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
     m_device->SetRenderState(D3DRS_DESTBLEND, destBlend);
@@ -874,6 +950,8 @@ void CFont::RestoreState(SavedState& state) const
     else
         m_device->SetFVF(state.fvf);
 
+    m_device->SetRenderState(D3DRS_BLENDOP, state.blendOp);
+    m_device->SetRenderState(D3DRS_COLORWRITEENABLE, state.colorWriteEnable);
     m_device->SetRenderState(D3DRS_ALPHABLENDENABLE, state.alphaBlendEnable);
     m_device->SetRenderState(D3DRS_SRCBLEND, state.srcBlend);
     m_device->SetRenderState(D3DRS_DESTBLEND, state.destBlend);
@@ -986,6 +1064,8 @@ int CFont::SubmitVertices(const std::vector<Vertex>& vertices, const RECT* clipR
     {
         const UINT count = static_cast<UINT>(std::min<std::size_t>(16384, vertices.size() - begin));
         result = m_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, static_cast<INT>(firstVertex + begin), 0, count, 0, count / 2);
+        PROFILE_ADD(FontDraws, 1);
+        PROFILE_ADD(FontVertices, count);
     }
 
     RestoreState(state);
@@ -1083,6 +1163,19 @@ int CFont::DrawTextOutlinedA(const char* text, RECT* rect, DWORD format, D3DCOLO
     const bool clip = (format & DT_NOCLIP) == 0;
     DrawVertices(vertices, rect, clip);
     return height;
+}
+
+void CFont::DrawBox(float x, float y, float width, float height, D3DCOLOR color)
+{
+    if (!IsValid() || width <= 0 || height <= 0)
+        return;
+    const float u = 1.5f / m_atlasWidth, v = 1.5f / m_atlasHeight;
+    m_vertices.clear();
+    m_vertices.push_back({x, y, 0, 1, color, u, v});
+    m_vertices.push_back({x + width, y, 0, 1, color, u, v});
+    m_vertices.push_back({x, y + height, 0, 1, color, u, v});
+    m_vertices.push_back({x + width, y + height, 0, 1, color, u, v});
+    DrawVertices(m_vertices, nullptr, false);
 }
 
 SIZE CFont::GetTextSize(const char* text, DWORD format) const

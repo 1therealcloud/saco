@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include "game/Profiler.h"
 
 #include "CObjectEdit.h"
 
@@ -360,9 +361,6 @@ BOOL CObjectEdit::RenderControlsForObject(Matrix* objectMatrix, float lineSize)
     m_CharMaxSize.x = maxSize.cx;
     m_CharMaxSize.y = maxSize.cy;
 
-    if (!RenderAxes(objectMatrix, lineSize))
-        return FALSE;
-
     const Vector origin3 = objectMatrix->pos;
     const Vector x3 = Add(origin3, Scale(objectMatrix->right, lineSize));
     const Vector y3 = Add(origin3, Scale(objectMatrix->up, lineSize));
@@ -378,6 +376,12 @@ BOOL CObjectEdit::RenderControlsForObject(Matrix* objectMatrix, float lineSize)
     {
         return FALSE;
     }
+
+    m_pLine->BeginRender();
+    m_pLine->DrawLine(originf[0], originf[1], xf[0], xf[1], 2.0f, AXIS_LINE_COLOR);
+    m_pLine->DrawLine(originf[0], originf[1], yf[0], yf[1], 2.0f, AXIS_LINE_COLOR);
+    m_pLine->DrawLine(originf[0], originf[1], zf[0], zf[1], 2.0f, AXIS_LINE_COLOR);
+    m_pLine->EndRender();
 
     const POINT origin{static_cast<LONG>(std::lround(originf[0])), static_cast<LONG>(std::lround(originf[1]))};
     const POINT x{static_cast<LONG>(std::lround(xf[0])), static_cast<LONG>(std::lround(xf[1]))};
@@ -670,6 +674,7 @@ BOOL CObjectEdit::MsgProc(int uMsg, int wParam, int lParam)
 
 void CObjectEdit::Render()
 {
+    PROFILE_SCOPE(ObjectEdit);
     m_bRenderedThisFrame = FALSE;
 
     if (!m_bEnabled || g_runtime[this].paused)

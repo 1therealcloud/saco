@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include "game/Profiler.h"
 #include "game/CGame.h"
 
 #include "CChat.h"
@@ -12,6 +13,13 @@
 namespace
 {
     std::unordered_map<const CChat*, ui::Appearance> g_appearances;
+    struct LineLayout
+    {
+        std::array<char, CChat::MAX_TEXT_LENGTH + 1> text{};
+        char timestamp[64]{};
+        bool dirty = true;
+    };
+    std::unordered_map<const CChat*, std::array<LineLayout, CChat::MAX_MESSAGES>> g_layouts;
     constexpr long kChatLeft = 45;
     constexpr long kChatTop = 10;
     constexpr long kChatRight = 550;
@@ -45,6 +53,7 @@ CChat::CChat(IDirect3DDevice9* device, CFonts* fontRenderer, const char* logPath
 CChat::~CChat()
 {
     g_appearances.erase(this);
+    g_layouts.erase(this);
     OnLostDevice();
 }
 
@@ -52,6 +61,7 @@ void CChat::Initialize(IDirect3DDevice9* device, CFonts* fontRenderer, const cha
 {
     // Match the R5 object state. The original creates D3DX sprites here; this
     // replacement keeps those ABI slots null and renders through CFonts.
+    g_layouts.erase(this);
     std::memset(this, 0, sizeof(*this));
 
     m_pFontRenderer = fontRenderer;
@@ -294,6 +304,14 @@ void CChat::PushBack()
 {
     // Exact R5 copy: entry[1..99] -> entry[0..98]. entry[99] is deliberately
     // left untouched and overwritten field-by-field by AddEntry().
+    auto& layouts = g_layouts[this];
+    for (int i = 0; i < MAX_MESSAGES - 1; ++i)
+    {
+        layouts[i] = std::move(layouts[i + 1]);
+        if (i == MAX_MESSAGES - 2)
+            layouts[i].dirty = true;
+    }
+    layouts.back().dirty = true;
     std::memmove(&m_entry[0], &m_entry[1], sizeof(ChatEntry) * (MAX_MESSAGES - 1));
 }
 
@@ -463,12 +481,18 @@ void CChat::DrawEntry(const ChatEntry& entry, long& left, long top, long bottom)
 
     // R5 permits all 144 text bytes and terminates in unused[0]. Give CFonts
     // a separate terminated string rather than reading past the text array.
-    char text[MAX_TEXT_LENGTH + 1]{};
-    std::memcpy(text, entry.m_szText, MAX_TEXT_LENGTH);
-
-    char timestamp[64]{};
-    if (m_bTimestamps && entry.m_timestamp)
-        FormatTimestamp(entry.m_timestamp, timestamp);
+    auto& layout = g_layouts[this][static_cast<std::size_t>(&entry - m_entry)];
+    if (layout.dirty)
+    {
+        std::memcpy(layout.text.data(), entry.m_szText, MAX_TEXT_LENGTH);
+        layout.text.back() = '\0';
+        std::memset(layout.timestamp, 0, sizeof(layout.timestamp));
+        if (entry.m_timestamp)
+            FormatTimestamp(entry.m_timestamp, layout.timestamp);
+        layout.dirty = false;
+    }
+    const char* text = layout.text.data();
+    const char* timestamp = layout.timestamp;
 
     if (entry.m_nType == ENTRY_TYPE_INFO || entry.m_nType == ENTRY_TYPE_DEBUG)
     {
@@ -507,6 +531,7 @@ void CChat::DrawEntry(const ChatEntry& entry, long& left, long top, long bottom)
 
 void CChat::Draw()
 {
+    PROFILE_SCOPE(Chat);
     auto& appearance = g_appearances[this];
     appearance.SetVisible(m_nMode != DISPLAY_MODE_OFF);
     ui::OpacityScope fade(appearance.GetOpacity());

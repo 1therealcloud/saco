@@ -75,7 +75,7 @@ void CTextDrawSelection::ResetTextDraws()
     if (!pool)
         return;
 
-    for (std::size_t i = 0; i < CTextDrawPool::MAX_SLOTS; ++i)
+    for (const auto i : pool->GetActiveIds())
     {
         if (!pool->m_bNotEmpty[i])
             continue;
@@ -113,7 +113,7 @@ void CTextDrawSelection::RawProcess(POINT point)
 
     m_nHoveredId = INVALID_TEXTDRAW_ID;
 
-    for (std::uint16_t id = 0; id < CTextDrawPool::MAX_SLOTS; ++id)
+    for (const auto id : pool->GetActiveIds())
     {
         if (!pool->m_bNotEmpty[id])
             continue;

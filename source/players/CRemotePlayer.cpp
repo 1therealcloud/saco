@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include "game/Profiler.h"
 #include "main.h"
 #include "net/CNetGame.h"
 #include "players/PlayerColors.h"
@@ -1048,6 +1049,7 @@ void CRemotePlayer::Update(Synchronization::BulletData* data)
 
 void CRemotePlayer::Process()
 {
+    PROFILE_SCOPE(RemotePlayers);
     m_pVehicle = m_nVehicleId == INVALID_ID ? nullptr : ResolveVehicle(m_nVehicleId);
     ProcessRemoteMarker(*this);
     if (!m_pPed || !m_pPed->HasNativePed())

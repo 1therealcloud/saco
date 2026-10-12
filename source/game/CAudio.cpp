@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include "game/Profiler.h"
 
 #include "CAudio.h"
 #include "Scripting.h"
@@ -83,6 +84,7 @@ void CAudio::Play(int sound, CVector location)
 
 void CAudio::Process()
 {
+    PROFILE_SCOPE(Audio);
     // R5 +0xA21D0: slot 1 is shared by all server-triggered mission audio
     if (m_nSoundState == 1 && scm::ProcessCommand(&missionAudioLoaded, 1))
     {

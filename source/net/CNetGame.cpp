@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include "game/Profiler.h"
 
 #include <new>
 
@@ -1337,10 +1338,13 @@ void CNetGame::Packet_ConnectionLost(Packet*)
 // update network (network loop)
 void CNetGame::UpdateNetwork()
 {
+    PROFILE_SCOPE(Receive);
     if (!m_pRakClient)
         return;
     while (Packet* packet = m_pRakClient->Receive())
     {
+        PROFILE_ADD(Packets, 1);
+        PROFILE_ADD(PacketBytes, packet->length);
         if (!packet->data || packet->length == 0)
         {
             m_pRakClient->DeallocatePacket(packet);
@@ -1443,6 +1447,7 @@ void CNetGame::UpdateNetwork()
 // process network
 void CNetGame::Process()
 {
+    PROFILE_SCOPE(Network);
     UpdateNetwork();
 
     const std::uint32_t now = GetTimeNow();

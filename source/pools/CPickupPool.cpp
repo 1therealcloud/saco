@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include "game/Profiler.h"
 
 #include "main.h"
 
@@ -160,6 +161,7 @@ void CPickupPool::SendNotification(int id)
 
 void CPickupPool::Process()
 {
+    PROFILE_SCOPE(Pickups);
     // Опкод 0x0214 (has_pickup_been_collected): перевіряє, чи підібрав гравець пікап
     constexpr scm::OpcodeInfo opHasCollected{0x0214, "i"};
 

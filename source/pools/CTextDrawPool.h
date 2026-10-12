@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 #include "gui/CTextDraw.h"
 
@@ -40,4 +41,11 @@ public:
     // R5 skips the whole draw pass when this external state exists and its
     // first DWORD is non-zero. Pass nullptr when that subsystem is absent.
     static void SetDrawBlockState(const std::uint32_t* state);
+    const std::vector<std::uint16_t>& GetActiveIds() const
+    {
+        return m_activeIds;
+    }
+
+private:
+    std::vector<std::uint16_t> m_activeIds;
 };

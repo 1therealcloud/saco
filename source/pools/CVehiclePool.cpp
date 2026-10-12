@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include "game/Profiler.h"
 
 #include "CVehiclePool.h"
 #include "net/CNetGame.h"
@@ -791,6 +792,7 @@ void CVehiclePool::ProcessWaitingList()
 
 void CVehiclePool::Process()
 {
+    PROFILE_SCOPE(Vehicles);
     // samp.dll + 0x1F3C0
     const DWORD now = ::GetTickCount();
     int unoccupiedSyncsSent = 0;

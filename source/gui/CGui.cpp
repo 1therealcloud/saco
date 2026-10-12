@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include "game/Profiler.h"
 
 #include "CGui.h"
 #include "ime.h"
@@ -93,14 +94,23 @@ namespace cgui
         };
 
         IDirect3DDevice9* g_device = nullptr;
+        HWND g_window = nullptr;
+        RECT g_clientRect{};
+        bool g_clientDirty = true;
         IDirect3DTexture9* g_skin = nullptr;
         IDirect3DTexture9* g_cursor = nullptr;
+        struct TextureMetrics
+        {
+            float inverseWidth = 0;
+            float inverseHeight = 0;
+        };
+        TextureMetrics g_skinMetrics{}, g_cursorMetrics{};
         FontAtlas g_font{};
         std::vector<Vertex> g_textVertices;
-        std::size_t g_textChunkSize = 0;
-        IDirect3DVertexBuffer9* g_textBuffer = nullptr;
-        std::size_t g_textBufferOffset = 0;
-        constexpr std::size_t kTextBufferCapacity = 24576;
+        std::size_t g_vertexChunkSize = 0;
+        IDirect3DVertexBuffer9* g_vertexBuffer = nullptr;
+        std::size_t g_vertexBufferOffset = 0;
+        constexpr std::size_t kVertexBufferCapacity = 24576;
         std::array<Dialog, static_cast<std::size_t>(DialogId::Count)> g_dialogs{};
         std::array<std::vector<SkinElement>, 10> g_defaultElements{};
         std::string g_assetDirectory;
@@ -108,7 +118,52 @@ namespace cgui
         int g_fontHeight = kDefaultFontHeight;
         int g_fontWeight = kDefaultFontWeight;
         bool g_fontDirty = false;
+        unsigned int g_fontRevision = 0;
+        HDC g_measureDc = nullptr;
+        HFONT g_measureFont = nullptr;
+        HGDIOBJ g_measureOldFont = nullptr;
+        void ReleaseMeasurement()
+        {
+            if (g_measureDc && g_measureOldFont)
+                SelectObject(g_measureDc, g_measureOldFont);
+            if (g_measureFont)
+                DeleteObject(g_measureFont);
+            if (g_measureDc)
+                DeleteDC(g_measureDc);
+            g_measureDc = nullptr;
+            g_measureFont = nullptr;
+            g_measureOldFont = nullptr;
+        }
+        HDC MeasurementDc()
+        {
+            if (!g_measureDc)
+            {
+                g_measureDc = CreateCompatibleDC(nullptr);
+                g_measureFont = CreateFontA(g_fontHeight, 0, 0, 0, g_fontWeight, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
+                                            DEFAULT_PITCH, g_fontFace.c_str());
+                if (!g_measureDc || !g_measureFont)
+                {
+                    ReleaseMeasurement();
+                    return nullptr;
+                }
+                g_measureOldFont = SelectObject(g_measureDc, g_measureFont);
+            }
+            return g_measureDc;
+        }
+
         bool g_initialized = false;
+        std::vector<IDirect3DStateBlock9*> g_states;
+        std::size_t g_passDepth = 0;
+        bool g_uiStateValid = false;
+        IDirect3DTexture9* g_boundTexture = nullptr;
+        IDirect3DTexture9* g_pendingTexture = nullptr;
+        std::vector<Vertex> g_pendingVertices;
+        RECT g_pendingClip{};
+        bool g_pendingClipped = false;
+        D3DVIEWPORT9 g_passViewport{};
+        std::unordered_map<IDirect3DTexture9*, TextureMetrics> g_textureDescriptions;
+        void FlushUi();
+        void SubmitUi(const Vertex* vertices, std::size_t count, IDirect3DTexture9* texture, const RECT* clip = nullptr);
 
         std::size_t Index(DialogId id)
         {
@@ -450,6 +505,8 @@ namespace cgui
             g_font.width = texW;
             g_font.textureHeight = texH;
             g_fontDirty = false;
+            ++g_fontRevision;
+            ReleaseMeasurement();
             return true;
         }
 
@@ -458,50 +515,142 @@ namespace cgui
         public:
             StateGuard()
             {
-                if (g_device && SUCCEEDED(g_device->CreateStateBlock(D3DSBT_ALL, &m_state)) && m_state)
-                    m_state->Capture();
+                FlushUi();
+                m_previousViewport = g_passViewport;
+                const auto index = g_passDepth++;
+                if (index == g_states.size())
+                    g_states.push_back(nullptr);
+                auto& state = g_states[index];
+                if (!state && g_device)
+                    g_device->CreateStateBlock(D3DSBT_ALL, &state);
+                if (state && SUCCEEDED(state->Capture()))
+                    m_state = state;
+                g_uiStateValid = false;
+                g_device->GetViewport(&g_passViewport);
+                g_textureDescriptions.clear();
             }
             ~StateGuard()
             {
+                FlushUi();
                 if (m_state)
-                {
                     m_state->Apply();
-                    m_state->Release();
-                }
+                --g_passDepth;
+                g_passViewport = m_previousViewport;
+                g_uiStateValid = false;
+            }
+            bool IsValid() const
+            {
+                return m_state != nullptr;
             }
 
         private:
+            D3DVIEWPORT9 m_previousViewport{};
             IDirect3DStateBlock9* m_state = nullptr;
         };
 
         void ApplyUiState(IDirect3DTexture9* texture)
         {
-            g_device->SetVertexShader(nullptr);
-            g_device->SetPixelShader(nullptr);
-            g_device->SetFVF(kFvf);
+            if (g_passDepth && g_uiStateValid && g_boundTexture == texture)
+                return;
+            const bool baseline = !g_passDepth || !g_uiStateValid;
+            g_boundTexture = texture;
+            g_uiStateValid = true;
+            if (baseline)
+            {
+                g_device->SetVertexShader(nullptr);
+                g_device->SetPixelShader(nullptr);
+                g_device->SetFVF(kFvf);
+                g_device->SetRenderState(D3DRS_ZENABLE, FALSE);
+                g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+                g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+                g_device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+                g_device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+                g_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0x0F);
+                g_device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+                g_device->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+                g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+                g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+                g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+                g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+                g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+                g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+                g_device->SetRenderState(D3DRS_LIGHTING, FALSE);
+                g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+            }
             g_device->SetTexture(0, texture);
-            g_device->SetRenderState(D3DRS_ZENABLE, FALSE);
-            g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-            g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-            g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-            g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
-            g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
-            g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-            g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-            g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-            g_device->SetRenderState(D3DRS_LIGHTING, FALSE);
-            g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
             g_device->SetTextureStageState(0, D3DTSS_COLOROP, texture ? D3DTOP_MODULATE : D3DTOP_SELECTARG1);
             g_device->SetTextureStageState(0, D3DTSS_COLORARG1, texture ? D3DTA_TEXTURE : D3DTA_DIFFUSE);
             g_device->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
             g_device->SetTextureStageState(0, D3DTSS_ALPHAOP, texture ? D3DTOP_MODULATE : D3DTOP_SELECTARG1);
             g_device->SetTextureStageState(0, D3DTSS_ALPHAARG1, texture ? D3DTA_TEXTURE : D3DTA_DIFFUSE);
             g_device->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
-            g_device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-            g_device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-            g_device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
-            g_device->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-            g_device->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+            if (baseline)
+            {
+                g_device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+                g_device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+                g_device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+                g_device->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+                g_device->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+            }
+        }
+
+        void FlushUi()
+        {
+            if (g_pendingVertices.empty())
+                return;
+            ApplyUiState(g_pendingTexture);
+            if (g_pendingClipped)
+            {
+                g_device->SetScissorRect(&g_pendingClip);
+                g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
+            }
+            if (!g_vertexBuffer)
+            {
+                g_vertexBufferOffset = 0;
+                g_device->CreateVertexBuffer(static_cast<UINT>(kVertexBufferCapacity * sizeof(Vertex)), D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY, kFvf, D3DPOOL_DEFAULT,
+                                             &g_vertexBuffer, nullptr);
+            }
+            for (std::size_t first = 0; first < g_pendingVertices.size(); first += g_vertexChunkSize)
+            {
+                const std::size_t size = std::min(g_vertexChunkSize, g_pendingVertices.size() - first);
+                if (g_vertexBuffer)
+                {
+                    if (g_vertexBufferOffset + size > kVertexBufferCapacity)
+                        g_vertexBufferOffset = 0;
+                    void* output = nullptr;
+                    if (SUCCEEDED(g_vertexBuffer->Lock(static_cast<UINT>(g_vertexBufferOffset * sizeof(Vertex)), static_cast<UINT>(size * sizeof(Vertex)), &output,
+                                                       g_vertexBufferOffset ? D3DLOCK_NOOVERWRITE : D3DLOCK_DISCARD)))
+                    {
+                        std::memcpy(output, g_pendingVertices.data() + first, size * sizeof(Vertex));
+                        g_vertexBuffer->Unlock();
+                        g_device->SetStreamSource(0, g_vertexBuffer, 0, sizeof(Vertex));
+                        g_device->DrawPrimitive(D3DPT_TRIANGLELIST, static_cast<UINT>(g_vertexBufferOffset), static_cast<UINT>(size / 3));
+                        PROFILE_ADD(GuiDraws, 1);
+                        PROFILE_ADD(GuiVertices, size);
+                        g_vertexBufferOffset += size;
+                        continue;
+                    }
+                }
+                g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, static_cast<UINT>(size / 3), g_pendingVertices.data() + first, sizeof(Vertex));
+                PROFILE_ADD(GuiDraws, 1);
+                PROFILE_ADD(GuiVertices, size);
+            }
+            if (g_pendingClipped)
+                g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+            g_pendingVertices.clear();
+        }
+
+        void SubmitUi(const Vertex* vertices, std::size_t count, IDirect3DTexture9* texture, const RECT* clip)
+        {
+            if (!g_pendingVertices.empty() && (texture != g_pendingTexture || (clip != nullptr) != g_pendingClipped || (clip && !EqualRect(clip, &g_pendingClip))))
+                FlushUi();
+            g_pendingTexture = texture;
+            g_pendingClipped = clip != nullptr;
+            if (clip)
+                g_pendingClip = *clip;
+            g_pendingVertices.insert(g_pendingVertices.end(), vertices, vertices + count);
+            if (!g_passDepth || g_pendingVertices.size() >= kVertexBufferCapacity)
+                FlushUi();
         }
 
         void DrawQuad(const RECT& rect, D3DCOLOR color, IDirect3DTexture9* texture = nullptr, const RECT* textureRect = nullptr)
@@ -513,13 +662,22 @@ namespace cgui
             float u0 = 0.0f, v0 = 0.0f, u1 = 1.0f, v1 = 1.0f;
             if (texture && textureRect)
             {
-                D3DSURFACE_DESC desc{};
-                if (SUCCEEDED(texture->GetLevelDesc(0, &desc)) && desc.Width && desc.Height)
+                auto& metrics = texture == g_skin ? g_skinMetrics : texture == g_cursor ? g_cursorMetrics : g_textureDescriptions[texture];
+                if (!metrics.inverseWidth)
                 {
-                    u0 = static_cast<float>(textureRect->left) / desc.Width;
-                    v0 = static_cast<float>(textureRect->top) / desc.Height;
-                    u1 = static_cast<float>(textureRect->right) / desc.Width;
-                    v1 = static_cast<float>(textureRect->bottom) / desc.Height;
+                    D3DSURFACE_DESC desc{};
+                    if (SUCCEEDED(texture->GetLevelDesc(0, &desc)) && desc.Width && desc.Height)
+                    {
+                        metrics.inverseWidth = 1.0f / desc.Width;
+                        metrics.inverseHeight = 1.0f / desc.Height;
+                    }
+                }
+                if (metrics.inverseWidth)
+                {
+                    u0 = static_cast<float>(textureRect->left) * metrics.inverseWidth;
+                    v0 = static_cast<float>(textureRect->top) * metrics.inverseHeight;
+                    u1 = static_cast<float>(textureRect->right) * metrics.inverseWidth;
+                    v1 = static_cast<float>(textureRect->bottom) * metrics.inverseHeight;
                 }
             }
 
@@ -533,8 +691,8 @@ namespace cgui
                 {l, b, 0.0f, 1.0f, color, u0, v1},
                 {r, b, 0.0f, 1.0f, color, u1, v1},
             };
-            ApplyUiState(texture);
-            g_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, vertices, sizeof(Vertex));
+            const Vertex triangles[]{vertices[0], vertices[1], vertices[2], vertices[2], vertices[1], vertices[3]};
+            SubmitUi(triangles, 6, texture);
         }
 
         void DrawGradientQuad(const RECT& rect, D3DCOLOR topLeft, D3DCOLOR topRight, D3DCOLOR bottomLeft, D3DCOLOR bottomRight)
@@ -556,8 +714,8 @@ namespace cgui
                 {l, b, 0.0f, 1.0f, bottomLeft, 0.0f, 1.0f},
                 {r, b, 0.0f, 1.0f, bottomRight, 1.0f, 1.0f},
             };
-            ApplyUiState(nullptr);
-            g_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, vertices, sizeof(Vertex));
+            const Vertex triangles[]{vertices[0], vertices[1], vertices[2], vertices[2], vertices[1], vertices[3]};
+            SubmitUi(triangles, 6, nullptr);
         }
 
         D3DCOLOR Modulate(D3DCOLOR color, float factor)
@@ -742,6 +900,8 @@ namespace cgui
                         for (UINT y = 0; y < height; ++y)
                             std::memcpy(static_cast<BYTE*>(locked.pBits) + y * locked.Pitch, colors + y * width, width * 4);
                         texture->UnlockRect(0);
+                        FlushUi();
+                        g_textureDescriptions.erase(*output);
                         Release(*output);
                         *output = texture;
                         success = true;
@@ -765,23 +925,12 @@ namespace cgui
                 return 0;
             if (!passwordSize && HasMultibyteText(text))
             {
-                HDC dc = CreateCompatibleDC(nullptr);
-                HFONT font = CreateFontA(g_fontHeight, 0, 0, 0, g_fontWeight, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
-                                         DEFAULT_PITCH, g_fontFace.c_str());
-                if (dc && font)
+                if (HDC dc = MeasurementDc())
                 {
-                    HGDIOBJ previous = SelectObject(dc, font);
                     SIZE size{};
-                    GetTextExtentPoint32A(dc, text, static_cast<int>(std::min(count, std::strlen(text))), &size);
-                    SelectObject(dc, previous);
-                    DeleteObject(font);
-                    DeleteDC(dc);
-                    return size.cx;
+                    if (GetTextExtentPoint32A(dc, text, static_cast<int>(std::min(count, std::strlen(text))), &size))
+                        return size.cx;
                 }
-                if (font)
-                    DeleteObject(font);
-                if (dc)
-                    DeleteDC(dc);
             }
             int width = 0;
             for (std::size_t i = 0; text[i] && i < count; ++i)
@@ -820,6 +969,8 @@ namespace cgui
             if (!g_device || !g_font.texture || !text)
                 return;
 
+            count = std::min(count, std::strlen(text));
+            g_textVertices.reserve(count * 6);
             int textWidth = MeasureText(text, count, passwordSize);
             if (colorTags)
             {
@@ -844,19 +995,17 @@ namespace cgui
             else if (format & DT_BOTTOM)
                 y = rect.bottom - g_font.height;
 
-            ApplyUiState(g_font.texture);
+            RECT clipped{};
             if (clip)
             {
                 D3DVIEWPORT9 viewport{};
-                if (FAILED(g_device->GetViewport(&viewport)))
+                viewport = g_passViewport;
+                if (!g_passDepth && FAILED(g_device->GetViewport(&viewport)))
                     return;
                 const RECT bounds{static_cast<LONG>(viewport.X), static_cast<LONG>(viewport.Y), static_cast<LONG>(viewport.X + viewport.Width),
                                   static_cast<LONG>(viewport.Y + viewport.Height)};
-                RECT clipped{};
                 if (!IntersectRect(&clipped, clip, &bounds))
                     return;
-                g_device->SetScissorRect(&clipped);
-                g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
             }
             g_textVertices.clear();
             for (std::size_t i = 0; text[i] && i < count; ++i)
@@ -880,39 +1029,8 @@ namespace cgui
                 g_textVertices.insert(g_textVertices.end(), std::begin(vertices), std::end(vertices));
                 x += passwordSize ? passwordSize + 2 : glyph.advance;
             }
-            // Keep glyph order and scissoring without the driver's per-call UP upload.
             if (!g_textVertices.empty())
-            {
-                if (!g_textBuffer)
-                {
-                    g_textBufferOffset = 0;
-                    g_device->CreateVertexBuffer(static_cast<UINT>(kTextBufferCapacity * sizeof(Vertex)), D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY, kFvf, D3DPOOL_DEFAULT,
-                                                 &g_textBuffer, nullptr);
-                }
-                for (std::size_t first = 0; first < g_textVertices.size(); first += g_textChunkSize)
-                {
-                    const std::size_t size = std::min(g_textChunkSize, g_textVertices.size() - first);
-                    if (g_textBuffer)
-                    {
-                        if (g_textBufferOffset + size > kTextBufferCapacity)
-                            g_textBufferOffset = 0;
-                        void* output = nullptr;
-                        if (SUCCEEDED(g_textBuffer->Lock(static_cast<UINT>(g_textBufferOffset * sizeof(Vertex)), static_cast<UINT>(size * sizeof(Vertex)), &output,
-                                                         g_textBufferOffset ? D3DLOCK_NOOVERWRITE : D3DLOCK_DISCARD)))
-                        {
-                            std::memcpy(output, g_textVertices.data() + first, size * sizeof(Vertex));
-                            g_textBuffer->Unlock();
-                            g_device->SetStreamSource(0, g_textBuffer, 0, sizeof(Vertex));
-                            g_device->DrawPrimitive(D3DPT_TRIANGLELIST, static_cast<UINT>(g_textBufferOffset), static_cast<UINT>(size / 3));
-                            g_textBufferOffset += size;
-                            continue;
-                        }
-                    }
-                    g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, static_cast<UINT>(size / 3), g_textVertices.data() + first, sizeof(Vertex));
-                }
-            }
-            if (clip)
-                g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+                SubmitUi(g_textVertices.data(), g_textVertices.size(), g_font.texture, clip ? &clipped : nullptr);
         }
 
         void DrawText(const char* text, const RECT& rect, D3DCOLOR color, DWORD format)
@@ -1454,7 +1572,36 @@ namespace cgui
     }
     int EditBox::TextWidth(std::size_t bytes) const
     {
-        return m_password ? static_cast<int>(CharacterCount(m_buffer.c_str(), bytes)) * (std::max(1, Height(GetScreenRect()) / 3) + 2) : MeasureText(m_buffer.c_str(), bytes);
+        const int passwordSize = m_password ? std::max(1, Height(GetScreenRect()) / 3) : 0;
+        if (m_widthText != m_buffer || m_widthRevision != g_fontRevision || m_widthPasswordSize != passwordSize || m_prefixWidths.empty())
+        {
+            m_widthText = m_buffer;
+            m_widthRevision = g_fontRevision;
+            m_widthPasswordSize = passwordSize;
+            m_prefixWidths.assign(m_buffer.size() + 1, 0);
+            bool measured = false;
+            const bool multibyte = !m_password && HasMultibyteText(m_buffer.c_str());
+            if (multibyte)
+            {
+                SIZE extent{};
+                if (HDC dc = MeasurementDc())
+                    measured = GetTextExtentExPointA(dc, m_buffer.data(), static_cast<int>(m_buffer.size()), 0, nullptr, m_prefixWidths.data() + 1, &extent) != FALSE;
+            }
+            if (!measured)
+            {
+                for (std::size_t first = 0; first < m_buffer.size();)
+                {
+                    const std::size_t next = NextCharacter(m_buffer.c_str(), first);
+                    const int width = m_password  ? m_prefixWidths[first] + passwordSize + 2
+                                      : multibyte ? MeasureText(m_buffer.c_str(), next)
+                                                  : m_prefixWidths[first] + g_font.glyphs[static_cast<unsigned char>(m_buffer[first])].advance;
+                    std::fill(m_prefixWidths.begin() + first + 1, m_prefixWidths.begin() + next + 1, width);
+                    first = next;
+                }
+            }
+            m_masked.assign(CharacterCount(m_buffer.c_str(), m_buffer.size()), kPasswordGlyph);
+        }
+        return m_prefixWidths[std::min(bytes, m_buffer.size())];
     }
     void EditBox::UpdateScroll() const
     {
@@ -1684,8 +1831,7 @@ namespace cgui
         UpdateScroll();
         const int scroll = TextWidth(m_firstVisible);
         const int passwordSize = m_password ? std::max(1, Height(rect) / 3) : 0;
-        const std::string masked = m_password ? std::string(CharacterCount(m_buffer.c_str() + m_firstVisible, m_buffer.size() - m_firstVisible), kPasswordGlyph) : std::string{};
-        const char* display = m_password ? masked.c_str() : m_buffer.c_str() + m_firstVisible;
+        const char* display = m_password ? m_masked.c_str() + scroll / (passwordSize + 2) : m_buffer.c_str() + m_firstVisible;
         const std::size_t first = std::min(m_selectionAnchor, m_caret), last = std::max(m_selectionAnchor, m_caret);
         if (HasSelection())
         {
@@ -2498,12 +2644,15 @@ namespace cgui
         D3DCAPS9 caps{};
         if (FAILED(device->GetDeviceCaps(&caps)) || caps.MaxPrimitiveCount < 2)
             return false;
-        g_textChunkSize = std::min<std::size_t>(caps.MaxPrimitiveCount / 2, 4096) * 6;
+        g_vertexChunkSize = std::min<std::size_t>(caps.MaxPrimitiveCount / 2, 4096) * 6;
         g_device = device;
         g_device->AddRef();
         D3DDEVICE_CREATION_PARAMETERS parameters{};
         if (SUCCEEDED(device->GetCreationParameters(&parameters)))
-            ime::SetWindow(parameters.hFocusWindow);
+        {
+            g_window = parameters.hFocusWindow;
+            ime::SetWindow(g_window);
+        }
         if (assetDirectory)
             SetAssetDirectory(assetDirectory);
         SetupDefaultElements();
@@ -2520,29 +2669,66 @@ namespace cgui
     void Shutdown()
     {
         ime::Shutdown();
+        ReleaseMeasurement();
         for (Dialog& dialog : g_dialogs)
             dialog.Reset();
         Release(g_cursor);
         Release(g_skin);
+        g_skinMetrics = {};
+        g_cursorMetrics = {};
         Release(g_font.texture);
-        Release(g_textBuffer);
-        g_textBufferOffset = 0;
+        for (auto*& state : g_states)
+            Release(state);
+        g_states.clear();
+        g_pendingVertices.clear();
+        g_textureDescriptions.clear();
+        Release(g_vertexBuffer);
+        g_vertexBufferOffset = 0;
         Release(g_device);
+        g_window = nullptr;
+        g_clientRect = {};
+        g_clientDirty = true;
         std::vector<Vertex>().swap(g_textVertices);
-        g_textChunkSize = 0;
+        g_vertexChunkSize = 0;
         g_initialized = false;
+    }
+
+    void BeginFrame()
+    {
+        g_clientDirty = true;
+    }
+    RECT GetClientRect()
+    {
+        if (g_clientDirty)
+        {
+            g_clientDirty = false;
+            RECT client{};
+            if (g_window && ::GetClientRect(g_window, &client) && client.right > 0 && client.bottom > 0)
+                g_clientRect = client;
+            else if (g_device)
+            {
+                D3DVIEWPORT9 viewport{};
+                if (SUCCEEDED(g_device->GetViewport(&viewport)))
+                    g_clientRect = RECT{0, 0, static_cast<LONG>(viewport.Width), static_cast<LONG>(viewport.Height)};
+            }
+        }
+        return g_clientRect;
     }
 
     void Render()
     {
+        PROFILE_SCOPE(Controls);
         if (!g_initialized || !g_device)
             return;
         if (g_fontDirty)
             CreateFontAtlas();
         StateGuard state;
+        if (!state.IsValid())
+            return;
         constexpr DialogId order[] = {DialogId::Scoreboard, DialogId::GameUI, DialogId::ClassSelection, DialogId::Dialog, DialogId::Secondary, DialogId::Auxiliary};
         for (DialogId id : order)
             g_dialogs[Index(id)].Render();
+        FlushUi();
         ApplyUiState(g_skin);
         ime::Render(g_device, g_fontFace.c_str(), g_fontHeight, g_fontWeight);
     }
@@ -2552,18 +2738,26 @@ namespace cgui
         if (!g_initialized || !g_device || !g_cursor)
             return;
         StateGuard state;
+        if (!state.IsValid())
+            return;
         DrawQuad(RECT{x, y, x + 32, y + 32}, 0xFFFFFFFFu, g_cursor);
     }
 
     void OnLostDevice()
     {
-        Release(g_textBuffer);
-        g_textBufferOffset = 0;
+        for (auto*& state : g_states)
+            Release(state);
+        g_states.clear();
+        g_pendingVertices.clear();
+        g_textureDescriptions.clear();
+        Release(g_vertexBuffer);
+        g_vertexBufferOffset = 0;
         // skin, font and cursor textures live in MANAGED pool and survive Reset
     }
 
     void OnResetDevice()
     {
+        g_clientDirty = true;
         if (!g_device)
             return;
         D3DVIEWPORT9 viewport{};
@@ -2579,6 +2773,8 @@ namespace cgui
 
     bool MsgProcAll(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
     {
+        if (message == WM_SIZE)
+            g_clientDirty = true;
         // Reverse render order so top-most dialogs get the message first.
         constexpr DialogId order[] = {DialogId::Auxiliary, DialogId::Secondary, DialogId::Dialog, DialogId::ClassSelection, DialogId::GameUI, DialogId::Scoreboard};
         for (DialogId id : order)

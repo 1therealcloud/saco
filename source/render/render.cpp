@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include "game/Profiler.h"
 #include "pools/CPlayerPool.h"
 
 #include "game/CGame.h"
@@ -397,6 +398,7 @@ namespace render
 
     void RenderNativeTextDraws()
     {
+        PROFILE_SCOPE(TextDraws);
         auto* pools = g_netGame ? g_netGame->m_pPools : nullptr;
         auto* textDrawPool = pools ? pools->m_pTextDraw : nullptr;
 
@@ -422,6 +424,10 @@ namespace render
 
     void RenderUi(IDirect3DDevice9* device)
     {
+#if defined(_DEBUG)
+        profiler::Scope uiProfile(profiler::Section::Ui);
+#endif
+        CGui::BeginFrame();
         if (g_shuttingDown)
             return;
 #if defined(_DEBUG)
@@ -442,16 +448,20 @@ namespace render
         auto* labelPool = pools ? pools->m_pLabel : nullptr;
         auto* playerPool = pools ? pools->m_pPlayer : nullptr;
 
-        if (objectPool)
-            objectPool->ConstructMaterials();
-        CObject::ConstructAllMaterialText();
-        if (vehiclePool)
         {
-            vehiclePool->ConstructLicensePlates();
+            PROFILE_SCOPE(Materials);
+            if (objectPool)
+                objectPool->ConstructMaterials();
+            CObject::ConstructAllMaterialText();
+            if (vehiclePool)
+                vehiclePool->ConstructLicensePlates();
         }
         // model previews own a temporary RW camera; the game's camera has ended before Present
         if (textDrawPool)
+        {
+            PROFILE_SCOPE(Previews);
             textDrawPool->LoadPreviews();
+        }
 
         // CMenuManager::m_bMenuActive: don't draw chat over the pause menu.
         if (CGame::IsPaused())
@@ -466,13 +476,18 @@ namespace render
         const bool f5Pressed = (::GetAsyncKeyState(VK_F5) & 0x8000) != 0;
         const bool f10Pressed = (::GetAsyncKeyState(VK_F10) & 0x8000) != 0;
 
-        const bool netStatsVisible = g_netStats && f5Pressed;
-        const bool srvNetStatsActive = !f5Pressed && g_srvNetStats && f10Pressed;
+#if defined(_DEBUG)
+        const bool profilerVisible = profiler::Visible();
+#else
+        constexpr bool profilerVisible = false;
+#endif
+        const bool netStatsVisible = !profilerVisible && g_netStats && f5Pressed;
+        const bool srvNetStatsActive = !profilerVisible && !f5Pressed && g_srvNetStats && f10Pressed;
 
         if (g_srvNetStats)
             g_srvNetStats->SetActive(srvNetStatsActive);
 
-        const bool hideChatForStats = netStatsVisible || srvNetStatsActive;
+        const bool hideChatForStats = profilerVisible || netStatsVisible || srvNetStatsActive;
 
         if (hideChatForStats)
         {
@@ -484,7 +499,10 @@ namespace render
             g_chat->UpdateScrollbarVisibility(g_input->IsEnabled());
         }
 
-        DrawPlayerTags();
+        {
+            PROFILE_SCOPE(Tags);
+            DrawPlayerTags();
+        }
         if (g_chatBubble)
             g_chatBubble->Draw();
         DrawVehicleDebugLabels();
@@ -538,6 +556,8 @@ namespace render
         RenderCursor(device);
 #if defined(_DEBUG)
         g_fonts->DrawFps(g_fps, g_frameTimeMs);
+        uiProfile.Stop();
+        profiler::Draw(device);
 #endif // _DEBUG
         device->EndScene();
         ProcessScreenshot(device);
@@ -633,7 +653,6 @@ namespace render
             SetCursorMode(2, false);
         if (g_scoreboard && g_scoreboard->m_bIsEnabled)
         {
-            g_scoreboard->Recalc();
             SetCursorMode(3, false);
         }
         if ((g_objectEdit && g_objectEdit->m_bEnabled) || (g_objectSelection && g_objectSelection->m_bIsActive))
@@ -668,6 +687,7 @@ namespace render
             return;
         bool hideStatus = false;
         g_config.GetParam(CConfig::PARAM_NO_NAMETAG_STATUS, hideStatus);
+        g_playerTags->BeginLabel();
         for (int id = 0; id <= playerPool->m_nLargestId; ++id)
         {
             auto* player = playerPool->GetPlayer(static_cast<CPlayerPool::ID>(id));
@@ -682,12 +702,9 @@ namespace render
             const char* name = playerPool->GetName(static_cast<CPlayerPool::ID>(id));
             char text[512]{};
             std::snprintf(text, sizeof(text), "%s (%d)", name ? name : "", id);
-            g_playerTags->BeginLabel();
-            g_playerTags->DrawLabel(&position, text, player->GetColorAsARGB(), cameraDistance, !hideStatus, player->GetStatus());
-            g_playerTags->EndLabel();
-            g_playerTags->BeginHealthBar();
-            g_playerTags->DrawHealthBar(&position, player->m_fReportedHealth, player->m_fReportedArmour, cameraDistance);
-            g_playerTags->EndHealthBar();
+            g_playerTags->DrawTag(&position, text, player->GetColorAsARGB(), player->m_fReportedHealth, player->m_fReportedArmour, cameraDistance, !hideStatus,
+                                  player->GetStatus());
         }
+        g_playerTags->EndLabel();
     }
 }

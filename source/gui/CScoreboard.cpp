@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include "game/Profiler.h"
 
 #include "CScoreboard.h"
 
@@ -38,6 +39,8 @@ namespace
     struct RuntimeState
     {
         std::vector<CScoreboard::PlayerInfo> players;
+        std::vector<CScoreboard::PlayerInfo> snapshot;
+        ULONGLONG nextRefresh = 0;
         std::vector<std::uint16_t> visibleIds;
         std::string serverName;
     };
@@ -48,37 +51,12 @@ namespace
         return g_runtime[scoreboard];
     }
 
-    bool GetClientSize(IDirect3DDevice9* device, int& width, int& height)
+    bool GetClientSize(int& width, int& height)
     {
-        width = 0;
-        height = 0;
-
-        if (device)
-        {
-            D3DDEVICE_CREATION_PARAMETERS params{};
-            if (SUCCEEDED(device->GetCreationParameters(&params)) && params.hFocusWindow)
-            {
-                RECT rect{};
-                if (GetClientRect(params.hFocusWindow, &rect))
-                {
-                    width = rect.right - rect.left;
-                    height = rect.bottom - rect.top;
-
-                    if (width > 0 && height > 0)
-                        return true;
-                }
-            }
-
-            D3DVIEWPORT9 viewport{};
-            if (SUCCEEDED(device->GetViewport(&viewport)))
-            {
-                width = static_cast<int>(viewport.Width);
-                height = static_cast<int>(viewport.Height);
-                return width > 0 && height > 0;
-            }
-        }
-
-        return false;
+        const RECT rect = CGui::GetClientRect();
+        width = rect.right - rect.left;
+        height = rect.bottom - rect.top;
+        return width > 0 && height > 0;
     }
 
     int ColumnWidth(float fraction, float width)
@@ -115,7 +93,7 @@ CScoreboard::CScoreboard(IDirect3DDevice9* device)
     int width = 0;
     int height = 0;
 
-    if (GetClientSize(m_pDevice, width, height) && width > 800)
+    if (GetClientSize(width, height) && width > 800)
     {
         m_size[0] = kLargeWidth;
         m_size[1] = kLargeHeight;
@@ -153,7 +131,7 @@ void CScoreboard::Recalc()
     int width = 0;
     int height = 0;
 
-    if (!GetClientSize(m_pDevice, width, height))
+    if (!GetClientSize(width, height))
         return;
 
     // Exact R5 behavior: scalar is always reset to 1.0 and the fixed-size
@@ -161,6 +139,17 @@ void CScoreboard::Recalc()
     m_fScalar = 1.0f;
     m_position[0] = static_cast<float>(width) * 0.5f - m_size[0] * 0.5f;
     m_position[1] = static_cast<float>(height) * 0.5f - m_size[1] * 0.5f;
+    if (m_pDialog)
+    {
+        const RECT current = m_pDialog->GetRect();
+        const RECT expected{static_cast<LONG>(m_position[0]), static_cast<LONG>(m_position[1]), static_cast<LONG>(m_position[0] + m_size[0]),
+                            static_cast<LONG>(m_position[1] + m_size[1])};
+        if (!EqualRect(&current, &expected))
+        {
+            m_pDialog->SetLocation(expected.left, expected.top);
+            m_pDialog->SetSize(static_cast<int>(m_size[0]), static_cast<int>(m_size[1]));
+        }
+    }
 }
 
 void CScoreboard::GetRect(RECT* rect) const
@@ -226,6 +215,7 @@ void CScoreboard::ResetDialogControls(cgui::Dialog* dialog)
     m_pDialog->SetVisible(false);
 
     RuntimeState& state = State(this);
+    state.nextRefresh = 0;
     state.players.clear();
     state.visibleIds.clear();
 
@@ -255,6 +245,7 @@ void CScoreboard::SendNotification()
 
 void CScoreboard::UpdateList()
 {
+    PROFILE_SCOPE(Scoreboard);
     if (!m_bIsEnabled || !m_pDialog || !m_pListbox)
         return;
 
@@ -262,7 +253,12 @@ void CScoreboard::UpdateList()
 
     const int selected = m_pListbox->GetSelectedIndex();
     const int selectedId = selected >= 0 && selected < static_cast<int>(state.visibleIds.size()) ? state.visibleIds[selected] : -1;
-    std::vector<PlayerInfo> players;
+    const auto now = GetTickCount64();
+    if (now < state.nextRefresh)
+        return;
+    state.nextRefresh = now + 100;
+    auto& players = state.snapshot;
+    players.clear();
     auto* pools = g_netGame ? g_netGame->m_pPools : nullptr;
     auto* playerPool = pools ? pools->m_pPlayer : nullptr;
     const bool connected = g_netGame && g_netGame->GetState() == CNetGame::GAME_MODE_CONNECTED;
@@ -316,7 +312,31 @@ void CScoreboard::UpdateList()
     if (unchanged)
         return;
     const int top = m_pListbox->GetTopIndex();
-    state.players = std::move(players);
+    const bool sameOrder =
+        players.size() == state.players.size() && std::equal(players.begin(), players.end(), state.players.begin(), [](const PlayerInfo& a, const PlayerInfo& b) {
+            return a.id == b.id;
+        });
+    if (sameOrder)
+    {
+        for (std::size_t row = 0; row < players.size(); ++row)
+        {
+            const auto& player = players[row];
+            const auto& old = state.players[row];
+            char color[9]{};
+            std::snprintf(color, sizeof(color), "{%06X}", player.color & 0xFFFFFFu);
+            if (player.color != old.color)
+                m_pListbox->SetItemText(static_cast<int>(row), 0, (color + std::to_string(player.id)).c_str());
+            if (player.color != old.color || player.name != old.name)
+                m_pListbox->SetItemText(static_cast<int>(row), 1, (color + player.name).c_str());
+            if (player.color != old.color || player.score != old.score)
+                m_pListbox->SetItemText(static_cast<int>(row), 2, (color + std::to_string(player.score)).c_str());
+            if (player.color != old.color || player.ping != old.ping)
+                m_pListbox->SetItemText(static_cast<int>(row), 3, (color + std::to_string(player.ping)).c_str());
+        }
+        state.players.swap(players);
+        return;
+    }
+    state.players.swap(players);
     state.visibleIds.clear();
     m_pListbox->RemoveAllItems();
     for (const PlayerInfo& player : state.players)
@@ -346,14 +366,6 @@ void CScoreboard::Draw()
     if (g_netGame && g_netGame->GetState() == CNetGame::GAME_MODE_CONNECTED)
         g_netGame->UpdatePlayers();
 
-    Recalc();
-
-    if (m_pDialog)
-    {
-        m_pDialog->SetLocation(static_cast<int>(m_position[0]), static_cast<int>(m_position[1]));
-        m_pDialog->SetSize(static_cast<int>(m_size[0]), static_cast<int>(m_size[1]));
-    }
-
     DrawHeader();
 }
 
@@ -368,6 +380,7 @@ void CScoreboard::Enable()
     m_pDialog->RequestFocus(m_pListbox);
 
     m_bIsEnabled = TRUE;
+    State(this).nextRefresh = 0;
     UpdateList();
 
     render::SetCursorMode(3, false);
@@ -393,6 +406,7 @@ void CScoreboard::SetSortMode(SortMode mode)
         mode = SORT_NONE;
 
     m_bIsSorted = static_cast<BOOL>(mode);
+    State(this).nextRefresh = 0;
 
     if (m_bIsEnabled)
         UpdateList();

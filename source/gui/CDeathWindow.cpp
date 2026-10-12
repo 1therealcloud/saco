@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include "game/Profiler.h"
 
 #include "CDeathWindow.h"
 
@@ -334,6 +335,7 @@ void CDeathWindow::OnResetDevice()
 
 void CDeathWindow::Draw()
 {
+    PROFILE_SCOPE(DeathWindow);
     if (!m_bEnabled || !m_pFont || !m_pWeaponFont1 || !m_pWeaponFont2)
         return;
 

@@ -65,15 +65,20 @@ void CInput::Open()
 
 void CInput::UpdateLayout()
 {
-    RECT client{};
-    D3DDEVICE_CREATION_PARAMETERS parameters{};
-    if (m_pDevice && SUCCEEDED(m_pDevice->GetCreationParameters(&parameters)))
-        GetClientRect(parameters.hFocusWindow, &client);
+    const RECT client = CGui::GetClientRect();
 
     long width = static_cast<long>(static_cast<float>(client.right) * 0.6f);
     width = std::min<long>(width, 800);
 
     const long chatBottom = g_chat ? g_chat->m_nWindowBottom : 0;
+
+    if (m_pEditbox)
+    {
+        const RECT current = m_pEditbox->GetRect();
+        if (current.left == 40 && current.top == chatBottom && current.right == 40 + width && current.bottom == chatBottom + 40 && g_inputRect.right == width + 100 &&
+            g_inputRect.bottom == chatBottom + 50)
+            return;
+    }
 
     // Original editbox: x=40, y=chat bottom, width=min(clientWidth*0.6, 800).
     // GetRect in R5 exposes the dialog extent, not the editbox rectangle itself.

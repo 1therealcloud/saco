@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include "game/Profiler.h"
 #include "BuildingRemoval.h"
 #include "patch/hooks.h"
 #include "utils/math/CVector.h"
@@ -202,6 +203,7 @@ namespace BuildingRemoval
     }
     void Process()
     {
+        PROFILE_SCOPE(Removal);
         for (const auto& key : pending)
             if (key.Alive())
             {

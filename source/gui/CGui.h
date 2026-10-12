@@ -385,6 +385,11 @@ namespace cgui
         int TextWidth(std::size_t bytes) const;
         void UpdateScroll() const;
         mutable std::size_t m_firstVisible = 0;
+        mutable std::string m_widthText;
+        mutable std::string m_masked;
+        mutable std::vector<int> m_prefixWidths;
+        mutable unsigned int m_widthRevision = 0;
+        mutable int m_widthPasswordSize = -1;
         IDirect3DTexture9* m_textTexture = nullptr;
         std::string m_cachedText;
         std::string m_cachedFace;
@@ -595,6 +600,8 @@ namespace cgui
     void Shutdown();
     void Render();
     void RenderCursor(int x, int y);
+    void BeginFrame();
+    RECT GetClientRect();
     void OnLostDevice();
     void OnResetDevice();
     bool MsgProc(DialogId id, HWND window, UINT message, WPARAM wParam, LPARAM lParam);
@@ -651,6 +658,15 @@ public:
     static bool Initialize(IDirect3DDevice9* device, const char* assetDirectory = nullptr)
     {
         return cgui::Initialize(device, assetDirectory);
+    }
+
+    static void BeginFrame()
+    {
+        cgui::BeginFrame();
+    }
+    static RECT GetClientRect()
+    {
+        return cgui::GetClientRect();
     }
 
     static void Shutdown()

@@ -13,6 +13,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -53,6 +54,8 @@ public:
     int DrawTextA(const char* text, int count, RECT* rect, DWORD format, D3DCOLOR color, D3DBLEND destBlend);
 
     int DrawTextOutlinedA(const char* text, RECT* rect, DWORD format, D3DCOLOR color, D3DCOLOR outlineColor, int outlineSize);
+
+    void DrawBox(float x, float y, float width, float height, D3DCOLOR color);
 
     SIZE GetTextSize(const char* text, DWORD format = DT_NOCLIP) const;
 
@@ -117,6 +120,8 @@ private:
         UINT streamStride = 0;
         DWORD fvf = 0;
 
+        DWORD blendOp = 0;
+        DWORD colorWriteEnable = 0;
         DWORD alphaBlendEnable = 0;
         DWORD srcBlend = 0;
         DWORD destBlend = 0;
@@ -162,6 +167,18 @@ private:
 
     int BuildVertices(const char* text, int count, RECT rect, DWORD format, D3DCOLOR color, bool useColorTags, float offsetX, float offsetY, std::vector<Vertex>& vertices,
                       SIZE* measured = nullptr) const;
+
+    int BuildVerticesUncached(const char* text, int count, RECT rect, DWORD format, D3DCOLOR color, bool useColorTags, float offsetX, float offsetY, std::vector<Vertex>& vertices,
+                              SIZE* measured) const;
+    struct CachedText
+    {
+        std::vector<Vertex> vertices;
+        SIZE size{};
+        int height = 0;
+    };
+    mutable std::unordered_map<std::string, CachedText> m_textCache;
+    mutable std::deque<std::string> m_textCacheOrder;
+    mutable std::size_t m_textCacheBytes = 0;
 
     int DrawVertices(std::vector<Vertex>& vertices, const RECT* clipRect, bool clip, D3DBLEND destBlend = D3DBLEND_INVSRCALPHA);
     int SubmitVertices(const std::vector<Vertex>& vertices, const RECT* clipRect, bool clip, D3DBLEND destBlend);

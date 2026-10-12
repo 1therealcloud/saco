@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include "game/Profiler.h"
 #include "game/CGame.h"
 #include "game/Scripting.h"
 #include "sync/KeyStuff.h"
@@ -97,6 +98,7 @@ char* CMenuPool::GetTextPointer(const char* text)
 
 void CMenuPool::Process()
 {
+    PROFILE_SCOPE(Menus);
     if (m_nCurrent == INVALID_MENU)
         return;
     CPad snapshot{};

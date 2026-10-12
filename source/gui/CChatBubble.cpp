@@ -1,4 +1,5 @@
 #include <stdafx.h>
+#include "game/Profiler.h"
 
 #include "main.h"
 
@@ -91,6 +92,9 @@ void CChatBubble::Add(ID player, const char* text, D3DCOLOR color, float drawDis
     if (player >= MAX_PLAYERS || !text || !std::isfinite(drawDistance) || drawDistance < 0 || lifeSpan < 0)
         return;
 
+    const auto active = std::lower_bound(m_activeIds.begin(), m_activeIds.end(), player);
+    if (active != m_activeIds.end() && *active == player)
+        m_activeIds.erase(active);
     Player& bubble = m_player[player];
 
     // The original clears an existing entry before validating the new string.
@@ -107,18 +111,20 @@ void CChatBubble::Add(ID player, const char* text, D3DCOLOR color, float drawDis
     bubble.m_fDrawDistance = drawDistance;
     bubble.m_nMaxLineLength = WrapText(bubble.m_szText, kWrapLength, kMinimumWordTail);
     bubble.m_bExists = TRUE;
+    m_activeIds.insert(std::lower_bound(m_activeIds.begin(), m_activeIds.end(), player), player);
 }
 
 void CChatBubble::Draw()
 {
+    PROFILE_SCOPE(Bubbles);
     if (!g_label)
         return;
 
     const std::uint32_t now = GetTickCount();
 
-    g_label->Begin();
+    bool begun = false;
 
-    for (ID id = 0; id < MAX_PLAYERS; ++id)
+    for (const ID id : m_activeIds)
     {
         Player& bubble = m_player[id];
         if (!bubble.m_bExists)
@@ -154,8 +160,17 @@ void CChatBubble::Draw()
         // Exact x87 expression reconstructed from R5 CChatBubble::Draw.
         position.z += 0.2f + 0.02f * extraLines + distanceToCamera * (0.065f + 0.0125f * extraLines);
 
+        if (!begun)
+        {
+            g_label->Begin();
+            begun = true;
+        }
         g_label->Draw(&position, bubble.m_szText, bubble.m_color, TRUE, false);
     }
 
-    g_label->End();
+    if (begun)
+        g_label->End();
+    std::erase_if(m_activeIds, [this](ID id) {
+        return !m_player[id].m_bExists;
+    });
 }
