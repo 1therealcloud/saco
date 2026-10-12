@@ -898,7 +898,7 @@ void CRemotePlayer::EnterVehicle(ID id, BOOL passenger)
     m_pPed->SetKeys(0, 0, 0);
 
     m_pPed->EnterVehicle(vehicle->m_handle, passenger);
-    runtime.transitionStarted = GetTickCount();
+    runtime.transitionStarted = g_game ? static_cast<TICK>(g_game->GetTimer()) : GetTickCount();
     runtime.transitionVehicle = runtime.lastVehicle = id;
     runtime.taskObserved = false;
     runtime.enteringVehicle = true;
@@ -924,7 +924,7 @@ void CRemotePlayer::ExitVehicle(ID id)
     m_pPed->SetKeys(0, 0, 0);
     m_pPed->ExitVehicle();
     runtime.transitionVehicle = id == INVALID_ID ? m_nVehicleId : id;
-    runtime.transitionStarted = GetTickCount();
+    runtime.transitionStarted = g_game ? static_cast<TICK>(g_game->GetTimer()) : GetTickCount();
     runtime.taskObserved = false;
     runtime.enteringVehicle = false;
     runtime.exitingVehicle = true;
@@ -1013,15 +1013,15 @@ void CRemotePlayer::Process()
     ProcessRemoteMarker(*this);
     if (!m_pPed || !m_pPed->HasNativePed())
         return;
-    m_pPed->ProcessAnimation();
     const TICK now = GetTickCount();
     auto& runtime = Runtime(this);
     if (runtime.enteringVehicle || runtime.exitingVehicle)
     {
         const bool task = runtime.enteringVehicle ? m_pPed->HasVehicleEntryTask() : m_pPed->HasVehicleExitTask();
         runtime.taskObserved = runtime.taskObserved || task;
-        const bool timedOut = now - runtime.transitionStarted >= VEHICLE_TASK_TIMEOUT_MS;
-        const bool taskEnded = !task && (runtime.taskObserved || now - runtime.transitionStarted >= 250);
+        const TICK taskTime = g_game ? static_cast<TICK>(g_game->GetTimer()) : now;
+        const bool timedOut = taskTime - runtime.transitionStarted >= VEHICLE_TASK_TIMEOUT_MS;
+        const bool taskEnded = !task && (runtime.taskObserved || taskTime - runtime.transitionStarted >= 250);
         bool complete = false;
         if (runtime.enteringVehicle)
         {
@@ -1184,14 +1184,14 @@ void CRemotePlayer::Process()
         ProcessSpecialAction();
         if (runtime.lastAnimation != m_animation.m_value)
         {
-            if (m_animation.m_value)
-                m_pPed->PerformNetworkAnimation(m_animation);
-            else if (runtime.lastAnimation == 0x1804067C)
+            m_pPed->PerformNetworkAnimation(m_animation);
+            if (!m_animation.m_value && runtime.lastAnimation == 0x1804067C)
                 m_pPed->PerformAnimation("VEND_EAT_P", "VENDING", 4.0f, 0, 0, 0, 0, -1);
             runtime.lastAnimation = m_animation.m_value;
             m_bPerformingCustomAnimation = FALSE;
         }
 
+        m_pPed->ProcessAnimation();
         ProcessHead();
 
         m_pPed->SetKeys(m_onfootData.m_controllerState.m_value, m_onfootData.m_controllerState.m_sLeftStickX, m_onfootData.m_controllerState.m_sLeftStickY);

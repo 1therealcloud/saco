@@ -1184,7 +1184,7 @@ void CLocalPlayer::EnterVehicle(int vehicle, BOOL passenger)
     {
         m_nLastVehicle = id;
         m_vehicleEntryPending = true;
-        m_vehicleTransitionStarted = GetTickCount();
+        m_vehicleTransitionStarted = g_game ? static_cast<TICK>(g_game->GetTimer()) : GetTickCount();
 #if defined(_DEBUG)
         Log("[sync:enter] vehicle=%u passenger=%d", static_cast<unsigned>(id), passenger != FALSE);
 #endif
@@ -1223,7 +1223,7 @@ void CLocalPlayer::ExitVehicle(int vehicle)
     {
         m_nLastVehicle = INVALID_ID;
         m_vehicleEntryPending = false;
-        m_vehicleTransitionStarted = GetTickCount();
+        m_vehicleTransitionStarted = g_game ? static_cast<TICK>(g_game->GetTimer()) : GetTickCount();
         m_vehicleExitPending = m_pPed && (m_pPed->IsInVehicle() || m_pPed->HasVehicleExitTask());
         m_damage.m_nVehicleUpdating = INVALID_ID;
     }
@@ -1783,12 +1783,13 @@ void CLocalPlayer::Process()
     const ID currentVehicleId = currentNativeVehicle && vehiclePool ? vehiclePool->Find(const_cast<void*>(currentNativeVehicle)) : INVALID_ID;
     const bool entering = m_pPed->HasVehicleEntryTask();
     const bool exiting = m_pPed->HasVehicleExitTask();
-    if (m_vehicleExitPending && !exiting && (!m_pPed->IsInVehicle() || now - m_vehicleTransitionStarted >= 250))
+    const TICK taskTime = g_game ? static_cast<TICK>(g_game->GetTimer()) : now;
+    if (m_vehicleExitPending && !exiting && (!m_pPed->IsInVehicle() || taskTime - m_vehicleTransitionStarted >= 250))
         m_vehicleExitPending = false;
     if (m_vehicleEntryPending && !entering && m_pPed->IsInVehicle() && currentVehicleId == m_nLastVehicle)
         m_vehicleEntryPending = false;
     if (m_nLastVehicle != INVALID_ID && !entering && !exiting &&
-        ((m_vehicleEntryPending && !m_pPed->IsInVehicle() && now - m_vehicleTransitionStarted > 100) || (!m_vehicleEntryPending && currentVehicleId != m_nLastVehicle)))
+        ((m_vehicleEntryPending && !m_pPed->IsInVehicle() && taskTime - m_vehicleTransitionStarted > 100) || (!m_vehicleEntryPending && currentVehicleId != m_nLastVehicle)))
         ExitVehicle(m_nLastVehicle);
     if (!m_vehicleEntryPending && !m_vehicleExitPending && !entering && !exiting && m_pPed->IsInVehicle() && currentVehicleId != INVALID_ID && m_nLastVehicle != currentVehicleId)
         EnterVehicle(currentVehicleId, m_pPed->IsPassenger());

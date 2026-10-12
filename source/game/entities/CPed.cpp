@@ -955,7 +955,7 @@ void CPed::PerformAnimation(const char* name, const char* file, float frameDelta
 
     const bool samePending =
         m_pendingAnimation.active && m_pendingAnimation.ped == m_pGamePed && m_pendingAnimation.handle == m_handle && std::strcmp(m_pendingAnimation.library, file) == 0;
-    const DWORD requested = samePending ? m_pendingAnimation.requested : GetTickCount();
+    const DWORD requested = samePending ? m_pendingAnimation.requested : static_cast<DWORD>(g_game->GetTimer());
     m_pendingAnimation = {};
     std::strcpy(m_pendingAnimation.name, name);
     std::strcpy(m_pendingAnimation.library, file);
@@ -979,8 +979,8 @@ void CPed::ProcessAnimation()
     auto& animation = m_pendingAnimation;
     if (!animation.active)
         return;
-    if (!HasCurrentNativePed() || !g_game || animation.ped != m_pGamePed || animation.handle != m_handle || GetTickCount() - animation.requested >= 5000 || GetState() == 54 ||
-        GetState() == 55)
+    if (!HasCurrentNativePed() || !g_game || animation.ped != m_pGamePed || animation.handle != m_handle || static_cast<DWORD>(g_game->GetTimer()) - animation.requested >= 5000 ||
+        GetState() == 54 || GetState() == 55)
     {
         animation.active = false;
         return;
@@ -1054,7 +1054,12 @@ Animation CPed::GetScriptAnimation()
 bool CPed::PerformNetworkAnimation(Animation animation)
 {
     const auto id = animation.m_nId;
-    if (!id || id >= game::animations::names.size() || !HasCurrentNativePed())
+    if (!id)
+    {
+        m_pendingAnimation.active = false;
+        return true;
+    }
+    if (id >= game::animations::names.size() || !HasCurrentNativePed())
         return false;
     const char* entry = game::animations::names[id];
     const char* separator = std::strchr(entry, ':');
