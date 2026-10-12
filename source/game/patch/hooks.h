@@ -1,6 +1,6 @@
 #pragma once
 
-#include "game/BulletSync.h"
+#include "sync/BulletSync.h"
 
 #include "game/RenderWare/rw/skeleton.h"
 

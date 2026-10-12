@@ -3,7 +3,7 @@
 #include "patch.h"
 #include "hooks.h"
 #include "game/PlayerSlots.h"
-#include "game/BulletSync.h"
+#include "sync/BulletSync.h"
 
 #include <chrono>
 #include <thread>

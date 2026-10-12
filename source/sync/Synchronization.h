@@ -6,7 +6,7 @@
 
 #include "utils/math/CVector.h"
 
-#include "game/Animation.h"
+#include "sync/Animation.h"
 #include "ControllerState.h"
 
 #pragma pack(push, 1)

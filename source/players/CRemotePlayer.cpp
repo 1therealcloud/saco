@@ -8,8 +8,8 @@
 
 #include "CLocalPlayer.h"
 #include "game/CGame.h"
-#include "game/BulletSync.h"
-#include "game/SpecialAction.h"
+#include "sync/BulletSync.h"
+#include "sync/SpecialAction.h"
 #include "game/entities/CObject.h"
 #include "game/entities/CPed.h"
 #include "game/entities/CVehicle.h"

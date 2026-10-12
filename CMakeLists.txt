@@ -41,7 +41,6 @@ add_library(samp SHARED
     source/exceptbox.rc
     source/exceptions.cpp
     source/game/BuildingRemoval.cpp
-    source/game/BulletSync.cpp
     source/game/CAudio.cpp
     source/game/CCamera.cpp
     source/game/CGame.cpp
@@ -116,6 +115,7 @@ add_library(samp SHARED
     source/render/render.cpp
     source/render/screenshot.cpp
     source/sync/AimStuff.cpp
+    source/sync/BulletSync.cpp
     source/sync/KeyStuff.cpp
     source/utils/math/CMatrix.cpp
     source/utils/math/CQuaternion.cpp

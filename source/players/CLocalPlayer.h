@@ -6,7 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "game/Animation.h"
+#include "sync/Animation.h"
 #include "sync/Synchronization.h"
 #include "utils/math/CVector.h"
 

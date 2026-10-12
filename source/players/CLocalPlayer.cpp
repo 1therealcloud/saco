@@ -8,7 +8,7 @@
 #include "CRemotePlayer.h"
 
 #include "game/CCamera.h"
-#include "game/BulletSync.h"
+#include "sync/BulletSync.h"
 #include "game/CAudio.h"
 #include "gui/CDialog.h"
 #include "game/CGame.h"
@@ -20,7 +20,7 @@
 #include "game/Scripting.h"
 #include "sync/KeyStuff.h"
 #include "sync/AimStuff.h"
-#include "game/SpecialAction.h"
+#include "sync/SpecialAction.h"
 #include "game/entities/CObject.h"
 #include "game/entities/CPed.h"
 #include "game/entities/CVehicle.h"
