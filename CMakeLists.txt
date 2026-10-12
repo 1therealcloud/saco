@@ -12,6 +12,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(SAMP_TRACY "Enable Tracy profiling" OFF)
+
 add_subdirectory(third-party)
 
 set(RENDERWARE_SOURCES
@@ -144,6 +146,7 @@ target_link_libraries(samp PRIVATE
     minhook
     raknet
     stb
+    Tracy::TracyClient
 
     d3d9
 

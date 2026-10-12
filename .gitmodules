@@ -10,3 +10,6 @@
 [submodule "third-party/directxmath"]
 	path = third-party/directxmath
 	url = https://github.com/microsoft/DirectXMath.git
+[submodule "third-party/tracy"]
+	path = third-party/tracy
+	url = https://github.com/wolfpld/tracy.git
