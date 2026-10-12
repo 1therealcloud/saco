@@ -40,6 +40,7 @@ namespace game::hooks
 {
     bool InstallRenderHooks();
     bool InstallVehicleTransitionHooks();
+    bool InstallVehicleControlHooks();
     bool InstallVehicleCollisionHooks();
     extern void* crimeReportPed;
 

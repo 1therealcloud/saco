@@ -71,6 +71,9 @@ namespace game::patch
         if (!game::players::Install())
             return false;
 
+        if (!game::hooks::InstallVehicleControlHooks())
+            return false;
+
         if (!game::hooks::InstallVehicleTransitionHooks())
             return false;
 

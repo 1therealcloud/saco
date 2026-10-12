@@ -271,6 +271,82 @@ void __fastcall ProcessControlHook(void* ped, void*)
     AimStuff::ApplyAim();
 }
 
+namespace
+{
+    struct VehicleControlMethod
+    {
+        std::uintptr_t vtable;
+        game::players::detail::ControlFn original;
+    };
+    std::array<VehicleControlMethod, 10> g_vehicleControlMethods{{{0x871120, nullptr},
+                                                                  {0x8721A0, nullptr},
+                                                                  {0x871360, nullptr},
+                                                                  {0x871948, nullptr},
+                                                                  {0x871680, nullptr},
+                                                                  {0x871528, nullptr},
+                                                                  {0x8717D8, nullptr},
+                                                                  {0x871AE8, nullptr},
+                                                                  {0x872370, nullptr},
+                                                                  {0x871C28, nullptr}}};
+
+    void __fastcall VehicleControlHook(void* native, void*)
+    {
+        const auto vtable = *static_cast<const std::uintptr_t*>(native);
+        const auto method = std::find_if(g_vehicleControlMethods.begin(), g_vehicleControlMethods.end(), [vtable](const auto& entry) {
+            return entry.vtable == vtable;
+        });
+        if (method == g_vehicleControlMethods.end() || !method->original)
+            return;
+        auto* vehicle = static_cast<std::uint8_t*>(native);
+        auto* driver = *reinterpret_cast<void**>(vehicle + 0x460);
+        auto& current = *reinterpret_cast<std::uint8_t*>(0xB7CD74);
+        const int slot = driver ? FindSlot(driver) : 0;
+        if (!slot || current != 0)
+        {
+            method->original(native);
+            return;
+        }
+
+        // R5 swaps the driver's input around the vehicle's virtual ProcessControl too.
+        KeyStuff::UpdateKeys();
+        KeyStuff::ApplyKeys(slot);
+        const char savedMode = *AimStuff::RefInternalCameraMode();
+        auto& secondaryMode = *reinterpret_cast<std::uint16_t*>(0xB6F858);
+        const auto savedSecondaryMode = secondaryMode;
+        const auto remoteMode = AimStuff::GetCameraMode(static_cast<std::uint8_t>(slot));
+        *AimStuff::RefInternalCameraMode() = remoteMode;
+        secondaryMode = remoteMode == 4 ? 0 : static_cast<std::uint8_t>(remoteMode);
+        AimStuff::UpdateCameraExtZoomAndAspectRatio();
+        AimStuff::ApplyCameraExtZoomAndAspectRatio(static_cast<std::uint8_t>(slot));
+        AimStuff::UpdateAim();
+        AimStuff::ApplyAim(slot);
+        current = static_cast<std::uint8_t>(slot);
+        method->original(native);
+        current = 0;
+        KeyStuff::ApplyKeys();
+        *AimStuff::RefInternalCameraMode() = savedMode;
+        secondaryMode = savedSecondaryMode;
+        AimStuff::ApplyCameraExtZoomAndAspectRatio();
+        AimStuff::ApplyAim();
+    }
+}
+
+bool game::hooks::InstallVehicleControlHooks()
+{
+    for (auto& method : g_vehicleControlMethods)
+    {
+        auto* entry = reinterpret_cast<game::players::detail::ControlFn*>(method.vtable + 0x28);
+        DWORD protection{};
+        if (!VirtualProtect(entry, sizeof(*entry), PAGE_READWRITE, &protection))
+            return false;
+        method.original = *entry;
+        *entry = reinterpret_cast<game::players::detail::ControlFn>(&VehicleControlHook);
+        DWORD unused{};
+        VirtualProtect(entry, sizeof(*entry), protection, &unused);
+    }
+    return true;
+}
+
 std::uint32_t __fastcall WeaponSkillHook(void* ped, void*)
 {
     const int slot = FindSlot(ped);
