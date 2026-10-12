@@ -39,13 +39,13 @@ namespace game::patch::modelinfo
             for (auto cursor = address; cursor < end;)
             {
                 MEMORY_BASIC_INFORMATION info{};
-                if (VirtualQuery(reinterpret_cast<const void*>(cursor), &info, sizeof(info)) != sizeof(info) ||
-                    info.State != MEM_COMMIT || (info.Protect & (PAGE_GUARD | PAGE_NOACCESS)))
+                if (VirtualQuery(reinterpret_cast<const void*>(cursor), &info, sizeof(info)) != sizeof(info) || info.State != MEM_COMMIT ||
+                    (info.Protect & (PAGE_GUARD | PAGE_NOACCESS)))
                     return false;
 
                 const DWORD protection = info.Protect & 0xFF;
-                if (protection != PAGE_READONLY && protection != PAGE_READWRITE && protection != PAGE_WRITECOPY &&
-                    protection != PAGE_EXECUTE_READ && protection != PAGE_EXECUTE_READWRITE && protection != PAGE_EXECUTE_WRITECOPY)
+                if (protection != PAGE_READONLY && protection != PAGE_READWRITE && protection != PAGE_WRITECOPY && protection != PAGE_EXECUTE_READ &&
+                    protection != PAGE_EXECUTE_READWRITE && protection != PAGE_EXECUTE_WRITECOPY)
                     return false;
 
                 const auto start = reinterpret_cast<std::uintptr_t>(info.BaseAddress);
@@ -59,8 +59,7 @@ namespace game::patch::modelinfo
             return true;
         }
 
-        bool validate_model_info_reference(const dl_reference::ModelInfoSite& site, bool firstVariant,
-                                           std::uint32_t currentTable, ModelInfoReference& reference)
+        bool validate_model_info_reference(const dl_reference::ModelInfoSite& site, bool firstVariant, std::uint32_t currentTable, ModelInfoReference& reference)
         {
             const auto address = static_cast<std::uintptr_t>(firstVariant ? site.gta_address_variant_1 : site.gta_address_variant_2);
             const auto opcode = site.opcode;
@@ -133,7 +132,7 @@ namespace game::patch::modelinfo
         {
             bool required{};
             unsigned variant{};
-            std::array<ModelInfoReference, dl_reference::kModelInfoSites.size()> references{};
+            std::array<ModelInfoReference, dl_reference::kModelInfoSites.size() + dl_reference::kModelInfoOffsetSites.size()> references{};
             std::array<std::uint8_t, 6> guardDetour{};
         };
 
@@ -149,8 +148,7 @@ namespace game::patch::modelinfo
                 return true;
             }
 
-            if (!readable_span(activeTable, kOriginalSlotCount * sizeof(void*)) ||
-                !::patch::expect(kNegativeGuard, kGuardOriginal.data(), kGuardOriginal.size()) ||
+            if (!readable_span(activeTable, kOriginalSlotCount * sizeof(void*)) || !::patch::expect(kNegativeGuard, kGuardOriginal.data(), kGuardOriginal.size()) ||
                 !guard_detour(plan.guardDetour))
             {
                 Log("[game::patch::modelinfo] original table or streaming guard differs from gta 1.0 us");
@@ -164,14 +162,22 @@ namespace game::patch::modelinfo
             const bool secondOK = second.valid == expected;
             if (firstOK == secondOK)
             {
-                Log("[game::patch::modelinfo] reference validation failed/ambiguous: v1=%u (0x%08X), v2=%u (0x%08X)",
-                    static_cast<unsigned>(first.valid), static_cast<unsigned>(first.firstMismatch),
-                    static_cast<unsigned>(second.valid), static_cast<unsigned>(second.firstMismatch));
+                Log("[game::patch::modelinfo] reference validation failed/ambiguous: v1=%u (0x%08X), v2=%u (0x%08X)", static_cast<unsigned>(first.valid),
+                    static_cast<unsigned>(first.firstMismatch), static_cast<unsigned>(second.valid), static_cast<unsigned>(second.firstMismatch));
                 return false;
             }
 
             plan.variant = firstOK ? 1u : 2u;
-            plan.references = firstOK ? first.entries : second.entries;
+            const auto& references = firstOK ? first.entries : second.entries;
+            std::copy(references.begin(), references.end(), plan.references.begin());
+            const auto& extraReferences = dl_reference::kModelInfoOffsetSites;
+            for (std::size_t index = 0; index < extraReferences.size(); ++index)
+            {
+                auto& reference = plan.references[expected + index];
+                reference.operand = extraReferences[index].operand;
+                if (!::patch::read(reference.operand, &reference.previous, sizeof(reference.previous)) || reference.previous != extraReferences[index].original)
+                    return false;
+            }
             plan.required = true;
             return true;
         }
@@ -193,7 +199,8 @@ namespace game::patch::modelinfo
             for (const auto& entry : plan.references)
             {
                 ++attempted;
-                if (!::patch::write(entry.operand, relocated))
+                const auto target = relocated + (entry.previous - activeTable);
+                if (!::patch::write(entry.operand, static_cast<std::uint32_t>(target)))
                 {
                     success = false;
                     break;
@@ -217,8 +224,8 @@ namespace game::patch::modelinfo
             }
 
             g_signedInstalled = true;
-            Log("[game::patch::modelinfo] signed CModelInfo installed: variant=%u, sites=%u, table=0x%08X, ids=[%d,%d]",
-                plan.variant, static_cast<unsigned>(plan.references.size()), relocated, kSignedMinId, kSignedMaxId);
+            Log("[game::patch::modelinfo] signed CModelInfo installed: variant=%u, sites=%u, table=0x%08X, ids=[%d,%d]", plan.variant,
+                static_cast<unsigned>(plan.references.size()), relocated, kSignedMinId, kSignedMaxId);
             return true;
         }
 
