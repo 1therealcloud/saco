@@ -54,12 +54,10 @@ namespace
     constexpr float INCAR_MIN_SPEED = 0.01f;
     constexpr float INCAR_ROTATION_SLERP = 0.75f;
     constexpr float INCAR_MAX_TURN_SPEED = 0.02f;
-    constexpr float UNOCCUPIED_DEAD_ZONE = 0.1f;
     constexpr float UNOCCUPIED_SNAP_XY = 6.0f;
     constexpr float UNOCCUPIED_SNAP_Z = 3.0f;
     constexpr float UNOCCUPIED_CORRECTION_DEAD_ZONE = 0.05f;
     constexpr float UNOCCUPIED_CORRECTION = 0.06f;
-    constexpr float TRAILER_DEAD_ZONE = 0.5f;
     constexpr float TRAILER_SNAP_XY = 6.0f;
     constexpr float TRAILER_SNAP_Z = 3.0f;
     constexpr float TRAILER_CORRECTION_DEAD_ZONE = 0.05f;
@@ -757,22 +755,19 @@ void CRemotePlayer::Update(Synchronization::UnoccupiedData* data)
     if (!FiniteVector(current))
         return;
 
-    if (PositionErrorExceeds(data->m_position, current, UNOCCUPIED_DEAD_ZONE, UNOCCUPIED_DEAD_ZONE))
-    {
-        if (!sync::math::SetUnoccupiedRotation(matrix, data->m_roll, data->m_direction))
-            return;
+    // Position thresholds must not discard an in-place rotation or a velocity change.
+    if (!sync::math::SetUnoccupiedRotation(matrix, data->m_roll, data->m_direction))
+        return;
+    const bool snap = PositionErrorExceeds(data->m_position, current, UNOCCUPIED_SNAP_XY, UNOCCUPIED_SNAP_Z);
+    if (snap)
+        matrix.GetPosition() = data->m_position;
+    vehicle->SetMatrix(matrix);
 
-        const bool snap = PositionErrorExceeds(data->m_position, current, UNOCCUPIED_SNAP_XY, UNOCCUPIED_SNAP_Z);
-        if (snap)
-            matrix.GetPosition() = data->m_position;
-        vehicle->SetMatrix(matrix);
-
-        CVector speed = data->m_speed;
-        if (!snap)
-            CorrectVelocity(speed, data->m_position, current, UNOCCUPIED_CORRECTION_DEAD_ZONE, UNOCCUPIED_CORRECTION);
-        vehicle->SetSpeed(speed);
-        vehicle->SetTurnSpeed(data->m_turnSpeed);
-    }
+    CVector speed = data->m_speed;
+    if (!snap)
+        CorrectVelocity(speed, data->m_position, current, UNOCCUPIED_CORRECTION_DEAD_ZONE, UNOCCUPIED_CORRECTION);
+    vehicle->SetSpeed(speed);
+    vehicle->SetTurnSpeed(data->m_turnSpeed);
 
     vehicle->m_bUnoccupiedSync = FALSE;
     vehicle->m_bRemoteUnocSync = TRUE;
@@ -814,9 +809,6 @@ void CRemotePlayer::Update(Synchronization::TrailerData* data)
     if (!FiniteVector(current))
         return;
 
-    if (!PositionErrorExceeds(data->m_position, current, TRAILER_DEAD_ZONE, TRAILER_DEAD_ZONE))
-        return;
-
     const CVector position = matrix.GetPosition();
     sync::math::SetRotation(matrix, sync::math::QuaternionFromWire(data->m_fQuaternion));
     matrix.GetPosition() = position;
@@ -826,15 +818,10 @@ void CRemotePlayer::Update(Synchronization::TrailerData* data)
         matrix.GetPosition() = data->m_position;
     trailer->SetMatrix(matrix);
 
-    if (snap)
-        trailer->SetSpeed(data->m_speed);
-    else
-    {
-        CVector speed{};
-        trailer->GetSpeed(&speed);
+    CVector speed = data->m_speed;
+    if (!snap)
         CorrectVelocity(speed, data->m_position, current, TRAILER_CORRECTION_DEAD_ZONE, TRAILER_CORRECTION);
-        trailer->SetSpeed(speed);
-    }
+    trailer->SetSpeed(speed);
     trailer->SetTurnSpeed(data->m_turnSpeed);
 }
 
@@ -1153,6 +1140,11 @@ void CRemotePlayer::Process()
             m_pVehicle->SetHealth(m_incarData.m_fHealth);
             m_pVehicle->EnableSiren(m_incarData.m_bSirenEnabled);
             m_pVehicle->SetLandingGearState(m_incarData.m_bLandingGear ? TRUE : FALSE);
+            if (m_pVehicle->GetModelIndex() == 520)
+            {
+                const auto thrust = static_cast<std::uint32_t>(m_incarData.m_aHydraThrustAngle[0]) | (static_cast<std::uint32_t>(m_incarData.m_aHydraThrustAngle[1]) << 16);
+                m_pVehicle->SetHydraThrusters(static_cast<int>(thrust));
+            }
 
             const ID trailerId = m_incarData.m_nTrailerId;
             CVehicle* trailer = trailerId != 0 && trailerId != INVALID_ID ? ResolveVehicle(trailerId) : nullptr;
@@ -1357,6 +1349,9 @@ void CRemotePlayer::Update(Synchronization::PassengerData* data, TICK timestamp)
     if (!data || data->m_nVehicleId >= CVehiclePool::MAX_VEHICLES || (data->m_nSeatId & 0x3Fu) == 0 || (data->m_nSeatId & 0x3Fu) > 7 || !FiniteVector(data->m_position))
         return;
 
+    if (timestamp && m_lastTimestamp && static_cast<std::int32_t>(timestamp - m_lastTimestamp) < 0)
+        return;
+
     m_passengerData = *data;
     Runtime(this).lastVehicle = data->m_nVehicleId;
     m_nVehicleId = data->m_nVehicleId;
@@ -1369,6 +1364,8 @@ void CRemotePlayer::Update(Synchronization::PassengerData* data, TICK timestamp)
     const char oldState = static_cast<char>(m_nState);
     m_nUpdateType = UPDATE_TYPE_PASSENGER;
     m_lastUpdate = GetTickCount();
+    if (timestamp)
+        m_lastTimestamp = timestamp;
     (void)timestamp;
     m_nStatus = 0;
     ChangeState(oldState, PLAYER_STATE_PASSENGER);
