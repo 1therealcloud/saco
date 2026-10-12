@@ -1496,6 +1496,39 @@ std::uint8_t CPed::GetCurrentWeapon() const
     return weapon <= 63 ? static_cast<std::uint8_t>(weapon) : 0;
 }
 
+std::uint8_t CPed::GetWeaponState() const
+{
+    if (!HasCurrentNativePed())
+        return 0;
+    const auto slot = Read<std::uint8_t>(m_pGamePed, 0x718);
+    if (slot >= 13)
+        return 0;
+    const auto* weapon = static_cast<const std::uint8_t*>(m_pGamePed) + 0x5A0 + slot * 0x1C;
+    // R5 SendAimData: reloading = 3, otherwise clamp ammunition in the clip to 0..2.
+    if (Read<std::uint32_t>(weapon, 4) == 2)
+        return 3;
+    return static_cast<std::uint8_t>(std::min(Read<std::uint32_t>(weapon, 8), 2u));
+}
+
+void CPed::SetWeaponState(std::uint8_t state)
+{
+    if (!HasCurrentNativePed() || state > 3)
+        return;
+    const auto slot = Read<std::uint8_t>(m_pGamePed, 0x718);
+    if (slot >= 13)
+        return;
+    auto* weapon = static_cast<std::uint8_t*>(m_pGamePed) + 0x5A0 + slot * 0x1C;
+    if (state == 3)
+        Write<std::uint32_t>(weapon, 4, 2);
+    else if (state == 2)
+    {
+        if (Read<std::uint32_t>(weapon, 8) < 2)
+            Write<std::uint32_t>(weapon, 8, 2);
+    }
+    else
+        Write<std::uint32_t>(weapon, 8, state);
+}
+
 std::uint8_t CPed::GetWeaponSlot() const
 {
     return HasCurrentNativePed() ? Read<std::uint8_t>(m_pGamePed, 0x718) : 0;

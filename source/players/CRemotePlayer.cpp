@@ -102,38 +102,6 @@ namespace
         }
     }
 
-    void ApplyRemoteWeaponState(CPed* ped, std::uint8_t state)
-    {
-        auto* nativePed = ped ? static_cast<std::uint8_t*>(ped->GetNativePedHandle()) : nullptr;
-        if (!nativePed || state > Synchronization::AimData::WS_RELOADING)
-            return;
-
-        const auto slot = nativePed[0x718];
-        if (slot >= 13)
-            return;
-        auto* weapon = nativePed + 0x5A0 + static_cast<std::size_t>(slot) * 0x1C;
-        std::uint32_t value{};
-        if (state == Synchronization::AimData::WS_RELOADING)
-        {
-            value = 2;
-            std::memcpy(weapon + 4, &value, sizeof(value));
-        }
-        else if (state == Synchronization::AimData::WS_MORE_BULLETS)
-        {
-            std::memcpy(&value, weapon + 8, sizeof(value));
-            if (value < 2)
-            {
-                value = 2;
-                std::memcpy(weapon + 8, &value, sizeof(value));
-            }
-        }
-        else
-        {
-            value = state;
-            std::memcpy(weapon + 8, &value, sizeof(value));
-        }
-    }
-
     RuntimeState& Runtime(CRemotePlayer* player)
     {
         return g_runtime[player];
@@ -734,7 +702,7 @@ void CRemotePlayer::Update(Synchronization::AimData* data)
     m_pPed->SetAimZ(data->m_fAimZ);
     m_pPed->SetCameraMode(static_cast<char>(data->m_nCameraMode));
     m_pPed->SetCameraExtZoomAndAspectRatio(Synchronization::DecompressCameraExtZoom(data->m_nCameraExtZoom), Synchronization::DecompressAspectRatio(data->m_nAspectRatio));
-    ApplyRemoteWeaponState(m_pPed, data->m_nWeaponState);
+    m_pPed->SetWeaponState(data->m_nWeaponState);
 }
 
 void CRemotePlayer::Update(Synchronization::UnoccupiedData* data)
@@ -1366,7 +1334,6 @@ void CRemotePlayer::Update(Synchronization::PassengerData* data, TICK timestamp)
     m_lastUpdate = GetTickCount();
     if (timestamp)
         m_lastTimestamp = timestamp;
-    (void)timestamp;
     m_nStatus = 0;
     ChangeState(oldState, PLAYER_STATE_PASSENGER);
 }

@@ -177,6 +177,8 @@ public:
     void SetDrunkLevel(int level); // 0xADFB0
 
     std::uint8_t GetCurrentWeapon() const;
+    std::uint8_t GetWeaponState() const;
+    void SetWeaponState(std::uint8_t state);
     bool GetWeaponData(int slot, int& weapon, std::uint32_t& ammo) const;
     std::uint8_t GetWeaponSlot() const;
     void* GetTargetEntity() const;

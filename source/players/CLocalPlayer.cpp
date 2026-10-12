@@ -1017,6 +1017,7 @@ void CLocalPlayer::SendAimData()
     data.m_aimf1 = aim->front;
     data.m_aimPos = aim->source;
     data.m_fAimZ = m_pPed->GetAimZ();
+    data.m_nWeaponState = m_pPed->GetWeaponState();
 
     const float zoom = AimStuff::GetCameraExtZoom();
     const float aspect = AimStuff::GetAspectRatio();
