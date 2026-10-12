@@ -8,20 +8,21 @@ namespace hook
     template <typename T>
     bool install(uintptr_t address, T detour, T* original = nullptr)
     {
-        Log("[hook::install] address=0x%08X, detour=0x%p, original=%s", address, reinterpret_cast<void*>(detour), original ? "yes" : "no");
-
         auto* target = reinterpret_cast<LPVOID>(address);
 
-        if (MH_CreateHook(target, reinterpret_cast<LPVOID>(detour), reinterpret_cast<LPVOID*>(original)) != MH_OK)
+        const MH_STATUS createStatus = MH_CreateHook(target, reinterpret_cast<LPVOID>(detour), reinterpret_cast<LPVOID*>(original));
+        if (createStatus != MH_OK)
         {
-            Log("[hook::install] MH_CreateHook failed");
+            Log("[hook::install] address=0x%08X, detour=0x%p, original=%s, create=%s", static_cast<unsigned int>(address), reinterpret_cast<void*>(detour),
+                original ? "yes" : "no", MH_StatusToString(createStatus));
             return false;
         }
 
-        const bool result = MH_EnableHook(target) == MH_OK;
+        const MH_STATUS enableStatus = MH_EnableHook(target);
 
-        Log("[hook::install] MH_EnableHook %s", result ? "success" : "failed");
+        Log("[hook::install] address=0x%08X, detour=0x%p, original=%s, enable=%s", static_cast<unsigned int>(address), reinterpret_cast<void*>(detour),
+            original ? "yes" : "no", MH_StatusToString(enableStatus));
 
-        return result;
+        return enableStatus == MH_OK;
     }
 }
