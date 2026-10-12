@@ -19,6 +19,7 @@ void __cdecl DrawRadarHook();
 void __cdecl DrawCrossHairsHook();
 
 void PickupCollectedHook();
+void NegativeModelGuardHook();
 void CameraProcessHook();
 void Opcode09C6();
 void Opcode09D3();

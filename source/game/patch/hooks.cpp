@@ -262,6 +262,24 @@ static void __cdecl NotifyPickupCollected(void* pickup)
         pool->SendNotification(static_cast<int>((address - 0x9788C0) / 0x20));
 }
 
+__declspec(naked) void NegativeModelGuardHook()
+{
+    __asm
+    {
+        cmp ebp, 0
+        jl negative_model
+        push esi
+        push edi
+        lea edi, [ebp + ebp*4]
+        push 0x4087F0
+        ret
+    negative_model:
+        pop ebp
+        pop ebx
+        ret
+    }
+}
+
 __declspec(naked) void PickupCollectedHook()
 {
     __asm

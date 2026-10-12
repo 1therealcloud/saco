@@ -17,6 +17,9 @@ namespace game::patch
     namespace modelinfo
     {
         bool install();
+        bool signed_ids_enabled();
+        bool valid_id(std::int32_t modelId);
+        void** active_table();
     }
 
     // pools.cpp

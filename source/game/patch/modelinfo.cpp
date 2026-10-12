@@ -1,11 +1,227 @@
 #include <stdafx.h>
 
 #include "patch.h"
+#include "hooks.h"
+#include "modelinfo_sites.h"
 
 namespace game::patch::modelinfo
 {
     namespace
     {
+        constexpr std::int32_t kSignedMinId = -32767;
+        constexpr std::int32_t kSignedMaxId = 32767;
+        constexpr std::size_t kSignedPivot = 32767;
+        constexpr std::size_t kSignedSlotCount = 65535;
+        constexpr std::size_t kOriginalSlotCount = 20000;
+        constexpr std::uintptr_t kNegativeGuard = address::negativeModelGuard;
+        static_assert(address::negativeModelGuardResume == 0x004087F0);
+        constexpr std::array<std::uint8_t, 6> kGuardOriginal = {0x56, 0x57, 0x8D, 0x7C, 0xAD, 0x00};
+
+        static_assert(sizeof(void*) == 4, "GTA:SA 1.0 requires a 32-bit build");
+        static_assert(kSignedPivot + kSignedMaxId < kSignedSlotCount);
+
+        alignas(16) std::array<void*, kSignedSlotCount> g_signedEntries{};
+        bool g_signedInstalled = false;
+        std::uint32_t g_guardDestination{};
+
+        struct ModelInfoReference
+        {
+            std::uintptr_t operand{};
+            std::uint32_t previous{};
+        };
+
+        bool readable_span(std::uintptr_t address, std::size_t bytes)
+        {
+            if (!address || bytes > std::numeric_limits<std::uintptr_t>::max() - address)
+                return false;
+
+            const auto end = address + bytes;
+            for (auto cursor = address; cursor < end;)
+            {
+                MEMORY_BASIC_INFORMATION info{};
+                if (VirtualQuery(reinterpret_cast<const void*>(cursor), &info, sizeof(info)) != sizeof(info) ||
+                    info.State != MEM_COMMIT || (info.Protect & (PAGE_GUARD | PAGE_NOACCESS)))
+                    return false;
+
+                const DWORD protection = info.Protect & 0xFF;
+                if (protection != PAGE_READONLY && protection != PAGE_READWRITE && protection != PAGE_WRITECOPY &&
+                    protection != PAGE_EXECUTE_READ && protection != PAGE_EXECUTE_READWRITE && protection != PAGE_EXECUTE_WRITECOPY)
+                    return false;
+
+                const auto start = reinterpret_cast<std::uintptr_t>(info.BaseAddress);
+                if (info.RegionSize > std::numeric_limits<std::uintptr_t>::max() - start)
+                    return false;
+                const auto next = start + info.RegionSize;
+                if (next <= cursor)
+                    return false;
+                cursor = (next < end) ? next : end;
+            }
+            return true;
+        }
+
+        bool validate_model_info_reference(const dl_reference::ModelInfoSite& site, bool firstVariant,
+                                           std::uint32_t currentTable, ModelInfoReference& reference)
+        {
+            const auto address = static_cast<std::uintptr_t>(firstVariant ? site.gta_address_variant_1 : site.gta_address_variant_2);
+            const auto opcode = site.opcode;
+            std::uint32_t displacement{};
+
+            if (opcode == 0xBE || opcode == 0xBF)
+            {
+                displacement = 1;
+            }
+            else if (opcode == 0x8B || opcode == 0x89 || opcode == 0x39)
+            {
+                displacement = 3;
+                std::array<std::uint8_t, 3> prefix{};
+                if (!::patch::read(address, prefix.data(), prefix.size()) || prefix[0] != opcode)
+                    return false;
+
+                // modrm uses sib + disp32; sib indexes dwords without a base register
+                if ((prefix[1] & 0xC7) != 0x04 || (prefix[2] & 0xC7) != 0x85 || (prefix[2] & 0x38) == 0x20)
+                    return false;
+            }
+            else
+            {
+                return false;
+            }
+
+            if (!::patch::expect(address, opcode))
+                return false;
+
+            reference.operand = address + displacement;
+            if (!::patch::read(reference.operand, &reference.previous, sizeof(reference.previous)))
+                return false;
+
+            return reference.previous == currentTable;
+        }
+
+        struct ModelInfoReferenceSet
+        {
+            std::array<ModelInfoReference, dl_reference::kModelInfoSites.size()> entries{};
+            std::size_t valid{};
+            std::uintptr_t firstMismatch{};
+        };
+
+        ModelInfoReferenceSet validate_model_info_references(bool firstVariant, std::uint32_t activeTable)
+        {
+            ModelInfoReferenceSet result{};
+            for (const auto& site : dl_reference::kModelInfoSites)
+            {
+                auto& entry = result.entries[result.valid];
+                if (!validate_model_info_reference(site, firstVariant, activeTable, entry))
+                {
+                    result.firstMismatch = firstVariant ? site.gta_address_variant_1 : site.gta_address_variant_2;
+                    break;
+                }
+                ++result.valid;
+            }
+            return result;
+        }
+
+        bool guard_detour(std::array<std::uint8_t, 6>& result)
+        {
+            // ff 25 [ptr] jumps through our permanently allocated handler pointer
+            g_guardDestination = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&NegativeModelGuardHook));
+            const auto operand = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&g_guardDestination));
+            result = {0xFF, 0x25, 0, 0, 0, 0};
+            std::memcpy(result.data() + 2, &operand, sizeof(operand));
+            return true;
+        }
+
+        struct SignedRelocationPlan
+        {
+            bool required{};
+            unsigned variant{};
+            std::array<ModelInfoReference, dl_reference::kModelInfoSites.size()> references{};
+            std::array<std::uint8_t, 6> guardDetour{};
+        };
+
+        bool prepare_signed_model_info(std::uint32_t activeTable, SignedRelocationPlan& plan)
+        {
+            if (g_signedInstalled)
+                return false;
+
+            // don't take over a model table owned by another limit adjuster
+            if (activeTable != address::vanillaModelInfoPtrs)
+            {
+                Log("[game::patch::modelinfo] external modelinfo table 0x%08X; signed ids unavailable", activeTable);
+                return true;
+            }
+
+            if (!readable_span(activeTable, kOriginalSlotCount * sizeof(void*)) ||
+                !::patch::expect(kNegativeGuard, kGuardOriginal.data(), kGuardOriginal.size()) ||
+                !guard_detour(plan.guardDetour))
+            {
+                Log("[game::patch::modelinfo] original table or streaming guard differs from gta 1.0 us");
+                return false;
+            }
+
+            const auto first = validate_model_info_references(true, activeTable);
+            const auto second = validate_model_info_references(false, activeTable);
+            constexpr std::size_t expected = dl_reference::kModelInfoSites.size();
+            const bool firstOK = first.valid == expected;
+            const bool secondOK = second.valid == expected;
+            if (firstOK == secondOK)
+            {
+                Log("[game::patch::modelinfo] reference validation failed/ambiguous: v1=%u (0x%08X), v2=%u (0x%08X)",
+                    static_cast<unsigned>(first.valid), static_cast<unsigned>(first.firstMismatch),
+                    static_cast<unsigned>(second.valid), static_cast<unsigned>(second.firstMismatch));
+                return false;
+            }
+
+            plan.variant = firstOK ? 1u : 2u;
+            plan.references = firstOK ? first.entries : second.entries;
+            plan.required = true;
+            return true;
+        }
+
+        bool install_signed_model_info(std::uint32_t activeTable, const SignedRelocationPlan& plan)
+        {
+            if (!plan.required)
+                return true;
+
+            g_signedEntries.fill(nullptr);
+            if (!::patch::read(activeTable, g_signedEntries.data() + kSignedPivot, kOriginalSlotCount * sizeof(void*)))
+                return false;
+
+            const auto newBase = reinterpret_cast<std::uintptr_t>(g_signedEntries.data() + kSignedPivot);
+            const auto relocated = static_cast<std::uint32_t>(newBase);
+
+            std::size_t attempted{};
+            bool success = true;
+            for (const auto& entry : plan.references)
+            {
+                ++attempted;
+                if (!::patch::write(entry.operand, relocated))
+                {
+                    success = false;
+                    break;
+                }
+            }
+
+            if (success && !::patch::write(kNegativeGuard, plan.guardDetour.data(), plan.guardDetour.size()))
+                success = false;
+
+            if (!success)
+            {
+                // a failed protect restore can still leave patched bytes behind
+                bool restored = ::patch::write(kNegativeGuard, kGuardOriginal.data(), kGuardOriginal.size());
+                while (attempted)
+                {
+                    const auto& entry = plan.references[--attempted];
+                    restored = ::patch::write(entry.operand, entry.previous) && restored;
+                }
+                Log("[game::patch::modelinfo] signed relocation failed; rollback=%s", restored ? "ok" : "failed");
+                return false;
+            }
+
+            g_signedInstalled = true;
+            Log("[game::patch::modelinfo] signed CModelInfo installed: variant=%u, sites=%u, table=0x%08X, ids=[%d,%d]",
+                plan.variant, static_cast<unsigned>(plan.references.size()), relocated, kSignedMinId, kSignedMaxId);
+            return true;
+        }
+
         constexpr std::uint32_t kAtomicVanillaCapacity = 14000;
         constexpr std::uint32_t kAtomicSampCapacity = 20000;
         constexpr std::uint32_t kAtomicStore = 0x00AAE950;
@@ -230,6 +446,10 @@ namespace game::patch::modelinfo
         if (!modelInfoPtrs)
             return false;
 
+        SignedRelocationPlan signedPlan{};
+        if (!prepare_signed_model_info(modelInfoPtrs, signedPlan))
+            return false;
+
         if (!install_atomic_store())
             return false;
 
@@ -242,6 +462,28 @@ namespace game::patch::modelinfo
         if (!patch_vehicle_struct_capacity())
             return false;
 
+        if (!install_signed_model_info(modelInfoPtrs, signedPlan))
+            return false;
+
         return true;
+    }
+
+    bool signed_ids_enabled()
+    {
+        return g_signedInstalled;
+    }
+
+    bool valid_id(std::int32_t modelId)
+    {
+        if (modelId >= 0)
+            return modelId < 20000;
+        return g_signedInstalled && modelId >= kSignedMinId;
+    }
+
+    void** active_table()
+    {
+        if (!g_signedInstalled)
+            return reinterpret_cast<void**>(static_cast<std::uintptr_t>(active_model_info_ptrs()));
+        return g_signedEntries.data() + kSignedPivot;
     }
 }
