@@ -1,3 +1,11 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * The original code is copyright (c) 2026, 1therealcloud.
+ */
+
 #pragma once
 
 // original 0.3.dl modelinfo references, extracted from dl.dll rva 0x152ae8/0x1538b8
