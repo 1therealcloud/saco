@@ -2148,7 +2148,7 @@ namespace cgui
     }
     void ListBox::SetTopIndex(int index)
     {
-        const int visible = std::max(1, m_height / 18);
+        const int visible = GetVisibleRowCount();
         m_top = std::clamp(index, 0, std::max(0, static_cast<int>(m_items.size()) - visible));
     }
     void ListBox::RemoveItem(int index)
@@ -2170,7 +2170,7 @@ namespace cgui
         ZoneScoped;
         if (index < 0 || index >= static_cast<int>(m_items.size()))
             return;
-        const int visible = std::max(1, m_height / 18);
+        const int visible = GetVisibleRowCount();
         if (index < m_top)
             m_top = index;
         else if (index >= m_top + visible)
@@ -2180,6 +2180,16 @@ namespace cgui
             m_selected = index;
             SendEvent(EVENT_LISTBOX_SELECTION);
         }
+    }
+    int ListBox::GetVisibleRowCount() const
+    {
+        const int capacity = std::max(1, m_height / 18);
+        return m_visibleRowCount > 0 ? std::min(capacity, m_visibleRowCount) : capacity;
+    }
+    void ListBox::SetVisibleRowCount(int count)
+    {
+        m_visibleRowCount = std::max(0, count);
+        SetTopIndex(m_top);
     }
     const char* ListBox::GetSelectedText(unsigned int column) const
     {
@@ -2198,7 +2208,7 @@ namespace cgui
         RECT rect = GetScreenRect();
         DrawSkin(ControlType::ListBox, 0, rect, GetState());
         const int rowH = 18;
-        const int visible = std::max(1, Height(rect) / rowH);
+        const int visible = GetVisibleRowCount();
         for (int row = 0; row < visible; ++row)
         {
             const int index = m_top + row;
@@ -2259,10 +2269,10 @@ namespace cgui
                     next = static_cast<int>(m_items.size()) - 1;
                     break;
                 case VK_PRIOR:
-                    next -= std::max(1, m_height / 18);
+                    next -= GetVisibleRowCount();
                     break;
                 case VK_NEXT:
-                    next += std::max(1, m_height / 18);
+                    next += GetVisibleRowCount();
                     break;
                 default:
                     return false;
@@ -2274,7 +2284,10 @@ namespace cgui
         const int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
         if (message == WM_LBUTTONUP && PtIn(rect, x, y))
         {
-            const int index = m_top + (y - rect.top) / 18;
+            const int row = (y - rect.top) / 18;
+            if (row >= GetVisibleRowCount())
+                return false;
+            const int index = m_top + row;
             if (index >= 0 && index < static_cast<int>(m_items.size()))
             {
                 SetSelectedIndex(index);

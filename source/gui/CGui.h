@@ -410,6 +410,7 @@ namespace cgui
     class ListBox final : public Control
     {
     public:
+        void SetVisibleRowCount(int count);
         ListBox(int id, int x, int y, int width, int height);
         void AddItem(const char* text, void* data = nullptr);
         void SetItemText(int index, unsigned int column, const char* text);
@@ -441,6 +442,8 @@ namespace cgui
         std::vector<Item> m_items;
         std::vector<int> m_columnWidths;
         int m_textPadding = 4;
+        int m_visibleRowCount = 0;
+        int GetVisibleRowCount() const;
         int m_selected = -1;
         int m_top = 0;
         DWORD m_lastClickTick = 0;

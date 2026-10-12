@@ -213,6 +213,7 @@ void CScoreboard::ResetDialogControls(cgui::Dialog* dialog)
     if (!m_pListbox)
         return;
 
+    m_pListbox->SetVisibleRowCount(std::max(1, (height - header) / 18 - 1));
     m_pListbox->SetTextPadding(kColumnLeft);
     m_pListbox->SetColumnWidth(0, ColumnWidth(m_fIdColumnWidth, m_size[0]));
     m_pListbox->SetColumnWidth(1, ColumnWidth(m_fNameColumnWidth, m_size[0]));
