@@ -244,6 +244,9 @@ void CLocalPlayer::ResetData()
     m_nCurrentInterior = 0;
     m_nLastVehicle = INVALID_ID;
     m_nCurrentVehicle = INVALID_ID;
+    m_vehicleEntryPending = false;
+    m_vehicleExitPending = false;
+    m_vehicleTransitionStarted = 0;
     m_bPassengerDriveBy = FALSE;
     m_bClearedToSpawn = FALSE;
     m_classSelection.m_nSelected = 0;
@@ -374,6 +377,10 @@ char CLocalPlayer::GetSpecialAction()
 {
     if (!m_pPed)
         return SPECIAL_ACTION_NONE;
+    if (m_pPed->HasVehicleEntryTask())
+        return SPECIAL_ACTION_ENTER_VEHICLE;
+    if (m_pPed->HasVehicleExitTask())
+        return SPECIAL_ACTION_EXIT_VEHICLE;
     if (m_pPed->DoesDancing())
         return static_cast<char>(SPECIAL_ACTION_DANCE1 + std::clamp(m_pPed->m_nDanceStyle, 0u, 3u));
     if (m_pPed->DoesHandsUp())
@@ -1163,14 +1170,25 @@ void CLocalPlayer::EnterVehicle(int vehicle, BOOL passenger)
     if (!target || !target->HasNativeVehicle())
         return;
 
+    if (m_nLastVehicle == id || m_vehicleExitPending || !m_bIsActive)
+        return;
     if (g_netGame->EnterVehicle(id, passenger ? 1 : 0))
+    {
         m_nLastVehicle = id;
+        m_vehicleEntryPending = true;
+        m_vehicleTransitionStarted = GetTickCount();
+#if defined(_DEBUG)
+        Log("[sync:enter] vehicle=%u passenger=%d", static_cast<unsigned>(id), passenger != FALSE);
+#endif
+    }
 }
 
 void CLocalPlayer::OnServerVehicleWarp(ID vehicle)
 {
     m_nLastVehicle = vehicle;
     m_nCurrentVehicle = vehicle;
+    m_vehicleEntryPending = false;
+    m_vehicleExitPending = false;
     m_damage.m_nVehicleUpdating = INVALID_ID;
 }
 
@@ -1184,13 +1202,21 @@ void CLocalPlayer::ExitVehicle(int vehicle)
     if (!pool || !pool->Get(id))
     {
         if (m_nLastVehicle == id)
+        {
             m_nLastVehicle = INVALID_ID;
+            m_vehicleEntryPending = m_vehicleExitPending = false;
+        }
         return;
     }
 
-    if (g_netGame->ExitVehicle(id) && m_nLastVehicle == id)
+    if (m_nLastVehicle != id || m_vehicleExitPending)
+        return;
+    if (g_netGame->ExitVehicle(id))
     {
         m_nLastVehicle = INVALID_ID;
+        m_vehicleEntryPending = false;
+        m_vehicleTransitionStarted = GetTickCount();
+        m_vehicleExitPending = m_pPed && (m_pPed->IsInVehicle() || m_pPed->HasVehicleExitTask());
         m_damage.m_nVehicleUpdating = INVALID_ID;
     }
 }
@@ -1572,8 +1598,8 @@ void CLocalPlayer::EnterVehicleAsPassenger()
     auto* vehiclePool = pools ? pools->m_pVehicle : nullptr;
 
     auto* menuPool = pools ? pools->m_pMenu : nullptr;
-    if (!m_pPed || !m_pPed->HasNativePed() || m_pPed->IsDead() || m_pPed->GetVehicle() || !vehiclePool || m_bDoesSpectating || m_classSelection.m_bIsActive ||
-        !(m_bIsActive || g_settings.m_bDebugMode) || game::inputhandler::game_input_blocked() || CGame::IsPaused() ||
+    if (!m_pPed || !m_pPed->HasNativePed() || m_pPed->IsDead() || m_pPed->IsInVehicle() || m_pPed->HasVehicleEntryTask() || !vehiclePool || m_bDoesSpectating ||
+        m_classSelection.m_bIsActive || !(m_bIsActive || g_settings.m_bDebugMode) || game::inputhandler::game_input_blocked() || CGame::IsPaused() ||
         (menuPool && menuPool->m_nCurrent != CMenuPool::INVALID_MENU) || (!g_game || GetForegroundWindow() != static_cast<HWND>(g_game->GetWindowHandle())))
         return;
     const ID id = vehiclePool->GetNearest();
@@ -1597,7 +1623,10 @@ void CLocalPlayer::EnterVehicleAsPassenger()
 
 void CLocalPlayer::ProcessPassengerEntry(const CPad& keys)
 {
-    if (!keys.DisablePlayerControls && !keys.bDisablePlayerEnterCar && keys.NewState.DPadUp && !keys.OldState.DPadUp)
+    const bool keyDown = (GetAsyncKeyState('G') & 0x8000) != 0;
+    const bool pressed = keyDown && !m_passengerKeyDown;
+    m_passengerKeyDown = keyDown;
+    if (!keys.DisablePlayerControls && !keys.bDisablePlayerEnterCar && (pressed || (keys.NewState.DPadUp && !keys.OldState.DPadUp)))
         EnterVehicleAsPassenger();
 }
 
@@ -1739,12 +1768,19 @@ void CLocalPlayer::Process()
     const void* currentNativeVehicle = m_pPed->GetVehicle();
     auto* vehiclePool = g_netGame ? g_netGame->GetVehiclePool() : nullptr;
     const ID currentVehicleId = currentNativeVehicle && vehiclePool ? vehiclePool->Find(const_cast<void*>(currentNativeVehicle)) : INVALID_ID;
-    if (m_nLastVehicle != INVALID_ID && m_nLastVehicle != currentVehicleId && (currentVehicleId != INVALID_ID || m_nCurrentVehicle == m_nLastVehicle))
+    const bool entering = m_pPed->HasVehicleEntryTask();
+    const bool exiting = m_pPed->HasVehicleExitTask();
+    if (m_vehicleExitPending && !exiting && (!m_pPed->IsInVehicle() || now - m_vehicleTransitionStarted >= 250))
+        m_vehicleExitPending = false;
+    if (m_vehicleEntryPending && !entering && m_pPed->IsInVehicle() && currentVehicleId == m_nLastVehicle)
+        m_vehicleEntryPending = false;
+    if (m_nLastVehicle != INVALID_ID && !entering && !exiting &&
+        ((m_vehicleEntryPending && !m_pPed->IsInVehicle() && now - m_vehicleTransitionStarted > 100) || (!m_vehicleEntryPending && currentVehicleId != m_nLastVehicle)))
         ExitVehicle(m_nLastVehicle);
-    if (currentVehicleId != INVALID_ID && m_nLastVehicle != currentVehicleId)
+    if (!m_vehicleEntryPending && !m_vehicleExitPending && !entering && !exiting && m_pPed->IsInVehicle() && currentVehicleId != INVALID_ID && m_nLastVehicle != currentVehicleId)
         EnterVehicle(currentVehicleId, m_pPed->IsPassenger());
 
-    if (m_pPed->GetVehicle())
+    if (m_pPed->IsInVehicle() && m_pPed->GetVehicleSeatIndex() >= 0)
     {
         if (m_pPed->IsPassenger())
         {

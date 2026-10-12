@@ -137,7 +137,7 @@ public:
     D3DCOLOR GetColorAsRGBA();
     D3DCOLOR GetColorAsARGB();
     void EnterVehicle(ID id, BOOL passenger);
-    void ExitVehicle();
+    void ExitVehicle(ID id = INVALID_ID);
     void ChangeState(char oldState, char newState);
     int GetStatus();
     void Update(Synchronization::BulletData* data);

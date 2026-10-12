@@ -142,6 +142,8 @@ public:
     void* GetVehicle() const;
     float GetDistanceToEntity(const CEntity* entity) const;
     int GetVehicleSeatIndex() const;
+    bool HasVehicleEntryTask() const;
+    bool HasVehicleExitTask() const;
     void PutIntoVehicle(std::uint32_t vehicle, int seat);
     void EnterVehicle(std::uint32_t vehicle, BOOL asPassenger);
     void ExitVehicle();

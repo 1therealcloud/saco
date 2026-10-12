@@ -40,6 +40,55 @@ void* __cdecl CrimeReportPedHook(int)
     return game::hooks::crimeReportPed;
 }
 
+namespace
+{
+    using EnterVehicleTaskFn = void*(__thiscall*)(void*, void*);
+    using ExitVehicleTaskFn = void*(__thiscall*)(void*, void*, int, int, bool, bool);
+    EnterVehicleTaskFn g_enterVehicleTask = nullptr;
+    ExitVehicleTaskFn g_exitVehicleTask = nullptr;
+
+    CLocalPlayer* VehicleTaskLocalPlayer()
+    {
+        auto* pool = g_netGame ? g_netGame->GetPlayerPool() : nullptr;
+        auto* local = pool ? pool->GetLocalPlayer() : nullptr;
+        return local && local->m_bIsActive && !local->m_bDoesSpectating ? local : nullptr;
+    }
+
+    void* __fastcall EnterVehicleTaskHook(void* task, void*, void* vehicle)
+    {
+        const auto caller = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+        void* result = g_enterVehicleTask(task, vehicle);
+        if (caller == 0x570A20 || caller == 0x570A99)
+        {
+            auto* local = VehicleTaskLocalPlayer();
+            auto* pool = g_netGame ? g_netGame->GetVehiclePool() : nullptr;
+            if (local && pool)
+                local->EnterVehicle(pool->Find(vehicle), FALSE);
+        }
+        return result;
+    }
+
+    void* __fastcall ExitVehicleTaskHook(void* task, void*, void* vehicle, int door, int delay, bool sensible, bool force)
+    {
+        const auto caller = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+        void* result = g_exitVehicleTask(task, vehicle, door, delay, sensible, force);
+        if (caller == 0x5704A1 || caller == 0x5703FC)
+        {
+            auto* local = VehicleTaskLocalPlayer();
+            auto* pool = g_netGame ? g_netGame->GetVehiclePool() : nullptr;
+            if (local && local->m_pPed && local->m_pPed->GetVehicle() == vehicle && pool)
+                local->ExitVehicle(pool->Find(vehicle));
+        }
+        return result;
+    }
+}
+
+bool game::hooks::InstallVehicleTransitionHooks()
+{
+    return hook::install(0x6402F0, reinterpret_cast<EnterVehicleTaskFn>(&EnterVehicleTaskHook), &g_enterVehicleTask) &&
+           hook::install(0x63B8C0, reinterpret_cast<ExitVehicleTaskFn>(&ExitVehicleTaskHook), &g_exitVehicleTask);
+}
+
 using namespace game::patch::fps;
 using namespace game::players::detail;
 using namespace game::patch::hudscalefix::detail;
@@ -204,7 +253,12 @@ void __fastcall ProcessControlHook(void* ped, void*)
     AimStuff::ApplyPlayerStats(static_cast<std::uint8_t>(slot));
 
     current = static_cast<std::uint8_t>(slot);
-    SetPositionUpdate(false);
+    auto* intelligence = *reinterpret_cast<std::uint8_t**>(static_cast<std::uint8_t*>(ped) + 0x47C);
+    using FindTaskFn = void*(__thiscall*)(void*, int);
+    const auto findTask = reinterpret_cast<FindTaskFn>(0x681740);
+    const bool vehicleTask = intelligence && (findTask(intelligence + 4, 700) || findTask(intelligence + 4, 701) || findTask(intelligence + 4, 712) ||
+                                              findTask(intelligence + 4, 713) || findTask(intelligence + 4, 702) || findTask(intelligence + 4, 704));
+    SetPositionUpdate(vehicleTask);
     g_control(ped);
     SetPositionUpdate(true);
 

@@ -226,4 +226,10 @@ public:
     void ProcessPassengerEntry(const CPad& keys);
     void SendIncarData();
     void Process(); // 0x74C0
+
+private:
+    bool m_passengerKeyDown = false;
+    bool m_vehicleEntryPending = false;
+    bool m_vehicleExitPending = false;
+    std::uint32_t m_vehicleTransitionStarted = 0;
 };

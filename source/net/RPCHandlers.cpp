@@ -1350,8 +1350,7 @@ void RPCHandlers::PlayerExitVehicle(RPCParameters* pParams)
         return;
     if (auto* remote = players->GetPlayer(playerId))
     {
-        if (remote->m_nVehicleId == vehicleId)
-            remote->ExitVehicle();
+        remote->ExitVehicle(vehicleId);
     }
 }
 

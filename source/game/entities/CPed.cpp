@@ -407,11 +407,11 @@ float CPed::GetDistanceToEntity(const CEntity* entity) const
 
 int CPed::GetVehicleSeatIndex() const
 {
-    if (!HasCurrentNativePed() || GetState() != 0x32)
+    if (!HasCurrentNativePed())
         return -1;
 
     auto* vehicle = Read<void*>(m_pGamePed, 0x58C);
-    if (!vehicle)
+    if (!NativeValid(vehicle))
         return -1;
     if (Read<void*>(vehicle, 0x460) == m_pGamePed)
         return 0;
@@ -419,6 +419,30 @@ int CPed::GetVehicleSeatIndex() const
         if (Read<void*>(vehicle, 0x464 + i * 4) == m_pGamePed)
             return i + 1;
     return -1;
+}
+
+bool CPed::HasVehicleEntryTask() const
+{
+    if (!HasCurrentNativePed())
+        return false;
+    auto* intelligence = Read<std::uint8_t*>(m_pGamePed, 0x47C);
+    if (!intelligence)
+        return false;
+    using FindTask = void*(__thiscall*)(void*, int);
+    const auto find = reinterpret_cast<FindTask>(0x681740);
+    return find(intelligence + 4, 700) || find(intelligence + 4, 701) || find(intelligence + 4, 712) || find(intelligence + 4, 713);
+}
+
+bool CPed::HasVehicleExitTask() const
+{
+    if (!HasCurrentNativePed())
+        return false;
+    auto* intelligence = Read<std::uint8_t*>(m_pGamePed, 0x47C);
+    if (!intelligence)
+        return false;
+    using FindTask = void*(__thiscall*)(void*, int);
+    const auto find = reinterpret_cast<FindTask>(0x681740);
+    return find(intelligence + 4, 702) || find(intelligence + 4, 704);
 }
 
 void CPed::PutIntoVehicle(std::uint32_t vehicleRef, int seat)

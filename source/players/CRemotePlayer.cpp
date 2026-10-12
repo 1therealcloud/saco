@@ -27,10 +27,16 @@ namespace
     struct RuntimeState
     {
         D3DCOLOR color = 0xFFFFFFFF;
-        CRemotePlayer::TICK entryExitDeadline = 0;
         bool enteringVehicle = false;
         bool exitingVehicle = false;
+        CRemotePlayer::ID transitionVehicle = CRemotePlayer::INVALID_ID;
+        CRemotePlayer::ID lastVehicle = CRemotePlayer::INVALID_ID;
+        CRemotePlayer::TICK transitionStarted = 0;
+        bool taskObserved = false;
         D3DCOLOR markerColor = 0;
+#if defined(_DEBUG)
+        CRemotePlayer::TICK lastVehicleSnapLog = 0;
+#endif
     };
 
     std::unordered_map<CRemotePlayer*, RuntimeState> g_runtime;
@@ -59,7 +65,7 @@ namespace
     constexpr float TRAILER_CORRECTION_DEAD_ZONE = 0.05f;
     constexpr float TRAILER_CORRECTION = 0.025f;
     constexpr float DISTANCE_INVALID = 10000.0f;
-    constexpr CRemotePlayer::TICK ENTRY_EXIT_ANIM_MS = 500;
+    constexpr CRemotePlayer::TICK VEHICLE_TASK_TIMEOUT_MS = 5000;
     constexpr CRemotePlayer::TICK HEAD_UPDATE_MS = 1000;
     constexpr CRemotePlayer::TICK HEAD_LOOK_MS = 200;
     constexpr CRemotePlayer::TICK TIMEOUT_MS = 3000;
@@ -209,7 +215,6 @@ namespace
 
         return localPlayer ? localPlayer->GetPed() : nullptr;
     }
-
 
     void DestroyPed(CPed*& ped)
     {
@@ -443,7 +448,17 @@ void CRemotePlayer::OnExitVehicle()
 
     CMatrix matrix = CMatrix::Unity();
     m_pPed->GetMatrix(&matrix);
-    m_pPed->WarpFromVehicle(matrix.GetPosition());
+    CVector position = matrix.GetPosition();
+    auto* pool = g_netGame ? g_netGame->GetVehiclePool() : nullptr;
+    const ID id = pool ? pool->Find(m_pPed->GetVehicle()) : INVALID_ID;
+    auto* vehicle = pool && id != INVALID_ID ? pool->Get(id) : nullptr;
+    if (vehicle)
+    {
+        vehicle->GetMatrix(&matrix);
+        position = matrix.GetPosition() + matrix.GetRight() * (m_pPed->GetVehicleSeatIndex() == 0 ? -2.0f : 2.0f);
+        position.z += 0.5f;
+    }
+    m_pPed->WarpFromVehicle(position);
 }
 
 void CRemotePlayer::ProcessSpecialAction()
@@ -608,6 +623,16 @@ void CRemotePlayer::UpdateIncarSpeedAndPosition()
     const float snapZ = subtype == 3 || subtype == 4 || subtype == 5 ? INCAR_AIR_WATER_SNAP_Z : INCAR_SNAP_Z;
     if (m_positionDifference.x > INCAR_SNAP_XY || m_positionDifference.y > INCAR_SNAP_XY || m_positionDifference.z > snapZ)
     {
+#if defined(_DEBUG)
+        auto& runtime = Runtime(this);
+        const TICK now = GetTickCount();
+        if (now - runtime.lastVehicleSnapLog >= 1000)
+        {
+            runtime.lastVehicleSnapLog = now;
+            Log("[sync:vehicle-snap] player=%u vehicle=%u error=%.3f/%.3f/%.3f speed=%.3f/%.3f/%.3f", static_cast<unsigned>(m_nId), static_cast<unsigned>(m_nVehicleId),
+                m_positionDifference.x, m_positionDifference.y, m_positionDifference.z, m_incarTargetSpeed.x, m_incarTargetSpeed.y, m_incarTargetSpeed.z);
+        }
+#endif
         matrix.GetPosition() = m_incarTargetPosition;
         m_pVehicle->SetMatrix(matrix);
         m_pVehicle->SetSpeed(m_incarTargetSpeed);
@@ -848,9 +873,11 @@ void CRemotePlayer::ResetData()
     m_bPerformingCustomAnimation = FALSE;
     m_nStatus = PLAYER_STATUS_TIMEOUT;
     auto& runtime = Runtime(this);
-    runtime.entryExitDeadline = 0;
     runtime.enteringVehicle = false;
     runtime.exitingVehicle = false;
+    runtime.transitionVehicle = runtime.lastVehicle = INVALID_ID;
+    runtime.transitionStarted = 0;
+    runtime.taskObserved = false;
 }
 
 float CRemotePlayer::GetDistanceToPlayer(CRemotePlayer* player)
@@ -894,25 +921,47 @@ void CRemotePlayer::EnterVehicle(ID id, BOOL passenger)
     if (!m_pPed || !vehicle || !vehicle->DoesExist())
         return;
 
+    auto& runtime = Runtime(this);
+    if (runtime.enteringVehicle && runtime.transitionVehicle == id)
+        return;
+    if (m_pPed->GetVehicle() == vehicle->GetNativeVehicleHandle() && m_pPed->GetVehicleSeatIndex() >= 0 &&
+        (passenger ? m_pPed->GetVehicleSeatIndex() > 0 : m_pPed->GetVehicleSeatIndex() == 0))
+        return;
+    const int seat = passenger && m_nState == PLAYER_STATE_PASSENGER && m_nVehicleId == id && m_nSeatId > 0 ? m_nSeatId : passenger ? 1 : 0;
     m_nVehicleId = id;
     m_pVehicle = vehicle;
-    m_nSeatId = passenger ? 1 : 0;
+    m_nSeatId = static_cast<std::uint8_t>(seat);
+    m_pPed->SetKeys(0, 0, 0);
 
     m_pPed->EnterVehicle(vehicle->m_handle, passenger);
-    auto& runtime = Runtime(this);
-    runtime.entryExitDeadline = GetTickCount() + ENTRY_EXIT_ANIM_MS;
+    runtime.transitionStarted = GetTickCount();
+    runtime.transitionVehicle = runtime.lastVehicle = id;
+    runtime.taskObserved = false;
     runtime.enteringVehicle = true;
     runtime.exitingVehicle = false;
 }
 
-void CRemotePlayer::ExitVehicle()
+void CRemotePlayer::ExitVehicle(ID id)
 {
     if (!m_pPed)
         return;
-
-    m_pPed->ExitVehicle();
     auto& runtime = Runtime(this);
-    runtime.entryExitDeadline = GetTickCount() + ENTRY_EXIT_ANIM_MS;
+    CVehicle* vehicle = id == INVALID_ID ? nullptr : ResolveVehicle(id);
+    if (id != INVALID_ID && id != m_nVehicleId && id != runtime.transitionVehicle && id != runtime.lastVehicle &&
+        (!vehicle || m_pPed->GetVehicle() != vehicle->GetNativeVehicleHandle()))
+        return;
+    if (runtime.exitingVehicle)
+        return;
+    if (id != INVALID_ID && m_pPed->IsInVehicle() && m_pPed->GetVehicle() && (!vehicle || m_pPed->GetVehicle() != vehicle->GetNativeVehicleHandle()))
+        return;
+
+    if (runtime.enteringVehicle && m_pPed->HasVehicleEntryTask())
+        m_pPed->ClearTasks();
+    m_pPed->SetKeys(0, 0, 0);
+    m_pPed->ExitVehicle();
+    runtime.transitionVehicle = id == INVALID_ID ? m_nVehicleId : id;
+    runtime.transitionStarted = GetTickCount();
+    runtime.taskObserved = false;
     runtime.enteringVehicle = false;
     runtime.exitingVehicle = true;
 }
@@ -1000,15 +1049,60 @@ void CRemotePlayer::Process()
         return;
     const TICK now = GetTickCount();
     auto& runtime = Runtime(this);
-    if (runtime.entryExitDeadline && now >= runtime.entryExitDeadline)
+    if (runtime.enteringVehicle || runtime.exitingVehicle)
     {
+        const bool task = runtime.enteringVehicle ? m_pPed->HasVehicleEntryTask() : m_pPed->HasVehicleExitTask();
+        runtime.taskObserved = runtime.taskObserved || task;
+        const bool timedOut = now - runtime.transitionStarted >= VEHICLE_TASK_TIMEOUT_MS;
+        const bool taskEnded = !task && (runtime.taskObserved || now - runtime.transitionStarted >= 250);
+        bool complete = false;
         if (runtime.enteringVehicle)
-            OnEnterVehicle();
-        else if (runtime.exitingVehicle)
-            OnExitVehicle();
-        runtime.entryExitDeadline = 0;
-        runtime.enteringVehicle = false;
-        runtime.exitingVehicle = false;
+        {
+            auto* vehicle = ResolveVehicle(runtime.transitionVehicle);
+            const int seat = m_pPed->GetVehicleSeatIndex();
+            const bool occupied = vehicle && m_pPed->GetVehicle() == vehicle->GetNativeVehicleHandle() && seat >= 0;
+            const bool authoritative = m_nState == PLAYER_STATE_DRIVER || m_nState == PLAYER_STATE_PASSENGER;
+            const bool expectedSeat = m_nState == PLAYER_STATE_DRIVER ? seat == 0 : m_nState == PLAYER_STATE_PASSENGER ? seat == m_nSeatId : m_nSeatId == 0 ? seat == 0 : seat > 0;
+            complete = occupied && expectedSeat && !task && authoritative;
+            if (!vehicle)
+            {
+                if (task)
+                    m_pPed->ClearTasks();
+                complete = true;
+            }
+            if (!complete && authoritative && m_nVehicleId == runtime.transitionVehicle && (taskEnded || timedOut))
+            {
+                OnEnterVehicle();
+                complete = m_pPed->GetVehicle() == (m_pVehicle ? m_pVehicle->GetNativeVehicleHandle() : nullptr) &&
+                           m_pPed->GetVehicleSeatIndex() == (m_nState == PLAYER_STATE_DRIVER ? 0 : m_nSeatId);
+            }
+            else if (!complete && !authoritative && (taskEnded || timedOut))
+            {
+                if (task)
+                    m_pPed->ClearTasks();
+                if (timedOut && m_pPed->IsInVehicle())
+                    OnExitVehicle();
+                complete = !m_pPed->IsInVehicle();
+            }
+        }
+        else
+        {
+            complete = !m_pPed->IsInVehicle() && m_pPed->GetVehicleSeatIndex() < 0 && !task && m_nState == PLAYER_STATE_ONFOOT;
+            if (!complete && taskEnded && m_nState != PLAYER_STATE_ONFOOT && m_pPed->IsInVehicle())
+                complete = true;
+            if (!complete && timedOut && m_nState == PLAYER_STATE_ONFOOT)
+            {
+                OnExitVehicle();
+                complete = !m_pPed->IsInVehicle() && m_pPed->GetVehicleSeatIndex() < 0;
+            }
+        }
+        if (!complete)
+        {
+            m_pPed->SetKeys(0, 0, 0);
+            return;
+        }
+        runtime.enteringVehicle = runtime.exitingVehicle = false;
+        runtime.transitionVehicle = INVALID_ID;
     }
 
     const TICK elapsed = now - m_lastUpdate;
@@ -1082,7 +1176,8 @@ void CRemotePlayer::Process()
     }
     else if (m_nState == PLAYER_STATE_PASSENGER && m_nUpdateType == UPDATE_TYPE_PASSENGER)
     {
-        OnEnterVehicle();
+        if (!runtime.enteringVehicle && !m_pPed->HasVehicleEntryTask())
+            OnEnterVehicle();
         m_nUpdateType = UPDATE_TYPE_NONE;
     }
 
@@ -1213,6 +1308,9 @@ void CRemotePlayer::Update(Synchronization::OnfootData* data, TICK timestamp)
     m_nSpecialAction = data->m_nSpecialAction;
 
     const char oldState = static_cast<char>(m_nState);
+    auto& runtime = Runtime(this);
+    if (!runtime.enteringVehicle && !runtime.exitingVehicle && (oldState == PLAYER_STATE_DRIVER || oldState == PLAYER_STATE_PASSENGER) && m_pPed && m_pPed->IsInVehicle())
+        ExitVehicle(m_nVehicleId);
     ChangeState(oldState, PLAYER_STATE_ONFOOT);
     m_pVehicle = nullptr;
     m_nVehicleId = INVALID_ID;
@@ -1231,6 +1329,7 @@ void CRemotePlayer::Update(Synchronization::IncarData* data, TICK timestamp)
         return;
 
     m_incarData = *data;
+    Runtime(this).lastVehicle = data->m_nVehicle;
     m_nVehicleId = data->m_nVehicle;
     m_pVehicle = ResolveVehicle(m_nVehicleId);
     m_nSeatId = 0;
@@ -1259,6 +1358,7 @@ void CRemotePlayer::Update(Synchronization::PassengerData* data, TICK timestamp)
         return;
 
     m_passengerData = *data;
+    Runtime(this).lastVehicle = data->m_nVehicleId;
     m_nVehicleId = data->m_nVehicleId;
     m_pVehicle = ResolveVehicle(m_nVehicleId);
     m_nSeatId = data->m_nSeatId & 0x3F;

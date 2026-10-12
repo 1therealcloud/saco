@@ -39,6 +39,7 @@ bool __cdecl CameraToIgnoreObjectHook(void* entity);
 namespace game::hooks
 {
     bool InstallRenderHooks();
+    bool InstallVehicleTransitionHooks();
     bool InstallVehicleCollisionHooks();
     extern void* crimeReportPed;
 
