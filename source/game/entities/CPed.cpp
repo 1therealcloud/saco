@@ -2,6 +2,7 @@
 
 #include "CPed.h"
 #include "game/CGame.h"
+#include "game/AnimationNames.h"
 #include "main.h"
 #include "game/PlayerSlots.h"
 #include "sync/ControllerState.h"
@@ -955,6 +956,84 @@ void CPed::ProcessAnimation()
     animation.active = false;
     scm::ProcessCommand(&PERFORM_ANIMATION, m_handle, animation.name, animation.library, static_cast<double>(animation.delta), animation.loop, animation.lockX, animation.lockY,
                         animation.freeze, animation.time);
+}
+
+Animation CPed::GetScriptAnimation()
+{
+    Animation animation{};
+    if (!HasCurrentNativePed())
+        return animation;
+    auto* intelligence = Read<void*>(m_pGamePed, 0x47C);
+    auto* task = Read<void*>(intelligence, 0x10);
+    for (unsigned depth = 0; task && depth < 32; ++depth)
+    {
+        const auto vtable = Read<std::uintptr_t>(task, 0);
+        if (vtable < 0x800000 || vtable > 0x900000)
+            return animation;
+        using TaskTypeFn = int(__thiscall*)(void*);
+        const int type = reinterpret_cast<TaskTypeFn>(Read<std::uintptr_t>(reinterpret_cast<void*>(vtable), 0x10))(task);
+        if (type == 401 || type == 934)
+        {
+            char name[25]{}, library[17]{}, key[43]{};
+            std::memcpy(name, static_cast<const std::uint8_t*>(task) + 0x10, 24);
+            std::memcpy(library, static_cast<const std::uint8_t*>(task) + 0x28, 16);
+            if (!name[0] || !library[0])
+                return animation;
+            std::snprintf(key, sizeof(key), "%s:%s", library, name);
+            std::uint16_t id = m_lastScriptAnimationId;
+            if (!id || _stricmp(key, game::animations::names[id]) != 0)
+            {
+                id = 0;
+                for (std::size_t i = 1; i < game::animations::names.size(); ++i)
+                    if (_stricmp(key, game::animations::names[i]) == 0)
+                    {
+                        id = static_cast<std::uint16_t>(i);
+                        break;
+                    }
+            }
+            m_lastScriptAnimationId = id;
+            if (!id)
+                return animation;
+            const float delta = Read<float>(task, 0x38);
+            if (!std::isfinite(delta))
+                return animation;
+            const auto flags = Read<std::uint32_t>(task, 0x5C);
+            const int time = Read<int>(task, 0x40);
+            animation.m_nId = id;
+            animation.m_nFramedelta = static_cast<std::uint8_t>(std::clamp(delta, 0.0f, 255.0f));
+            animation.m_nLoopA = (flags & 2) != 0;
+            animation.m_nLockX = (flags & 0x40) != 0;
+            animation.m_nLockY = (flags & 0x80) != 0;
+            animation.m_nLockF = (flags & 8) == 0;
+            animation.m_nTime = time > 0 ? 2 : time < 0 ? 1 : 0;
+            return animation;
+        }
+        using SubTaskFn = void*(__thiscall*)(void*);
+        auto* next = reinterpret_cast<SubTaskFn>(Read<std::uintptr_t>(reinterpret_cast<void*>(vtable), 8))(task);
+        if (next == task)
+            return animation;
+        task = next;
+    }
+    return animation;
+}
+
+bool CPed::PerformNetworkAnimation(Animation animation)
+{
+    const auto id = animation.m_nId;
+    if (!id || id >= game::animations::names.size() || !HasCurrentNativePed())
+        return false;
+    const char* entry = game::animations::names[id];
+    const char* separator = std::strchr(entry, ':');
+    if (!separator)
+        return false;
+    char library[36]{};
+    const auto length = static_cast<std::size_t>(separator - entry);
+    if (length >= sizeof(library))
+        return false;
+    std::memcpy(library, entry, length);
+    const int time = animation.m_nTime == 1 ? -1 : animation.m_nTime == 2 ? 1 : 0;
+    PerformAnimation(separator + 1, library, static_cast<float>(animation.m_nFramedelta), animation.m_nLoopA, animation.m_nLockX, animation.m_nLockY, animation.m_nLockF, time);
+    return true;
 }
 
 void CPed::ClearTasks()

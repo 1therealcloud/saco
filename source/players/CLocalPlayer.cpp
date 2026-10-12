@@ -989,6 +989,7 @@ void CLocalPlayer::SendOnfootData()
         data.m_surfingOffset = CVector{};
         data.m_nSurfingVehicleId = 0;
     }
+    m_animation = m_pPed->GetScriptAnimation();
     data.m_animation = m_animation;
     field_100 = 1;
 

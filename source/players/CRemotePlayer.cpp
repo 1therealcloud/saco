@@ -33,6 +33,7 @@ namespace
         CRemotePlayer::ID lastVehicle = CRemotePlayer::INVALID_ID;
         CRemotePlayer::TICK transitionStarted = 0;
         bool taskObserved = false;
+        std::uint32_t lastAnimation = 0;
         D3DCOLOR markerColor = 0;
 #if defined(_DEBUG)
         CRemotePlayer::TICK lastVehicleSnapLog = 0;
@@ -833,6 +834,7 @@ void CRemotePlayer::ResetData()
     runtime.transitionVehicle = runtime.lastVehicle = INVALID_ID;
     runtime.transitionStarted = 0;
     runtime.taskObserved = false;
+    runtime.lastAnimation = 0;
 }
 
 float CRemotePlayer::GetDistanceToPlayer(CRemotePlayer* player)
@@ -949,6 +951,8 @@ void CRemotePlayer::ChangeState(char oldState, char newState)
         }
     }
 
+    if (newState != PLAYER_STATE_ONFOOT)
+        Runtime(this).lastAnimation = 0;
     m_nState = static_cast<unsigned char>(newState);
 }
 
@@ -1171,6 +1175,16 @@ void CRemotePlayer::Process()
         ApplyOnfootWeapon(m_pPed, m_onfootData.m_nCurrentWeapon);
         UpdateOnfootRotation();
         ProcessSpecialAction();
+        if (runtime.lastAnimation != m_animation.m_value)
+        {
+            if (m_animation.m_value)
+                m_pPed->PerformNetworkAnimation(m_animation);
+            else if (runtime.lastAnimation == 0x1804067C)
+                m_pPed->PerformAnimation("VEND_EAT_P", "VENDING", 4.0f, 0, 0, 0, 0, -1);
+            runtime.lastAnimation = m_animation.m_value;
+            m_bPerformingCustomAnimation = FALSE;
+        }
+
         ProcessHead();
 
         m_pPed->SetKeys(m_onfootData.m_controllerState.m_value, m_onfootData.m_controllerState.m_sLeftStickX, m_onfootData.m_controllerState.m_sLeftStickY);

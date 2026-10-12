@@ -7,6 +7,7 @@
 #include <cstdint>
 
 #include "CEntity.h"
+#include "sync/Animation.h"
 
 class CObject;
 namespace AimStuff
@@ -195,6 +196,8 @@ public:
     void PerformAnimation(const char* name, const char* file, float frameDelta, int loop, int lockX, int lockY, int lockF, int time); // 0xAD230
     void ClearTasks();
     void ProcessAnimation();
+    Animation GetScriptAnimation();
+    bool PerformNetworkAnimation(Animation animation);
     void LinkToInterior(char id, BOOL refresh);
 
     BOOL IsOnGround() const;
@@ -273,6 +276,7 @@ public:
     void GetBonePosition(unsigned int boneId, CVector* outPosition) const;
 
 private:
+    std::uint16_t m_lastScriptAnimationId{};
     struct PendingAnimation
     {
         char name[256]{};
