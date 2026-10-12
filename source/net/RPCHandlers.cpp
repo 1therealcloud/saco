@@ -774,7 +774,10 @@ void RPCHandlers::SetWeather(RPCParameters* pParams)
     if (!bs.Read(weatherId))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (g_netGame && g_netGame->m_pSettings)
+        g_netGame->m_pSettings->m_nWeather = weatherId;
+    if (g_game)
+        g_game->SetWorldWeather(static_cast<char>(weatherId));
 }
 
 // -----------------------------------------------------------------------------
