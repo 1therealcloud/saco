@@ -33,6 +33,8 @@ namespace game::bullets
         };
         static_assert(sizeof(DamageCalculator) == 20);
         using DamageFn = void(__thiscall*)(DamageCalculator*, void*, void*, bool);
+        using AffectsPedFn = bool(__thiscall*)(void*, void*);
+        extern AffectsPedFn affectsPed;
         extern DamageFn damage;
         extern InstantFn instant;
         extern SniperFn sniper;

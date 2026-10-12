@@ -796,6 +796,14 @@ bool __cdecl BulletTraceHook(const CVector& origin, const CVector& target, void*
     return hit;
 }
 
+bool __fastcall DamageAffectsPedHook(void* event, void*, void* victim)
+{
+    // R5 A53A0: local damage events remain valid while remote player controls run.
+    if (g_netGame && victim == *reinterpret_cast<void**>(0xB7CD98) && *reinterpret_cast<const std::uint8_t*>(0xB7CD74) != 0)
+        return true;
+    return game::bullets::detail::affectsPed(event, victim);
+}
+
 void __fastcall ComputeDamageResponseHook(game::bullets::detail::DamageCalculator* calculator, void*, void* victim, void* response, bool speak)
 {
     auto* pools = g_netGame ? g_netGame->m_pPools : nullptr;

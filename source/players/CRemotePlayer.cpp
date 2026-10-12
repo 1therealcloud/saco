@@ -1289,9 +1289,12 @@ void CRemotePlayer::Update(Synchronization::OnfootData* data, TICK timestamp)
         return;
 
     m_onfootData = *data;
+    // R5 discards animations marked as native; the remote pad drives them.
+    if (m_onfootData.m_animation.m_value & 0x80000000u)
+        m_onfootData.m_animation = {};
     m_fReportedHealth = static_cast<float>(data->m_nHealth);
     m_fReportedArmour = static_cast<float>(data->m_nArmor);
-    m_animation = data->m_animation;
+    m_animation = m_onfootData.m_animation;
     m_nSpecialAction = data->m_nSpecialAction;
 
     const char oldState = static_cast<char>(m_nState);

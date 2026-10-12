@@ -79,3 +79,4 @@ bool __cdecl BulletTraceHook(const CVector& origin, const CVector& target, void*
                              bool seeThrough, bool cameraIgnore, bool shootThrough);
 
 void __fastcall ComputeDamageResponseHook(game::bullets::detail::DamageCalculator* calculator, void*, void* victim, void* response, bool speak);
+bool __fastcall DamageAffectsPedHook(void* event, void*, void* victim);
