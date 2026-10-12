@@ -2058,10 +2058,13 @@ void RPCHandlers::SetGravity(RPCParameters* pParams)
 
     float gravity{};
 
-    if (!bs.Read(gravity))
+    if (!bs.Read(gravity) || !std::isfinite(gravity))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (g_netGame && g_netGame->m_pSettings)
+        g_netGame->m_pSettings->m_fGravity = gravity;
+    if (g_game)
+        g_game->SetWorldGravity(gravity);
 }
 
 // -----------------------------------------------------------------------------
