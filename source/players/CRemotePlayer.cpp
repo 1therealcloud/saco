@@ -1002,6 +1002,7 @@ void CRemotePlayer::Process()
     ProcessRemoteMarker(*this);
     if (!m_pPed || !m_pPed->HasNativePed())
         return;
+    m_pPed->ProcessAnimation();
     const TICK now = GetTickCount();
     auto& runtime = Runtime(this);
     if (runtime.enteringVehicle || runtime.exitingVehicle)

@@ -447,6 +447,7 @@ bool CPed::HasVehicleExitTask() const
 
 void CPed::PutIntoVehicle(std::uint32_t vehicleRef, int seat)
 {
+    m_pendingAnimation.active = false;
     if (!HasCurrentNativePed() || seat < 0 || seat > 7)
         return;
     auto* vehicle = VehicleFromHandle(vehicleRef);
@@ -461,6 +462,7 @@ void CPed::PutIntoVehicle(std::uint32_t vehicleRef, int seat)
 
 void CPed::EnterVehicle(std::uint32_t vehicleRef, BOOL asPassenger)
 {
+    m_pendingAnimation.active = false;
     if (!HasCurrentNativePed())
         return;
     auto* vehicle = VehicleFromHandle(vehicleRef);
@@ -482,6 +484,7 @@ void CPed::EnterVehicle(std::uint32_t vehicleRef, BOOL asPassenger)
 
 void CPed::ExitVehicle()
 {
+    m_pendingAnimation.active = false;
     if (!HasCurrentNativePed() || !InVehicle(m_pGamePed))
         return;
     auto* vehicle = Read<void*>(m_pGamePed, 0x58C);
@@ -497,6 +500,7 @@ void CPed::ExitVehicle()
 
 void CPed::WarpFromVehicle(CVector putAt)
 {
+    m_pendingAnimation.active = false;
     if (HasCurrentNativePed() && std::isfinite(putAt.x) && std::isfinite(putAt.y) && std::isfinite(putAt.z) && InVehicle(m_pGamePed))
         scm::ProcessCommand(&WARP_ACTOR_FROM_CAR, m_handle, static_cast<double>(putAt.x), static_cast<double>(putAt.y), static_cast<double>(putAt.z));
 }
@@ -857,24 +861,51 @@ void CPed::PerformAnimation(const char* name, const char* file, float frameDelta
     if (!HasCurrentNativePed() || !g_game || !name || !*name || !file || !*file || !std::isfinite(frameDelta))
         return;
 
-    if (_stricmp(file, "SEX") != 0 && !g_game->IsAnimationLoaded(file))
-    {
-        g_game->RequestAnimation(file);
-        if (!g_game->IsAnimationLoaded(file))
-        {
-            for (int attempt = 0; attempt < 15 && !g_game->IsAnimationLoaded(file); ++attempt)
-                Sleep(1);
-            if (!g_game->IsAnimationLoaded(file))
-                return;
-        }
-    }
+    if (std::strlen(name) >= sizeof(m_pendingAnimation.name) || std::strlen(file) >= sizeof(m_pendingAnimation.library))
+        return;
 
-    if (HasCurrentNativePed())
-        scm::ProcessCommand(&PERFORM_ANIMATION, m_handle, name, file, static_cast<double>(frameDelta), loop, lockX, lockY, lockF, time);
+    const bool samePending =
+        m_pendingAnimation.active && m_pendingAnimation.ped == m_pGamePed && m_pendingAnimation.handle == m_handle && std::strcmp(m_pendingAnimation.library, file) == 0;
+    const DWORD requested = samePending ? m_pendingAnimation.requested : GetTickCount();
+    m_pendingAnimation = {};
+    std::strcpy(m_pendingAnimation.name, name);
+    std::strcpy(m_pendingAnimation.library, file);
+    m_pendingAnimation.ped = m_pGamePed;
+    m_pendingAnimation.handle = m_handle;
+    m_pendingAnimation.requested = requested;
+    m_pendingAnimation.delta = frameDelta;
+    m_pendingAnimation.loop = loop;
+    m_pendingAnimation.lockX = lockX;
+    m_pendingAnimation.lockY = lockY;
+    m_pendingAnimation.freeze = lockF;
+    m_pendingAnimation.time = time;
+    m_pendingAnimation.active = true;
+    if (_stricmp(file, "SEX") != 0 && !g_game->IsAnimationLoaded(file) && !samePending)
+        g_game->RequestAnimation(file);
+    ProcessAnimation();
+}
+
+void CPed::ProcessAnimation()
+{
+    auto& animation = m_pendingAnimation;
+    if (!animation.active)
+        return;
+    if (!HasCurrentNativePed() || !g_game || animation.ped != m_pGamePed || animation.handle != m_handle || GetTickCount() - animation.requested >= 5000 || GetState() == 54 ||
+        GetState() == 55)
+    {
+        animation.active = false;
+        return;
+    }
+    if (_stricmp(animation.library, "SEX") != 0 && !g_game->IsAnimationLoaded(animation.library))
+        return;
+    animation.active = false;
+    scm::ProcessCommand(&PERFORM_ANIMATION, m_handle, animation.name, animation.library, static_cast<double>(animation.delta), animation.loop, animation.lockX, animation.lockY,
+                        animation.freeze, animation.time);
 }
 
 void CPed::ClearTasks()
 {
+    m_pendingAnimation.active = false;
     if (!HasCurrentNativePed())
         return;
     scm::ProcessCommand(&CLEAR_TASKS, m_handle);
@@ -1249,6 +1280,7 @@ BOOL CPed::CopyAppearanceFrom(const CPed& source)
 
 void CPed::Destroy()
 {
+    m_pendingAnimation.active = false;
     if (!m_handle && !m_pGamePed)
         return;
 

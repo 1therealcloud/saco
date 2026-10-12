@@ -190,6 +190,7 @@ public:
 
     void PerformAnimation(const char* name, const char* file, float frameDelta, int loop, int lockX, int lockY, int lockF, int time); // 0xAD230
     void ClearTasks();
+    void ProcessAnimation();
     void LinkToInterior(char id, BOOL refresh);
 
     BOOL IsOnGround() const;
@@ -266,4 +267,17 @@ public:
         return true;
     }
     void GetBonePosition(unsigned int boneId, CVector* outPosition) const;
+
+private:
+    struct PendingAnimation
+    {
+        char name[256]{};
+        char library[256]{};
+        void* ped{};
+        std::uint32_t handle{};
+        DWORD requested{};
+        float delta{};
+        int loop{}, lockX{}, lockY{}, freeze{}, time{};
+        bool active{};
+    } m_pendingAnimation;
 };

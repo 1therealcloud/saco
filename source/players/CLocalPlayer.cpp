@@ -1713,6 +1713,7 @@ void CLocalPlayer::Process()
         m_pPed = game->GetPlayerPed();
     if (!m_pPed || !m_pPed->HasNativePed())
         return;
+    m_pPed->ProcessAnimation();
 
     CPad snapshot{};
     if (const auto* internalKeys = KeyStuff::GetInternalKeys())

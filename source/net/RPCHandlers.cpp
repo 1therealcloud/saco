@@ -2979,7 +2979,7 @@ void RPCHandlers::GangZoneStopFlash(RPCParameters* pParams)
 //   uint32 time - Animation duration/time.
 void RPCHandlers::ApplyPlayerAnimation(RPCParameters* pParams)
 {
-    if (!g_game)
+    if (!g_game || !g_netGame || !pParams || !pParams->input)
         return;
 
     BitStream bs(pParams->input, BITS_TO_BYTES(pParams->numberOfBitsOfData), false);
@@ -3022,15 +3022,6 @@ void RPCHandlers::ApplyPlayerAnimation(RPCParameters* pParams)
     }
 
     if (!ped || !ped->HasNativePed() || !ped->IsValid())
-        return;
-
-    if (!g_game->IsAnimationLoaded(animLib.data()))
-    {
-        g_game->RequestAnimation(animLib.data());
-        g_game->LoadRequestedModels();
-    }
-
-    if (!g_game->IsAnimationLoaded(animLib.data()))
         return;
 
     ped->PerformAnimation(animName.data(), animLib.data(), delta, loop, lockX, lockY, freeze, static_cast<int>(time));
