@@ -589,7 +589,8 @@ void RPCHandlers::SetWorldTime(RPCParameters* pParams)
     if (!bs.Read(hour))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (g_netGame && g_netGame->m_pSettings)
+        g_netGame->m_pSettings->m_nWorldTimeHour = hour;
 }
 
 // -----------------------------------------------------------------------------
@@ -800,7 +801,13 @@ void RPCHandlers::SetPlayerTime(RPCParameters* pParams)
     if (!bs.Read(minute))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (g_game)
+        g_game->SetWorldTime(static_cast<char>(hour), static_cast<char>(minute));
+    if (g_netGame && g_netGame->m_pSettings)
+    {
+        g_netGame->m_pSettings->m_nWorldTimeHour = hour;
+        g_netGame->m_pSettings->m_nWorldTimeMinute = minute;
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -819,7 +826,22 @@ void RPCHandlers::ToggleClock(RPCParameters* pParams)
     if (!bs.Read(enabled))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (!g_game)
+        return;
+
+    g_game->EnableClock(enabled != 0);
+    if (g_netGame && g_netGame->m_pSettings)
+    {
+        auto& settings = *g_netGame->m_pSettings;
+        settings.m_bHoldTime = enabled == 0;
+        if (!enabled)
+        {
+            char hour{}, minute{};
+            g_game->GetWorldTime(&hour, &minute);
+            settings.m_nWorldTimeHour = static_cast<unsigned char>(hour);
+            settings.m_nWorldTimeMinute = static_cast<unsigned char>(minute);
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -838,7 +860,8 @@ void RPCHandlers::SendGameTimeUpdate(RPCParameters* pParams)
     if (!bs.Read(time))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (g_game)
+        g_game->SetTimer(time);
 }
 
 // -----------------------------------------------------------------------------
