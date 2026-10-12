@@ -139,7 +139,8 @@ namespace Commands
     // +0x684E0
     void Default(const char* params)
     {
-        (void)params;
+        if (params && g_netGame)
+            g_netGame->ChatMessage(params);
     }
 
     // +0x685F0
