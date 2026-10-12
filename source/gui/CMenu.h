@@ -46,7 +46,6 @@ public:
     CMenu& operator=(const CMenu&) = delete;
 
     bool IsVisible() const;
-    static bool InstallTextHook();
 
     void SetTitle(const char* text);
     void AddItem(unsigned char column, unsigned char row, const char* text);

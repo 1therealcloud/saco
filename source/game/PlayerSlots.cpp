@@ -30,8 +30,6 @@ namespace game::players::detail
     constexpr std::array<std::uint8_t, 5> kNop5{0x90, 0x90, 0x90, 0x90, 0x90};
     constexpr std::array<std::uint8_t, 6> kNop6{0x90, 0x90, 0x90, 0x90, 0x90, 0x90};
     ControlFn g_control = reinterpret_cast<ControlFn>(kOriginalProcessControl);
-    InfoFn g_info = nullptr;
-    ShadowFn g_shadow = nullptr;
 
     constexpr std::uintptr_t kScanBase[] = {0x5dc7aa, 0x41a85d, 0x41a864, 0x408259, 0x711b32, 0x699cf8, 0x4092ec,
                                             0x409151, 0x408702, 0x564220, 0x564172, 0x563845, 0x84e9c2, 0x85652d};
@@ -185,20 +183,9 @@ namespace game::players
         if (!MakeWritable(kUpdatePositionCall, kUpdatePositionOriginal.size()) || !MakeWritable(kCameraRotationA, kCameraRotationOriginal.size()) ||
             !MakeWritable(kCameraRotationB, kCameraRotationOriginal.size()))
             return false;
-        if (!hook::install(0x609FF0, reinterpret_cast<InfoFn>(&PlayerInfoHook), &g_info) || !hook::install(0x706970, reinterpret_cast<ShadowFn>(&ShadowHook), &g_shadow))
-            return false;
-        const auto controlHook = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&ProcessControlHook));
-        if (!patch::write(kProcessControlVtable, controlHook))
-            return false;
-        // r5 also selects remote weapon skills outside ProcessControl
-        if (!patch::call(0x7330A2, reinterpret_cast<const void*>(&WeaponSkillHook)))
+        if (!game::hooks::InstallPlayerHooks())
             return false;
         DisableLocalCameraRotation();
-        std::array<std::uint8_t, 6> animationCall{0xE8, 0, 0, 0, 0, 0x90};
-        const auto relative = static_cast<std::int32_t>(reinterpret_cast<std::uintptr_t>(&MovementAnimationHook) - 0x609A4E - 5);
-        std::memcpy(animationCall.data() + 1, &relative, sizeof(relative));
-        if (!patch::write(0x609A4E, animationCall.data(), animationCall.size()))
-            return false;
         g_installed = true;
         return true;
     }

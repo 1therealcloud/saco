@@ -966,13 +966,7 @@ void CObject::SetPoolManaged(bool managed)
 {
     g_objects.at(this).poolManaged = managed;
 }
-bool CObject::InstallRenderHook()
-{
-    ZoneScoped;
-    const bool renderInstalled = game::hooks::g_originalRender || hook::install(0x553260, &RenderObjectHook, &game::hooks::g_originalRender);
-    const bool cameraInstalled = game::hooks::g_originalCameraIgnore || hook::install(0x563F40, &CameraToIgnoreObjectHook, &game::hooks::g_originalCameraIgnore);
-    return renderInstalled && cameraInstalled;
-}
+
 void CObject::ProcessAll(float elapsedSeconds)
 {
     ZoneScoped;

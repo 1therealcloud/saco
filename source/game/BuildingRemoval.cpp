@@ -1,12 +1,12 @@
 #include <stdafx.h>
 #include "game/Profiler.h"
 #include "BuildingRemoval.h"
-#include "patch/hooks.h"
 #include "utils/math/CVector.h"
 #include <cmath>
 
 namespace BuildingRemoval
 {
+
     namespace
     {
         struct Removal
@@ -268,13 +268,5 @@ namespace BuildingRemoval
     {
         RestoreAll();
     }
-    bool Install()
-    {
-        if (!hook::install(0x538090, &LoadObjectInstanceHook, &game::hooks::originalLoad) ||
-            !hook::install(0x535E90, reinterpret_cast<game::hooks::DestroyEntityFn>(&EntityDestroyedHook), &game::hooks::originalDestroy) ||
-            !hook::install(0x71DCA0, &OcclusionInitializedHook, &game::hooks::originalOcclusionInit) ||
-            !hook::install(0x5519F0, &PoolsShutdownHook, &game::hooks::originalPoolsShutdown))
-            return false;
-        return true;
-    }
+
 }

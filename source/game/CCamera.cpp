@@ -1,6 +1,5 @@
 #include <stdafx.h>
 #include "CCamera.h"
-#include "patch/hooks.h"
 #include "main.h"
 #include "game/CGame.h"
 
@@ -17,8 +16,6 @@ namespace
     constexpr std::uintptr_t GTA_CAMERA_TAKE_CONTROL = 0x0050C7C0;
 
     constexpr std::uintptr_t GTA_ENTITY_MATRIX_OFFSET = 0x14;
-    constexpr std::uintptr_t GTA_CAMERA_PROCESS_CALL = 0x0053C104;
-    constexpr std::uintptr_t GTA_CAMERA_PROCESS = 0x0052B730;
 
     constexpr ::scm::OpcodeInfo CMD_FADE{0x016A, "ii"};
     constexpr ::scm::OpcodeInfo CMD_CAMERA_BEHIND_PLAYER{0x0373, ""};
@@ -52,16 +49,6 @@ namespace
         return *reinterpret_cast<void* const*>(native + GTA_ENTITY_MATRIX_OFFSET) != nullptr;
     }
 
-}
-
-bool CCamera::InstallProcessHook()
-{
-    ZoneScoped;
-    // r5 redirects this call, not the whole gta camera function.
-    if (!patch::expect_call(GTA_CAMERA_PROCESS_CALL, GTA_CAMERA_PROCESS))
-        return false;
-
-    return patch::call(GTA_CAMERA_PROCESS_CALL, reinterpret_cast<const void*>(&CameraProcessHook));
 }
 
 CVector CCamera::GetPosition()

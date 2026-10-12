@@ -13,112 +13,6 @@ namespace
     using ::patch::RET;
     using ::patch::RET_ZERO;
 
-    constexpr std::uintptr_t kVertexDeclarationInstColor = 0x754AE0;
-    using VertexDeclarationInstColorFn = std::int32_t(__cdecl*)(std::uint8_t*, const std::uint8_t*, std::int32_t, std::uint32_t);
-    VertexDeclarationInstColorFn g_vertexDeclarationInstColor = nullptr;
-
-    bool AllowsRead(DWORD protect)
-    {
-        ZoneScoped;
-        if (protect & (PAGE_GUARD | PAGE_NOACCESS))
-            return false;
-        switch (protect & 0xFF)
-        {
-            case PAGE_READONLY:
-            case PAGE_READWRITE:
-            case PAGE_WRITECOPY:
-            case PAGE_EXECUTE_READ:
-            case PAGE_EXECUTE_READWRITE:
-            case PAGE_EXECUTE_WRITECOPY:
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    bool AllowsWrite(DWORD protect)
-    {
-        ZoneScoped;
-        if (protect & (PAGE_GUARD | PAGE_NOACCESS))
-            return false;
-        switch (protect & 0xFF)
-        {
-            case PAGE_READWRITE:
-            case PAGE_WRITECOPY:
-            case PAGE_EXECUTE_READWRITE:
-            case PAGE_EXECUTE_WRITECOPY:
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    bool ValidateSpan(const void* data, std::size_t size, bool write)
-    {
-        ZoneScoped;
-        if (!size)
-            return true;
-        if (!data)
-            return false;
-
-        const auto begin = reinterpret_cast<std::uintptr_t>(data);
-        if (size - 1 > std::numeric_limits<std::uintptr_t>::max() - begin)
-            return false;
-        const auto end = begin + size;
-
-        for (auto cursor = begin; cursor < end;)
-        {
-            MEMORY_BASIC_INFORMATION info{};
-            if (VirtualQuery(reinterpret_cast<const void*>(cursor), &info, sizeof(info)) != sizeof(info) || info.State != MEM_COMMIT ||
-                !(write ? AllowsWrite(info.Protect) : AllowsRead(info.Protect)))
-                return false;
-
-            const auto region = reinterpret_cast<std::uintptr_t>(info.BaseAddress);
-            if (info.RegionSize > std::numeric_limits<std::uintptr_t>::max() - region)
-                return false;
-            const auto regionEnd = region + info.RegionSize;
-            if (regionEnd <= cursor)
-                return false;
-            cursor = regionEnd < end ? regionEnd : end;
-        }
-        return true;
-    }
-
-    std::int32_t __cdecl VertexDeclarationInstColorHook(std::uint8_t* mem, const std::uint8_t* color, std::int32_t numVerts, std::uint32_t stride)
-    {
-        ZoneScoped;
-        if (numVerts <= 0)
-            return FALSE;
-
-        constexpr std::size_t kColorSize = 4;
-        const auto count = static_cast<std::size_t>(numVerts);
-        if (count > std::numeric_limits<std::size_t>::max() / kColorSize)
-            return FALSE;
-        const auto colorBytes = count * kColorSize;
-
-        const auto lastVertex = count - 1;
-        if (stride && lastVertex > (std::numeric_limits<std::size_t>::max() - kColorSize) / stride)
-            return FALSE;
-        const auto destinationBytes = lastVertex * static_cast<std::size_t>(stride) + kColorSize;
-
-        if (!ValidateSpan(color, colorBytes, false) || !ValidateSpan(mem, destinationBytes, true))
-        {
-            return FALSE;
-        }
-
-        return g_vertexDeclarationInstColor(mem, color, numVerts, stride);
-    }
-
-    bool InstallRenderWareCrashFix()
-    {
-        ZoneScoped;
-        // unused streams have zero stride; do not allocate or lock a buffer for them
-        return hook::install(kVertexDeclarationInstColor, &VertexDeclarationInstColorHook, &g_vertexDeclarationInstColor) &&
-               ::patch::jump(0x757C3C, reinterpret_cast<const void*>(&EmptyVertexStreamAllocateHook), 6) &&
-               ::patch::jump(0x757D5C, reinterpret_cast<const void*>(&EmptyVertexStreamLockHook), 6) &&
-               ::patch::jump(0x757DBB, reinterpret_cast<const void*>(&EmptyVertexStreamRelockHook), 6);
-    }
-
     const Entry kSinglePlayer[] = {
         {0x605A30, RET}, // disables CInterestingEvents::ScanForNearbyEntities
         {0x446610, RET}, // disables CGangWars::Update
@@ -283,14 +177,14 @@ namespace game::patch::base
         if (!::patch::apply(kMisc))
             return false;
 
-        if (!InstallRenderWareCrashFix())
+        if (!game::hooks::InstallRenderWareHooks())
             return false;
 
         // notify the server when GTA collects a pickup, including persistent types
-        if (!::patch::jump(0x4579C6, reinterpret_cast<const void*>(&PickupCollectedHook)))
+        if (!game::hooks::InstallPickupHook())
             return false;
 
-        if (!game::patch::hudscalefix::install())
+        if (!game::hooks::InstallHudHooks())
             return false;
 
         return true;

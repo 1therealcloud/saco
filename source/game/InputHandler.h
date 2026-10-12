@@ -10,11 +10,11 @@ namespace game::inputhandler
     bool game_input_blocked();
 
     bool install(HWND window = nullptr);
-    void rehook();
     void uninstall();
     bool installed();
 
     int handle_key_up(WPARAM key);
     bool handle_char(WPARAM character);
-    LRESULT CALLBACK wnd_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
+    void FinishKeyboardFilter();
+    LRESULT ProcessWindowMessage(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
 }

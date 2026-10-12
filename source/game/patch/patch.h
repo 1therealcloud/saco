@@ -39,7 +39,6 @@ namespace game::patch
             extern bool nextVehicleHasSiren;
             extern bool detachingTrailer;
         }
-        bool install();
     }
 
     // streaming.h

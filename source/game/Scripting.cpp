@@ -15,9 +15,6 @@ namespace
     constexpr std::uintptr_t kProcessOneCommand = 0x469EB0;
     constexpr std::uintptr_t kScmDispatchPatch = 0x469EF5;
 
-    constexpr std::uintptr_t kOpcode09C6Slot = 0x47BF54;
-    constexpr std::uintptr_t kOpcode09D3Slot = 0x47BF88;
-
     constexpr std::uint16_t kScmEnabled = 0xD2FF;
     constexpr std::uint16_t kScmDisabled = 0xD08B;
 
@@ -294,13 +291,7 @@ namespace scm
         if (!g_thread || !g_processOneCommand)
             return false;
 
-        const std::uint32_t opcode09C6 = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&Opcode09C6));
-        const std::uint32_t opcode09D3 = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&Opcode09D3));
-
-        if (!patch::write(kOpcode09C6Slot, opcode09C6))
-            return false;
-
-        if (!patch::write(kOpcode09D3Slot, opcode09D3))
+        if (!game::hooks::InstallScmHooks())
             return false;
 
         Log("[scm] installed");

@@ -30,6 +30,8 @@
 #include "players/CRemotePlayer.h"
 #include <intrin.h>
 
+EventHandlerFn g_eventHandler = nullptr;
+
 namespace game::hooks
 {
     void* crimeReportPed = nullptr;
@@ -442,7 +444,9 @@ namespace game::hooks
     bool InstallRenderHooks()
     {
         ZoneScoped;
-        return hook::install(0x584770, &RadarTraceColorHook, &g_radarColor) && hook::install(0x53E230, &NativeTextHook, &g_text) && hook::install(0x586650, &GangZoneRadarHook) &&
+        return (g_originalRender || hook::install(0x553260, &RenderObjectHook, &g_originalRender)) &&
+               (g_originalCameraIgnore || hook::install(0x563F40, &CameraToIgnoreObjectHook, &g_originalCameraIgnore)) &&
+               hook::install(0x584770, &RadarTraceColorHook, &g_radarColor) && hook::install(0x53E230, &NativeTextHook, &g_text) && hook::install(0x586650, &GangZoneRadarHook) &&
                hook::install(0x553AA0, &WorldRenderHook, &g_world) && hook::install(0x5531E0, &FadingRenderHook, &g_fading);
     }
 
@@ -930,4 +934,431 @@ bool game::hooks::InstallVehicleCollisionHooks()
            ::patch::write<std::uintptr_t>(0x871580, reinterpret_cast<std::uintptr_t>(&AutomobileCollisionHook)) &&
            ::patch::write<std::uintptr_t>(0x871830, reinterpret_cast<std::uintptr_t>(&BikeCollisionHook)) &&
            ::patch::write<std::uintptr_t>(0x8721F8, reinterpret_cast<std::uintptr_t>(&VehicleCollisionHook));
+}
+
+bool game::hooks::InstallGameLoopHook()
+{
+    ZoneScoped;
+    constexpr std::uintptr_t kIdleCall = 0x748D9B;
+
+    std::int32_t relative{};
+    if (!::patch::read(kIdleCall + 1, &relative, sizeof(relative)))
+        return false;
+
+    const auto target = kIdleCall + 5 + static_cast<std::uintptr_t>(relative);
+
+    return hook::install(target, &EventHandlerHook, &g_eventHandler);
+}
+
+bool game::hooks::InstallShutdownHook()
+{
+    return hook::install(0x53C900, &ShutdownHook);
+}
+
+bool game::hooks::InstallCameraHook()
+{
+    ZoneScoped;
+    // r5 redirects this call, not the whole gta camera function.
+    if (!::patch::expect_call(0x53C104, 0x52B730))
+        return false;
+
+    return ::patch::call(0x53C104, reinterpret_cast<const void*>(&CameraProcessHook));
+}
+
+bool game::hooks::InstallMenuTextHook()
+{
+    static bool installed = false;
+    if (installed)
+        return true;
+    if (!hook::install(0x6A0050, reinterpret_cast<decltype(game::hooks::g_getText)>(&MenuTextHook), &game::hooks::g_getText))
+        return false;
+    installed = true;
+    return true;
+}
+
+bool game::hooks::InstallBulletHooks()
+{
+    return ::patch::call(0x73AC4B, reinterpret_cast<const void*>(&SniperBulletHook)) &&
+           hook::install(0x73FB10, reinterpret_cast<game::bullets::detail::InstantFn>(&FireInstantHitHook), &game::bullets::detail::instant) &&
+           hook::install(0x73AAC0, reinterpret_cast<game::bullets::detail::SniperFn>(&FireSniperHook), &game::bullets::detail::sniper) &&
+           hook::install(0x56BA00, &BulletTraceHook, &game::bullets::detail::trace) &&
+           hook::install(0x4B5AC0, reinterpret_cast<game::bullets::detail::DamageFn>(&ComputeDamageResponseHook), &game::bullets::detail::damage) &&
+           hook::install(0x4B35A0, reinterpret_cast<game::bullets::detail::AffectsPedFn>(&DamageAffectsPedHook), &game::bullets::detail::affectsPed);
+}
+
+bool game::hooks::InstallBuildingRemovalHooks()
+{
+    if (!hook::install(0x538090, &LoadObjectInstanceHook, &game::hooks::originalLoad) ||
+        !hook::install(0x535E90, reinterpret_cast<game::hooks::DestroyEntityFn>(&EntityDestroyedHook), &game::hooks::originalDestroy) ||
+        !hook::install(0x71DCA0, &OcclusionInitializedHook, &game::hooks::originalOcclusionInit) ||
+        !hook::install(0x5519F0, &PoolsShutdownHook, &game::hooks::originalPoolsShutdown))
+        return false;
+    return true;
+}
+
+namespace
+{
+    constexpr std::uintptr_t kVertexDeclarationInstColor = 0x754AE0;
+    using VertexDeclarationInstColorFn = std::int32_t(__cdecl*)(std::uint8_t*, const std::uint8_t*, std::int32_t, std::uint32_t);
+    VertexDeclarationInstColorFn g_vertexDeclarationInstColor = nullptr;
+
+    bool AllowsRead(DWORD protect)
+    {
+        ZoneScoped;
+        if (protect & (PAGE_GUARD | PAGE_NOACCESS))
+            return false;
+        switch (protect & 0xFF)
+        {
+            case PAGE_READONLY:
+            case PAGE_READWRITE:
+            case PAGE_WRITECOPY:
+            case PAGE_EXECUTE_READ:
+            case PAGE_EXECUTE_READWRITE:
+            case PAGE_EXECUTE_WRITECOPY:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    bool AllowsWrite(DWORD protect)
+    {
+        ZoneScoped;
+        if (protect & (PAGE_GUARD | PAGE_NOACCESS))
+            return false;
+        switch (protect & 0xFF)
+        {
+            case PAGE_READWRITE:
+            case PAGE_WRITECOPY:
+            case PAGE_EXECUTE_READWRITE:
+            case PAGE_EXECUTE_WRITECOPY:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    bool ValidateSpan(const void* data, std::size_t size, bool write)
+    {
+        ZoneScoped;
+        if (!size)
+            return true;
+        if (!data)
+            return false;
+
+        const auto begin = reinterpret_cast<std::uintptr_t>(data);
+        if (size - 1 > std::numeric_limits<std::uintptr_t>::max() - begin)
+            return false;
+        const auto end = begin + size;
+
+        for (auto cursor = begin; cursor < end;)
+        {
+            MEMORY_BASIC_INFORMATION info{};
+            if (VirtualQuery(reinterpret_cast<const void*>(cursor), &info, sizeof(info)) != sizeof(info) || info.State != MEM_COMMIT ||
+                !(write ? AllowsWrite(info.Protect) : AllowsRead(info.Protect)))
+                return false;
+
+            const auto region = reinterpret_cast<std::uintptr_t>(info.BaseAddress);
+            if (info.RegionSize > std::numeric_limits<std::uintptr_t>::max() - region)
+                return false;
+            const auto regionEnd = region + info.RegionSize;
+            if (regionEnd <= cursor)
+                return false;
+            cursor = regionEnd < end ? regionEnd : end;
+        }
+        return true;
+    }
+
+    std::int32_t __cdecl VertexDeclarationInstColorHook(std::uint8_t* mem, const std::uint8_t* color, std::int32_t numVerts, std::uint32_t stride)
+    {
+        ZoneScoped;
+        if (numVerts <= 0)
+            return FALSE;
+
+        constexpr std::size_t kColorSize = 4;
+        const auto count = static_cast<std::size_t>(numVerts);
+        if (count > std::numeric_limits<std::size_t>::max() / kColorSize)
+            return FALSE;
+        const auto colorBytes = count * kColorSize;
+
+        const auto lastVertex = count - 1;
+        if (stride && lastVertex > (std::numeric_limits<std::size_t>::max() - kColorSize) / stride)
+            return FALSE;
+        const auto destinationBytes = lastVertex * static_cast<std::size_t>(stride) + kColorSize;
+
+        if (!ValidateSpan(color, colorBytes, false) || !ValidateSpan(mem, destinationBytes, true))
+        {
+            return FALSE;
+        }
+
+        return g_vertexDeclarationInstColor(mem, color, numVerts, stride);
+    }
+
+    bool InstallRenderWareCrashFix()
+    {
+        ZoneScoped;
+        // unused streams have zero stride; do not allocate or lock a buffer for them
+        return hook::install(kVertexDeclarationInstColor, &VertexDeclarationInstColorHook, &g_vertexDeclarationInstColor) &&
+               ::patch::jump(0x757C3C, reinterpret_cast<const void*>(&EmptyVertexStreamAllocateHook), 6) &&
+               ::patch::jump(0x757D5C, reinterpret_cast<const void*>(&EmptyVertexStreamLockHook), 6) &&
+               ::patch::jump(0x757DBB, reinterpret_cast<const void*>(&EmptyVertexStreamRelockHook), 6);
+    }
+
+}
+
+bool game::hooks::InstallRenderWareHooks()
+{
+    return InstallRenderWareCrashFix();
+}
+
+namespace
+{
+    constexpr std::array<std::uintptr_t, 5> TRAILER_VTABLE_SLOTS = {
+        0x871218, 0x871778, 0x8718D0, 0x871A40, 0x871BE0,
+    };
+}
+
+bool game::hooks::InstallVehicleHooks()
+{
+    ZoneScoped;
+    static bool installed = false;
+    if (installed)
+        return true;
+
+    if (!hook::install(0x6D8470, reinterpret_cast<game::patch::vehicle::detail::UsesSirenFn>(&UsesSirenHook), &game::patch::vehicle::detail::originalUsesSiren))
+        return false;
+    if (!hook::install(0x502280, reinterpret_cast<game::patch::vehicle::detail::VehicleAudioFn>(&VehicleAudioHook), &game::patch::vehicle::detail::originalVehicleAudio))
+        return false;
+    const auto replacement = reinterpret_cast<std::uintptr_t>(&TrailerProcessHook);
+    for (const auto slot : TRAILER_VTABLE_SLOTS)
+        if (!::patch::write(slot, replacement))
+            return false;
+
+    installed = true;
+    return true;
+}
+
+namespace
+{
+    using ReadKeyboardFn = void(__thiscall*)(void*);
+    ReadKeyboardFn g_readKeyboard = nullptr;
+    void __fastcall ReadKeyboardHook(void* manager, void*)
+    {
+        for (const uintptr_t address : {0xB72CB0u, 0xB72F20u, 0xB73190u})
+            game::inputhandler::filter_game_keyboard(reinterpret_cast<std::uint16_t*>(address));
+        game::inputhandler::FinishKeyboardFilter();
+        g_readKeyboard(manager);
+    }
+}
+bool game::hooks::InstallKeyboardHook()
+{
+    return g_readKeyboard || hook::install(0x531140, reinterpret_cast<ReadKeyboardFn>(&ReadKeyboardHook), &g_readKeyboard);
+}
+void game::hooks::RemoveKeyboardHook()
+{
+    if (!g_readKeyboard)
+        return;
+    MH_DisableHook(reinterpret_cast<void*>(0x531140));
+    MH_RemoveHook(reinterpret_cast<void*>(0x531140));
+    g_readKeyboard = nullptr;
+}
+LRESULT CALLBACK game::hooks::WindowProcHook(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    return game::inputhandler::ProcessWindowMessage(window, message, wParam, lParam);
+}
+
+bool game::hooks::InstallPlayerHooks()
+{
+    if (!hook::install(0x609FF0, reinterpret_cast<InfoFn>(&PlayerInfoHook), &g_info) || !hook::install(0x706970, reinterpret_cast<ShadowFn>(&ShadowHook), &g_shadow))
+        return false;
+    const auto controlHook = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&ProcessControlHook));
+    if (!::patch::write(0x86D190, controlHook))
+        return false;
+    // r5 also selects remote weapon skills outside ProcessControl
+    if (!::patch::call(0x7330A2, reinterpret_cast<const void*>(&WeaponSkillHook)))
+        return false;
+    std::array<std::uint8_t, 6> animationCall{0xE8, 0, 0, 0, 0, 0x90};
+    const auto relative = static_cast<std::int32_t>(reinterpret_cast<std::uintptr_t>(&MovementAnimationHook) - 0x609A4E - 5);
+    std::memcpy(animationCall.data() + 1, &relative, sizeof(relative));
+    if (!::patch::write(0x609A4E, animationCall.data(), animationCall.size()))
+        return false;
+    return true;
+}
+
+bool game::hooks::InstallHudHooks()
+{
+    static bool installed = false;
+    if (installed)
+        return false;
+    // The scoped draw wrappers update these constants every frame.
+    DWORD oldProtect{};
+    if (!VirtualProtect(reinterpret_cast<void*>(0x859520), sizeof(float) * 2, PAGE_READWRITE, &oldProtect) ||
+        !VirtualProtect(reinterpret_cast<void*>(0x866B74), sizeof(float) * 2, PAGE_READWRITE, &oldProtect))
+        return false;
+
+    // vital stats redirects here too while TAB is held
+    if (!hook::install(0x58A330, &DrawRadarHook, &g_drawRadar))
+        return false;
+
+    if (!::patch::call(0x58FBBF, reinterpret_cast<const void*>(&DrawCrossHairsHook)))
+        return false;
+
+    installed = true;
+    return true;
+}
+
+bool game::hooks::InstallFrameLimiterHooks()
+{
+    ZoneScoped;
+    constexpr std::uintptr_t kIdleDelay = 0x53E923;
+
+    constexpr std::uintptr_t kLimitFlag = 0x748D81;
+    constexpr std::uintptr_t kLimitHook = 0x748D83;
+
+    constexpr std::uintptr_t kNoLimitFlag = 0x748D98;
+    constexpr std::uintptr_t kNoLimitHook = 0x748D9A;
+
+    static bool installed = false;
+    if (installed)
+        return true;
+
+    // preserve the existing idle call, including a loader or another hook
+    std::int32_t relative = 0;
+    if (!::patch::read(kNoLimitFlag + 4, &relative, sizeof(relative)))
+        return false;
+    const std::uintptr_t handler = kNoLimitFlag + 8 + static_cast<std::uintptr_t>(relative);
+    g_idleHandler = handler;
+
+    // remove gta's extra 14 ms idle delay
+    if (!::patch::write<std::uint16_t>(kIdleDelay, 0x43EB))
+        return false;
+
+    // preserve gta's original menu/replay/audio decision:
+    // this path reaches the hook with limiter enabled.
+    if (!::patch::write<std::uint16_t>(kLimitFlag, 0x01B0))
+        return false;
+
+    if (!::patch::jump(kLimitHook, reinterpret_cast<const void*>(&FrameLimiterHook)))
+        return false;
+
+    // this path reaches the same hook with limiter disabled.
+    if (!::patch::write<std::uint16_t>(kNoLimitFlag, 0xC030))
+        return false;
+
+    if (!::patch::jump(kNoLimitHook, reinterpret_cast<const void*>(&FrameLimiterHook)))
+        return false;
+
+    installed = true;
+    return true;
+}
+bool game::hooks::InstallPickupHook()
+{
+    return ::patch::jump(0x4579C6, reinterpret_cast<const void*>(&PickupCollectedHook));
+}
+
+bool game::hooks::InstallScmHooks()
+{
+    const std::uint32_t opcode09C6 = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&Opcode09C6));
+    const std::uint32_t opcode09D3 = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&Opcode09D3));
+
+    if (!::patch::write(0x47BF54, opcode09C6))
+        return false;
+
+    if (!::patch::write(0x47BF88, opcode09D3))
+        return false;
+
+    return true;
+}
+
+bool game::hooks::InstallCrimeReportHook()
+{
+    return ::patch::call(0x4E7427, reinterpret_cast<const void*>(&CrimeReportPedHook));
+}
+
+namespace
+{
+    std::uint32_t g_guardDestination{};
+}
+bool game::hooks::BuildModelGuardDetour(std::array<std::uint8_t, 6>& result)
+{
+    // ff 25 [ptr] jumps through our permanently allocated handler pointer
+    g_guardDestination = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&NegativeModelGuardHook));
+    const auto operand = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&g_guardDestination));
+    result = {0xFF, 0x25, 0, 0, 0, 0};
+    std::memcpy(result.data() + 2, &operand, sizeof(operand));
+    return true;
+}
+namespace
+{
+    WNDPROC g_originalWndProc = nullptr;
+    HWND g_window = nullptr;
+}
+bool game::hooks::InstallWindowHook(HWND window)
+{
+    ZoneScoped;
+    if (!window)
+        return false;
+
+    const auto current = reinterpret_cast<WNDPROC>(GetWindowLongA(window, GWL_WNDPROC));
+    if (!current)
+        return false;
+
+    // another subclass can still call us; leave its wndproc chain intact
+    if (g_window)
+        return g_window == window && g_originalWndProc;
+    if (current == game::hooks::WindowProcHook)
+        return false;
+
+    SetLastError(ERROR_SUCCESS);
+    if (!SetWindowLongA(window, GWL_WNDPROC, reinterpret_cast<LONG>(game::hooks::WindowProcHook)) && GetLastError() != ERROR_SUCCESS)
+        return false;
+
+    g_originalWndProc = current;
+    g_window = window;
+    return true;
+}
+void game::hooks::RemoveWindowHook()
+{
+    if (g_window && g_originalWndProc)
+    {
+        const auto current = reinterpret_cast<WNDPROC>(GetWindowLongA(g_window, GWL_WNDPROC));
+        if (current == game::hooks::WindowProcHook)
+            SetWindowLongA(g_window, GWL_WNDPROC, reinterpret_cast<LONG>(g_originalWndProc));
+    }
+
+    g_originalWndProc = nullptr;
+    g_window = nullptr;
+}
+LRESULT game::hooks::ForwardWindowMessage(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    if (!g_originalWndProc)
+        return DefWindowProcA(window, message, wParam, lParam);
+
+    return CallWindowProcA(g_originalWndProc, window, message, wParam, lParam);
+}
+
+namespace game::patch::vehicle::detail
+{
+    UsesSirenFn originalUsesSiren = nullptr;
+    VehicleAudioFn originalVehicleAudio = nullptr;
+}
+
+namespace game::patch::hudscalefix::detail
+{
+    DrawRadarFn g_drawRadar = nullptr;
+}
+
+namespace game::players::detail
+{
+    InfoFn g_info = nullptr;
+    ShadowFn g_shadow = nullptr;
+}
+
+namespace game::bullets::detail
+{
+    DamageFn damage = nullptr;
+    AffectsPedFn affectsPed = nullptr;
+    InstantFn instant = nullptr;
+    SniperFn sniper = nullptr;
+    TraceFn trace = nullptr;
 }

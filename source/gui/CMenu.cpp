@@ -2,7 +2,6 @@
 
 #include "CMenu.h"
 #include "game/Scripting.h"
-#include "game/patch/hooks.h"
 
 namespace
 {
@@ -15,7 +14,6 @@ namespace
         {"SAMP006", "SAMP106"}, {"SAMP007", "SAMP107"}, {"SAMP008", "SAMP108"}, {"SAMP009", "SAMP109"}, {"SAMP010", "SAMP110"}, {"SAMP011", "SAMP111"}};
 
     CMenu* g_activeMenu = nullptr;
-    bool g_textHookInstalled = false;
 
     constexpr scm::OpcodeInfo kCreatePanel{0x08D4, "sfffiiiiv"};
     constexpr scm::OpcodeInfo kRemovePanel{0x08DA, "i"};
@@ -60,16 +58,6 @@ CMenu::~CMenu()
 bool CMenu::IsVisible() const
 {
     return g_activeMenu == this && m_panel != kInvalidPanel;
-}
-
-bool CMenu::InstallTextHook()
-{
-    if (g_textHookInstalled)
-        return true;
-    if (!hook::install(0x6A0050, reinterpret_cast<decltype(game::hooks::g_getText)>(&MenuTextHook), &game::hooks::g_getText))
-        return false;
-    g_textHookInstalled = true;
-    return true;
 }
 
 void CMenu::SetTitle(const char* text)

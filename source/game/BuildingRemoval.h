@@ -14,7 +14,6 @@ namespace BuildingRemoval
     void RestoreAll();
     // restore the map and clear session rules
     void Reset();
-    bool Install();
 }
 
 namespace BuildingRemoval::detail

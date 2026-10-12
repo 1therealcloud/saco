@@ -79,10 +79,10 @@ namespace game::patch
         if (!game::hooks::InstallVehicleTransitionHooks())
             return false;
 
-        if (!game::bullets::Install())
+        if (!game::hooks::InstallBulletHooks())
             return false;
 
-        if (!vehicle::install())
+        if (!game::hooks::InstallVehicleHooks())
         {
             Log("[game::patch] vehicle siren hook failed");
             return false;

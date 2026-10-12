@@ -115,22 +115,6 @@ bool IsGtaSa10Us()
     return entry == 0x824570 || entry == 0x82457C;
 }
 
-EventHandlerFn g_eventHandler = nullptr;
-
-bool InstallGameLoopHook()
-{
-    ZoneScoped;
-    constexpr std::uintptr_t kIdleCall = 0x748D9B;
-
-    std::int32_t relative{};
-    if (!patch::read(kIdleCall + 1, &relative, sizeof(relative)))
-        return false;
-
-    const auto target = kIdleCall + 5 + static_cast<std::uintptr_t>(relative);
-
-    return hook::install(target, &EventHandlerHook, &g_eventHandler);
-}
-
 // initializes resources once, then waits for the debug scene to be ready
 static bool InitializeGameplay(IDirect3DDevice9* device)
 {
@@ -312,7 +296,7 @@ DWORD WINAPI InitializeThread(LPVOID)
 
     // hook gta shutdown
     // 0x53C900 - default gta shutdown function
-    if (!hook::install(0x53C900, &ShutdownHook))
+    if (!game::hooks::InstallShutdownHook())
     {
         Log("failed to install game shutdown hook!");
         return 1;
@@ -340,7 +324,7 @@ DWORD WINAPI InitializeThread(LPVOID)
     }
 
     // init game loop hock
-    if (!InstallGameLoopHook())
+    if (!game::hooks::InstallGameLoopHook())
     {
         Log("failed to init game loop hook!");
         return 1;
@@ -354,14 +338,14 @@ DWORD WINAPI InitializeThread(LPVOID)
     }
 
     // hook gxt
-    if (!CMenu::InstallTextHook())
+    if (!game::hooks::InstallMenuTextHook())
     {
         Log("failed to install menu text hook!");
         return 1;
     }
 
     // init building removal
-    if (!BuildingRemoval::Install())
+    if (!game::hooks::InstallBuildingRemovalHooks())
     {
         Log("failed to install building removal hook!");
         return 1;
@@ -375,7 +359,7 @@ DWORD WINAPI InitializeThread(LPVOID)
         return 1;
     }
 
-    if (!CCamera::InstallProcessHook())
+    if (!game::hooks::InstallCameraHook())
     {
         Log("failed to install GTA camera process hook!");
         return 1;

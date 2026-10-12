@@ -120,7 +120,6 @@ public:
     void SetPoolManaged(bool managed);
     float MoveTo(CVector position, float speed, CVector rotation = {-1000.0f, -1000.0f, -1000.0f}); // 0xA9BD0 (R5 movement setup; saco return value)
     void Detach();
-    static bool InstallRenderHook();
     static void ProcessAll(float elapsedSeconds);
     static void ConstructAllMaterialText();
 

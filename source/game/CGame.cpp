@@ -184,13 +184,13 @@ bool CGame::StartGame()
         return false;
 
     // base patches already ran before the frontend; install game hooks once
-    if (!CObject::InstallRenderHook() || !game::hooks::InstallRenderHooks())
+    if (!game::hooks::InstallRenderHooks())
         return false;
 
     int limit = 48;
     g_config.GetParam(CConfig::PARAM_FPS_LIMIT, limit);
     SetFrameLimiter(limit);
-    if (!game::patch::fps::install())
+    if (!game::hooks::InstallFrameLimiterHooks())
         return false;
 
     // resource streaming must wait until the first gameplay frame
@@ -523,7 +523,7 @@ void CGame::PlayCrimeReport(int crime, const CVector* position, int inVehicle, i
         return;
     if (!patch::nop(scannerPatch, original.size()))
         return;
-    if (!patch::call(pedCall, reinterpret_cast<const void*>(&CrimeReportPedHook)))
+    if (!game::hooks::InstallCrimeReportHook())
     {
         patch::write(scannerPatch, original.data(), original.size());
         return;

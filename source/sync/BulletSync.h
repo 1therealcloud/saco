@@ -14,7 +14,6 @@ namespace game::bullets
         void* entity = nullptr;
     };
 
-    bool Install();
     void Fire(CPed& ped, const Shot& shot, unsigned lagCompMode);
     CVector HitOffset(void* entity, CVector point, unsigned lagCompMode);
 

@@ -3,7 +3,6 @@
 #include "CVehicle.h"
 #include "game/Profiler.h"
 #include "game/patch/patch.h"
-#include "game/patch/hooks.h"
 
 #include "game/ModelInfo.h"
 #include "game/Scripting.h"
@@ -12,8 +11,6 @@
 
 namespace game::patch::vehicle::detail
 {
-    UsesSirenFn originalUsesSiren = nullptr;
-    VehicleAudioFn originalVehicleAudio = nullptr;
     bool nextVehicleHasSiren = false;
     bool detachingTrailer = false;
 }
@@ -62,10 +59,6 @@ namespace
     void* g_lastTrainVehicle = nullptr;
 
     CVehicle* VehicleWrapperFromPointer(void* vehicle);
-
-    constexpr std::array<std::uintptr_t, 5> TRAILER_VTABLE_SLOTS = {
-        0x871218, 0x871778, 0x8718D0, 0x871A40, 0x871BE0,
-    };
 
     template <class T>
     T Read(const void* data, std::size_t offset)
@@ -1192,29 +1185,6 @@ void CVehicle::EnableEngine(BOOL enable)
         Write<unsigned char>(m_pGameVehicle, 0x428, static_cast<unsigned char>(flags | 0x10));
     if (GetSubtype() == 3 && HasDriver() && !DriverIsPlayerPed())
         m_bEngineState = TRUE;
-}
-
-namespace game::patch::vehicle
-{
-    bool install()
-    {
-        ZoneScoped;
-        static bool installed = false;
-        if (installed)
-            return true;
-
-        if (!hook::install(0x6D8470, reinterpret_cast<detail::UsesSirenFn>(&UsesSirenHook), &detail::originalUsesSiren))
-            return false;
-        if (!hook::install(0x502280, reinterpret_cast<detail::VehicleAudioFn>(&VehicleAudioHook), &detail::originalVehicleAudio))
-            return false;
-        const auto replacement = reinterpret_cast<std::uintptr_t>(&TrailerProcessHook);
-        for (const auto slot : TRAILER_VTABLE_SLOTS)
-            if (!::patch::write(slot, replacement))
-                return false;
-
-        installed = true;
-        return true;
-    }
 }
 
 std::uint32_t CVehicle::GetNativeRef(void* vehicle)

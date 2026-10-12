@@ -22,7 +22,6 @@ namespace game::patch::modelinfo
 
         alignas(16) std::array<void*, kSignedSlotCount> g_signedEntries{};
         bool g_signedInstalled = false;
-        std::uint32_t g_guardDestination{};
 
         struct ModelInfoReference
         {
@@ -122,16 +121,6 @@ namespace game::patch::modelinfo
             return result;
         }
 
-        bool guard_detour(std::array<std::uint8_t, 6>& result)
-        {
-            // ff 25 [ptr] jumps through our permanently allocated handler pointer
-            g_guardDestination = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&NegativeModelGuardHook));
-            const auto operand = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&g_guardDestination));
-            result = {0xFF, 0x25, 0, 0, 0, 0};
-            std::memcpy(result.data() + 2, &operand, sizeof(operand));
-            return true;
-        }
-
         struct SignedRelocationPlan
         {
             bool required{};
@@ -154,7 +143,7 @@ namespace game::patch::modelinfo
             }
 
             if (!readable_span(activeTable, kOriginalSlotCount * sizeof(void*)) || !::patch::expect(kNegativeGuard, kGuardOriginal.data(), kGuardOriginal.size()) ||
-                !guard_detour(plan.guardDetour))
+                !game::hooks::BuildModelGuardDetour(plan.guardDetour))
             {
                 Log("[game::patch::modelinfo] original table or streaming guard differs from gta 1.0 us");
                 return false;

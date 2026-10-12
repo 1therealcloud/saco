@@ -1,6 +1,7 @@
 #include <stdafx.h>
 
 #include "InputHandler.h"
+#include "game/patch/hooks.h"
 
 #include "main.h"
 
@@ -27,11 +28,7 @@ namespace game::inputhandler
     namespace
     {
         constexpr uintptr_t kGtaWindow = 0xC97C1C;
-        constexpr uintptr_t kReadKeyboard = 0x531140;
         constexpr char kWindowTitle[] = "GTA:SA:MP";
-
-        WNDPROC g_originalWndProc = nullptr;
-        HWND g_window = nullptr;
 
         bool g_cursorWasHidden = false;
         bool g_inputOutsideClick = false;
@@ -39,22 +36,6 @@ namespace game::inputhandler
         bool g_installed = false;
         std::array<bool, 256> g_consumedKeys{};
         std::array<bool, 256> g_pendingGameKeys{};
-        using ReadKeyboard = void(__thiscall*)(void*);
-        ReadKeyboard g_readKeyboard = nullptr;
-
-        void __fastcall ReadKeyboardHook(void* manager, void*)
-        {
-            for (const uintptr_t address : {0xB72CB0u, 0xB72F20u, 0xB73190u})
-                filter_game_keyboard(reinterpret_cast<std::uint16_t*>(address));
-            g_pendingGameKeys.fill(false);
-            g_readKeyboard(manager);
-        }
-
-        bool InstallKeyboardHook()
-        {
-            return hook::install(kReadKeyboard, reinterpret_cast<ReadKeyboard>(&ReadKeyboardHook), &g_readKeyboard);
-        }
-
         bool IsInputAvailable()
         {
             return g_input != nullptr;
@@ -110,39 +91,6 @@ namespace game::inputhandler
             const int y = GET_Y_LPARAM(lParam);
 
             return x < rect.left || x > rect.right || y < rect.top || y > rect.bottom;
-        }
-
-        LRESULT CallOriginal(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
-        {
-            if (!g_originalWndProc)
-                return DefWindowProcA(window, message, wParam, lParam);
-
-            return CallWindowProcA(g_originalWndProc, window, message, wParam, lParam);
-        }
-
-        bool InstallWndProc(HWND window)
-        {
-            ZoneScoped;
-            if (!window)
-                return false;
-
-            const auto current = reinterpret_cast<WNDPROC>(GetWindowLongA(window, GWL_WNDPROC));
-            if (!current)
-                return false;
-
-            // another subclass can still call us; leave its wndproc chain intact
-            if (g_window)
-                return g_window == window && g_originalWndProc;
-            if (current == wnd_proc)
-                return false;
-
-            SetLastError(ERROR_SUCCESS);
-            if (!SetWindowLongA(window, GWL_WNDPROC, reinterpret_cast<LONG>(wnd_proc)) && GetLastError() != ERROR_SUCCESS)
-                return false;
-
-            g_originalWndProc = current;
-            g_window = window;
-            return true;
         }
 
         bool ClassSelectionActive()
@@ -278,6 +226,11 @@ namespace game::inputhandler
             }
             return false;
         }
+    }
+
+    void FinishKeyboardFilter()
+    {
+        g_pendingGameKeys.fill(false);
     }
 
     bool game_input_blocked()
@@ -422,7 +375,7 @@ namespace game::inputhandler
         return true;
     }
 
-    LRESULT CALLBACK wnd_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
+    LRESULT ProcessWindowMessage(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
     {
         ZoneScoped;
         if (message == WM_KILLFOCUS || (message == WM_ACTIVATEAPP && wParam == FALSE))
@@ -439,7 +392,7 @@ namespace game::inputhandler
                 render::SetCursorMode(0, true);
 
             cgui::ime::MsgProc(window, message, wParam, lParam);
-            return CallOriginal(window, message, wParam, lParam);
+            return game::hooks::ForwardWindowMessage(window, message, wParam, lParam);
         }
         if (cgui::ime::MsgProc(window, message, wParam, lParam))
             return 0;
@@ -584,7 +537,7 @@ namespace game::inputhandler
                 break;
         }
 
-        return CallOriginal(window, message, wParam, lParam);
+        return game::hooks::ForwardWindowMessage(window, message, wParam, lParam);
     }
 
     void filter_game_keyboard(std::uint16_t* state)
@@ -623,7 +576,7 @@ namespace game::inputhandler
             window = *reinterpret_cast<HWND*>(kGtaWindow);
         if (!window)
             return false;
-        if (!g_readKeyboard && !InstallKeyboardHook())
+        if (!game::hooks::InstallKeyboardHook())
             return false;
 
         SetLastError(ERROR_SUCCESS);
@@ -635,7 +588,7 @@ namespace game::inputhandler
         if (!SetClassLongA(window, GCL_STYLE, classStyle | CS_DBLCLKS) && GetLastError() != ERROR_SUCCESS)
             return false;
 
-        if (!InstallWndProc(window))
+        if (!game::hooks::InstallWindowHook(window))
             return false;
 
         SetWindowTextA(window, kWindowTitle);
@@ -644,35 +597,17 @@ namespace game::inputhandler
         return true;
     }
 
-    void rehook()
-    {
-        if (g_installed && g_window)
-            InstallWndProc(g_window);
-    }
-
     void uninstall()
     {
         ZoneScoped;
-        if (g_readKeyboard)
-        {
-            MH_DisableHook(reinterpret_cast<void*>(kReadKeyboard));
-            MH_RemoveHook(reinterpret_cast<void*>(kReadKeyboard));
-            g_readKeyboard = nullptr;
-        }
+        game::hooks::RemoveKeyboardHook();
         g_consumedKeys.fill(false);
         g_pendingGameKeys.fill(false);
-        if (g_window && g_originalWndProc)
-        {
-            const auto current = reinterpret_cast<WNDPROC>(GetWindowLongA(g_window, GWL_WNDPROC));
-            if (current == wnd_proc)
-                SetWindowLongA(g_window, GWL_WNDPROC, reinterpret_cast<LONG>(g_originalWndProc));
-        }
-
-        g_originalWndProc = nullptr;
-        g_window = nullptr;
+        game::hooks::RemoveWindowHook();
         g_cursorWasHidden = false;
         g_inputOutsideClick = false;
         g_scoreboardOutsideClick = false;
+
         g_installed = false;
     }
 

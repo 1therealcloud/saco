@@ -18,7 +18,6 @@ public:
     static CVector GetPosition();
     static bool HasLineOfSight(const CVector& position);
     static CVector TraceTarget(const CVector& origin, const CVector& target, bool vehicles, bool objects);
-    static bool InstallProcessHook(); // gta CCamera::Process call at 0x53C104
 
     void Fade(BOOL in);                                           // 0x9D440
     void GetMatrix(CMatrix* matrix) const;                        // 0x9D460

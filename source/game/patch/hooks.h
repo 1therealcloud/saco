@@ -38,6 +38,30 @@ bool __cdecl CameraToIgnoreObjectHook(void* entity);
 
 namespace game::hooks
 {
+
+    bool InstallGameLoopHook();
+    bool InstallShutdownHook();
+    bool InstallCameraHook();
+    bool InstallMenuTextHook();
+    bool InstallBulletHooks();
+    bool InstallBuildingRemovalHooks();
+    bool InstallRenderWareHooks();
+    bool InstallVehicleHooks();
+    bool InstallKeyboardHook();
+    void RemoveKeyboardHook();
+    LRESULT CALLBACK WindowProcHook(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
+
+    bool InstallPlayerHooks();
+    bool InstallHudHooks();
+    bool InstallFrameLimiterHooks();
+    bool InstallPickupHook();
+    bool InstallScmHooks();
+    bool InstallCrimeReportHook();
+    bool BuildModelGuardDetour(std::array<std::uint8_t, 6>& result);
+    bool InstallWindowHook(HWND window);
+    void RemoveWindowHook();
+    LRESULT ForwardWindowMessage(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
+
     bool InstallRenderHooks();
     bool InstallVehicleTransitionHooks();
     bool InstallVehicleControlHooks();

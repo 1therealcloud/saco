@@ -4,7 +4,6 @@
 
 namespace game::patch::fps
 {
-    bool install();
 
     void set_limit(std::uint32_t fps);
     std::uint32_t get_limit();

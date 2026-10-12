@@ -1,7 +1,6 @@
 #include <stdafx.h>
 
 #include "HudScaleFix.h"
-#include "hooks.h"
 
 #include <atomic>
 #include <cmath>
@@ -18,9 +17,6 @@ namespace game::patch::hudscalefix
         constexpr std::uintptr_t kRadarWidth = 0x00866B74;
         constexpr std::uintptr_t kRadarHeight = 0x00866B78;
 
-        constexpr std::uintptr_t kDrawRadar = 0x0058A330;
-        constexpr std::uintptr_t kDrawCrossHairsCall = 0x0058FBBF;
-
         constexpr float kMinAspectRatio = 1.6f;
         constexpr float kFixedScaleX = 0.00222f;
         constexpr float kFixedScaleY = 0.00242f;
@@ -28,7 +24,6 @@ namespace game::patch::hudscalefix
         constexpr float kFixedRadarHeight = 96.0f;
 
         std::atomic_bool g_enabled{true};
-        DrawRadarFn g_drawRadar = nullptr;
 
         float& RefFloat(std::uintptr_t address)
         {
@@ -94,30 +89,6 @@ namespace game::patch::hudscalefix
     ScopedScaleFix::~ScopedScaleFix()
     {
         detail::Restore(m_state);
-    }
-
-    bool install()
-    {
-        ZoneScoped;
-        static bool installed = false;
-        if (installed)
-            return false;
-
-        // the scoped draw wrappers update these constants every frame
-        DWORD oldProtect{};
-        if (!VirtualProtect(reinterpret_cast<void*>(kHudScaleX), sizeof(float) * 2, PAGE_READWRITE, &oldProtect) ||
-            !VirtualProtect(reinterpret_cast<void*>(kRadarWidth), sizeof(float) * 2, PAGE_READWRITE, &oldProtect))
-            return false;
-
-        // vital stats redirects here too while TAB is held
-        if (!hook::install(kDrawRadar, &DrawRadarHook, &g_drawRadar))
-            return false;
-
-        if (!::patch::call(kDrawCrossHairsCall, reinterpret_cast<const void*>(&DrawCrossHairsHook)))
-            return false;
-
-        installed = true;
-        return true;
     }
 
     void set_enabled(bool enabled)

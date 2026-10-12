@@ -4,7 +4,6 @@ namespace game::patch::hudscalefix
 {
     // Installs a radar entry hook and a scoped crosshair draw wrapper.
     // The hooks are always installed; set_enabled() controls whether scaling is applied.
-    bool install();
 
     void set_enabled(bool enabled);
     bool is_enabled();
