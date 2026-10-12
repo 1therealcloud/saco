@@ -1,5 +1,4 @@
 #include <stdafx.h>
-#include "game/Profiler.h"
 
 #include "CObjectEdit.h"
 
@@ -691,7 +690,7 @@ BOOL CObjectEdit::MsgProc(int uMsg, int wParam, int lParam)
 void CObjectEdit::Render()
 {
     ZoneScoped;
-    PROFILE_SCOPE(ObjectEdit);
+
     m_bRenderedThisFrame = FALSE;
 
     if (!m_bEnabled || g_runtime[this].paused)

@@ -6,7 +6,6 @@
 
 #include "CFonts.h"
 #include "gui/CGui.h"
-#include "game/Profiler.h"
 
 #if defined(SACO_BUILD)
 #   include "config/CConfig.h"
@@ -656,8 +655,7 @@ int CFont::BuildVertices(const char* text, int count, RECT rect, DWORD format, D
                                                   useColorTags ? 1u : 0u};
     key.append(reinterpret_cast<const char*>(properties.data()), sizeof(properties));
     auto found = m_textCache.find(key);
-    PROFILE_ADD(CacheHits, found != m_textCache.end());
-    PROFILE_ADD(CacheMisses, found == m_textCache.end());
+
     if (found == m_textCache.end())
     {
         CachedText entry;
@@ -1114,8 +1112,7 @@ int CFont::SubmitVertices(const std::vector<Vertex>& vertices, const RECT* clipR
     {
         const UINT count = static_cast<UINT>(std::min<std::size_t>(16384, vertices.size() - begin));
         result = m_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, static_cast<INT>(firstVertex + begin), 0, count, 0, count / 2);
-        PROFILE_ADD(FontDraws, 1);
-        PROFILE_ADD(FontVertices, count);
+
     }
 
     RestoreState(state);

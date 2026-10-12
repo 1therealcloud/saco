@@ -1,5 +1,4 @@
 #include <stdafx.h>
-#include "game/Profiler.h"
 #include "game/entities/CVehicle.h"
 #include "game/patch/patch.h"
 
@@ -237,7 +236,7 @@ void* __fastcall ShadowHook(void* manager, void*, void* ped)
 void __fastcall ProcessControlHook(void* ped, void*)
 {
     ZoneScoped;
-    PROFILE_SCOPE(PedControl);
+
     const int slot = FindSlot(ped);
     auto& current = *reinterpret_cast<std::uint8_t*>(0xB7CD74);
     if (!ped || !slot || current != 0)
@@ -505,7 +504,7 @@ __declspec(naked) void PickupCollectedHook()
 void __cdecl WorldRenderHook()
 {
     ZoneScoped;
-    PROFILE_SCOPE(World);
+
     game::hooks::g_world();
     render::RenderWorldObjects();
 }
@@ -513,7 +512,7 @@ void __cdecl WorldRenderHook()
 void __cdecl FadingRenderHook()
 {
     ZoneScoped;
-    PROFILE_SCOPE(Fading);
+
     game::hooks::g_fading();
     render::RenderFadingObjects();
 }

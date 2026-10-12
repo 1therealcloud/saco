@@ -1,5 +1,4 @@
 #include <stdafx.h>
-#include "game/Profiler.h"
 
 #include "CGui.h"
 #include "ime.h"
@@ -635,15 +634,13 @@ namespace cgui
                         g_vertexBuffer->Unlock();
                         g_device->SetStreamSource(0, g_vertexBuffer, 0, sizeof(Vertex));
                         g_device->DrawPrimitive(D3DPT_TRIANGLELIST, static_cast<UINT>(g_vertexBufferOffset), static_cast<UINT>(size / 3));
-                        PROFILE_ADD(GuiDraws, 1);
-                        PROFILE_ADD(GuiVertices, size);
+
                         g_vertexBufferOffset += size;
                         continue;
                     }
                 }
                 g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, static_cast<UINT>(size / 3), g_pendingVertices.data() + first, sizeof(Vertex));
-                PROFILE_ADD(GuiDraws, 1);
-                PROFILE_ADD(GuiVertices, size);
+
             }
             if (g_pendingClipped)
                 g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
@@ -2803,7 +2800,7 @@ namespace cgui
     void Render()
     {
         ZoneScoped;
-        PROFILE_SCOPE(Controls);
+
         if (!g_initialized || !g_device)
             return;
         if (g_fontDirty)

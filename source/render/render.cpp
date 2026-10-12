@@ -1,5 +1,4 @@
 #include <stdafx.h>
-#include "game/Profiler.h"
 #include "pools/CPlayerPool.h"
 
 #include "game/CGame.h"
@@ -413,7 +412,7 @@ namespace render
     void RenderNativeTextDraws()
     {
         ZoneScoped;
-        PROFILE_SCOPE(TextDraws);
+
         auto* pools = g_netGame ? g_netGame->m_pPools : nullptr;
         auto* textDrawPool = pools ? pools->m_pTextDraw : nullptr;
 
@@ -440,9 +439,6 @@ namespace render
     void RenderUi(IDirect3DDevice9* device)
     {
         ZoneScoped;
-#if defined(_DEBUG)
-        profiler::Scope uiProfile(profiler::Section::Ui);
-#endif
         CGui::BeginFrame();
         if (g_shuttingDown)
             return;
@@ -465,7 +461,6 @@ namespace render
         auto* playerPool = pools ? pools->m_pPlayer : nullptr;
 
         {
-            PROFILE_SCOPE(Materials);
             if (objectPool)
                 objectPool->ConstructMaterials();
             CObject::ConstructAllMaterialText();
@@ -474,10 +469,7 @@ namespace render
         }
         // model previews own a temporary RW camera; the game's camera has ended before Present
         if (textDrawPool)
-        {
-            PROFILE_SCOPE(Previews);
             textDrawPool->LoadPreviews();
-        }
 
         // CMenuManager::m_bMenuActive: don't draw chat over the pause menu.
         if (CGame::IsPaused())
@@ -492,18 +484,13 @@ namespace render
         const bool f5Pressed = (::GetAsyncKeyState(VK_F5) & 0x8000) != 0;
         const bool f10Pressed = (::GetAsyncKeyState(VK_F10) & 0x8000) != 0;
 
-#if defined(_DEBUG)
-        const bool profilerVisible = profiler::Visible();
-#else
-        constexpr bool profilerVisible = false;
-#endif
-        const bool netStatsVisible = !profilerVisible && g_netStats && f5Pressed;
-        const bool srvNetStatsActive = !profilerVisible && !f5Pressed && g_srvNetStats && f10Pressed;
+        const bool netStatsVisible = g_netStats && f5Pressed;
+        const bool srvNetStatsActive = !f5Pressed && g_srvNetStats && f10Pressed;
 
         if (g_srvNetStats)
             g_srvNetStats->SetActive(srvNetStatsActive);
 
-        const bool hideChatForStats = profilerVisible || netStatsVisible || srvNetStatsActive;
+        const bool hideChatForStats = netStatsVisible || srvNetStatsActive;
 
         if (hideChatForStats)
         {
@@ -515,10 +502,7 @@ namespace render
             g_chat->UpdateScrollbarVisibility(g_input->IsEnabled());
         }
 
-        {
-            PROFILE_SCOPE(Tags);
-            DrawPlayerTags();
-        }
+        DrawPlayerTags();
         if (g_chatBubble)
             g_chatBubble->Draw();
         DrawVehicleDebugLabels();
@@ -572,8 +556,6 @@ namespace render
         RenderCursor(device);
 #if defined(_DEBUG)
         g_fonts->DrawFps(g_fps, g_frameTimeMs);
-        uiProfile.Stop();
-        profiler::Draw(device);
 #endif // _DEBUG
         device->EndScene();
         ProcessScreenshot(device);

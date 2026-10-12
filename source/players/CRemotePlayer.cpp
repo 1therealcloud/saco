@@ -1,5 +1,4 @@
 #include <stdafx.h>
-#include "game/Profiler.h"
 #include "main.h"
 #include "net/CNetGame.h"
 #include "players/PlayerColors.h"
@@ -23,7 +22,6 @@
 
 namespace
 {
-
     struct RuntimeState
     {
         D3DCOLOR color = 0xFFFFFFFF;
@@ -1048,7 +1046,7 @@ void CRemotePlayer::Update(Synchronization::BulletData* data)
 void CRemotePlayer::Process()
 {
     ZoneScoped;
-    PROFILE_SCOPE(RemotePlayers);
+
     m_pVehicle = m_nVehicleId == INVALID_ID ? nullptr : ResolveVehicle(m_nVehicleId);
     ProcessRemoteMarker(*this);
     if (!m_pPed || !m_pPed->HasNativePed())

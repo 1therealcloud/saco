@@ -1,5 +1,4 @@
 #include <stdafx.h>
-#include "game/Profiler.h"
 #include "main.h"
 #include "net/CNetGame.h"
 #include "players/PlayerColors.h"
@@ -1771,7 +1770,7 @@ void CLocalPlayer::SendIncarData()
 void CLocalPlayer::Process()
 {
     ZoneScoped;
-    PROFILE_SCOPE(LocalPlayer);
+
     if (auto* game = g_game.get())
         m_pPed = game->GetPlayerPed();
     if (!m_pPed || !m_pPed->HasNativePed())

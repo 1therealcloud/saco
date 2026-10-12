@@ -1,5 +1,4 @@
 #include <stdafx.h>
-#include "game/Profiler.h"
 
 #include "main.h"
 
@@ -169,7 +168,7 @@ void CPickupPool::SendNotification(int id)
 void CPickupPool::Process()
 {
     ZoneScoped;
-    PROFILE_SCOPE(Pickups);
+
     if (m_nCount <= 0)
         return;
 

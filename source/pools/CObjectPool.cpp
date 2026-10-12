@@ -1,5 +1,4 @@
 #include <stdafx.h>
-#include "game/Profiler.h"
 
 #include "main.h"
 
@@ -164,7 +163,7 @@ void CObjectPool::Process()
 void CObjectPool::Process(float elapsedSeconds)
 {
     ZoneScoped;
-    PROFILE_SCOPE(Objects);
+
     if (!std::isfinite(elapsedSeconds) || elapsedSeconds < 0)
         return;
     for (int id = 0; id <= m_nLargestId && id < MAX_OBJECTS; ++id)

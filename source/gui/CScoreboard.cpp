@@ -1,5 +1,4 @@
 #include <stdafx.h>
-#include "game/Profiler.h"
 
 #include "CScoreboard.h"
 
@@ -255,7 +254,7 @@ void CScoreboard::SendNotification()
 void CScoreboard::UpdateList()
 {
     ZoneScoped;
-    PROFILE_SCOPE(Scoreboard);
+
     if (!m_bIsEnabled || !m_pDialog || !m_pListbox)
         return;
 

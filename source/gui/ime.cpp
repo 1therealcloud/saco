@@ -1,5 +1,4 @@
 #include <stdafx.h>
-#include "game/Profiler.h"
 
 #include "ime.h"
 #include "CGui.h"
@@ -414,7 +413,7 @@ namespace cgui::ime
             device->SetTextureStageState(0, D3DTSS_ALPHAOP, texture ? D3DTOP_MODULATE : D3DTOP_SELECTARG1);
             device->SetTextureStageState(0, D3DTSS_ALPHAARG1, texture ? D3DTA_TEXTURE : D3DTA_DIFFUSE);
             device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, vertices, sizeof(Vertex));
-            PROFILE_ADD(ImeDraws, 1);
+
         }
 
         RECT IndicatorRect()
@@ -689,7 +688,7 @@ namespace cgui::ime
     void Render(IDirect3DDevice9* device, const char* face, int height, int weight)
     {
         ZoneScoped;
-        PROFILE_SCOPE(Ime);
+
         RefreshFocus();
         if (!device || !g_edit || !g_enabled || !g_attached || !g_edit->IsVisible() || !g_edit->IsEnabled() || (g_edit->GetDialog() && !g_edit->GetDialog()->IsVisible()))
             return;

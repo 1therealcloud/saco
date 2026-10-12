@@ -66,7 +66,6 @@ add_library(samp SHARED
     source/game/patch/pools.cpp
     source/game/patch/streaming.cpp
     source/game/PlayerSlots.cpp
-    source/game/Profiler.cpp
     source/game/render/CLicensePlate.cpp
     source/game/render/CObjectMaterialText.cpp
     source/game/render/model_preview.cpp

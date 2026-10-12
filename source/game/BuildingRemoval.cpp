@@ -1,12 +1,10 @@
 #include <stdafx.h>
-#include "game/Profiler.h"
 #include "BuildingRemoval.h"
 #include "utils/math/CVector.h"
 #include <cmath>
 
 namespace BuildingRemoval
 {
-
     namespace
     {
         struct Removal
@@ -208,7 +206,7 @@ namespace BuildingRemoval
     void Process()
     {
         ZoneScoped;
-        PROFILE_SCOPE(Removal);
+
         for (const auto& key : pending)
             if (key.Alive())
             {

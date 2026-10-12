@@ -1,5 +1,4 @@
 #include <stdafx.h>
-#include "game/Profiler.h"
 
 #include "CVehiclePool.h"
 #include "net/CNetGame.h"
@@ -15,7 +14,6 @@
 
 namespace
 {
-
     constexpr int TRAIN_STREAK_LOCO = 537;
     constexpr int TRAIN_FREIGHT_LOCO = 538;
     constexpr int TRAIN_STREAK = 569;
@@ -776,7 +774,7 @@ void CVehiclePool::SendDestroyNotification(ID id)
 void CVehiclePool::ProcessWaitingList()
 {
     ZoneScoped;
-    PROFILE_SCOPE(VehicleWaiting);
+
     // samp.dll + 0x1F300
     const DWORD now = ::GetTickCount();
     auto& attempts = g_failedSpawnAttempts[this];
@@ -816,7 +814,7 @@ void CVehiclePool::ProcessWaitingList()
 void CVehiclePool::Process()
 {
     ZoneScoped;
-    PROFILE_SCOPE(Vehicles);
+
     // samp.dll + 0x1F3C0
     const DWORD now = ::GetTickCount();
     int unoccupiedSyncsSent = 0;
@@ -895,7 +893,7 @@ void CVehiclePool::Process()
         {
             // Throttle eligibility separately from sends: a rejection must not rescan all players every frame.
             m_lastUnoccupiedCheck[id] = now;
-            PROFILE_SCOPE(VehicleUnoccupied);
+
             if (localPlayer->ProcessUnoccupiedSync(static_cast<ID>(id), vehicle, distance))
             {
                 m_lastUndrivenProcessTick[id] = now;

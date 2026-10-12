@@ -1,5 +1,4 @@
 #include <stdafx.h>
-#include "game/Profiler.h"
 #include "game/CGame.h"
 
 #include "CChat.h"
@@ -561,7 +560,7 @@ void CChat::DrawEntry(const ChatEntry& entry, long& left, long top, long bottom)
 void CChat::Draw()
 {
     ZoneScoped;
-    PROFILE_SCOPE(Chat);
+
     auto& appearance = g_appearances[this];
     appearance.SetVisible(m_nMode != DISPLAY_MODE_OFF);
     ui::OpacityScope fade(appearance.GetOpacity());

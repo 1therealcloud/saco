@@ -1,5 +1,4 @@
 #include <stdafx.h>
-#include "game/Profiler.h"
 
 #include <shlobj.h> // winapi
 
@@ -156,7 +155,7 @@ static bool InitializeGameplay(IDirect3DDevice9* device)
 void Process()
 {
     ZoneScoped;
-    PROFILE_SCOPE(Process);
+
     if (!CGame::IsPlaying())
         return;
 

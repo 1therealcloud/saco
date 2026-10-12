@@ -1,5 +1,4 @@
 #include <stdafx.h>
-#include "game/Profiler.h"
 
 #include "main.h"
 
@@ -114,7 +113,7 @@ BOOL CLabelPool::Delete(ID id)
 void CLabelPool::Draw()
 {
     ZoneScoped;
-    PROFILE_SCOPE(Labels);
+
     if (!g_label)
         return;
 

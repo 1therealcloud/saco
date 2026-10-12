@@ -1,7 +1,6 @@
 #include <stdafx.h>
 
 #include "CVehicle.h"
-#include "game/Profiler.h"
 #include "game/patch/patch.h"
 
 #include "game/ModelInfo.h"
@@ -455,7 +454,6 @@ void CVehicle::SetInvulnerable(BOOL invulnerable)
     if (!HasNativeVehicle() || Read<std::uintptr_t>(m_pGameVehicle, 0) == 0x863C40)
         return;
 
-    PROFILE_SCOPE(VehicleProofs);
     constexpr std::uint32_t proofMask = (1u << 18) | (1u << 19) | (1u << 20) | (1u << 21) | (1u << 23);
     // 02AC only changes these five CPhysical flags; avoid SCM dispatch in the pool's per-frame path.
     const auto physicalFlags = Read<std::uint32_t>(m_pGameVehicle, 0x40);
@@ -652,7 +650,7 @@ void CVehicle::ProcessMarkers()
 void CVehicle::ProcessMarkers(float distance)
 {
     ZoneScoped;
-    PROFILE_SCOPE(VehicleMarkers);
+
     if (!HasNativeVehicle())
         return;
 

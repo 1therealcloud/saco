@@ -1,5 +1,4 @@
 #include <stdafx.h>
-#include "game/Profiler.h"
 
 #include "main.h"
 
@@ -119,7 +118,7 @@ void CChatBubble::Add(ID player, const char* text, D3DCOLOR color, float drawDis
 void CChatBubble::Draw()
 {
     ZoneScoped;
-    PROFILE_SCOPE(Bubbles);
+
     if (!g_label)
         return;
 

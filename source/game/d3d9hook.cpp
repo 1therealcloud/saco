@@ -1,5 +1,4 @@
 #include <stdafx.h>
-#include "game/Profiler.h"
 
 #include "d3d9hook.h"
 #include "render/render.h"
@@ -31,22 +30,13 @@ namespace d3d9hook
         HRESULT WINAPI present(IDirect3DDevice9* device, const RECT* source, const RECT* destination, HWND window, const RGNDATA* dirty)
         {
             ZoneScoped;
-#if defined(_DEBUG)
-            if (device == g_device)
-                profiler::BeginFrame();
-#endif
             if (device == g_device && !g_deviceLost)
                 Frame(device);
             HRESULT result;
             {
-                PROFILE_SCOPE(Present);
                 ZoneNamedN(tracyPresent, "D3D9 Present / wait", true);
                 result = g_present(device, source, destination, window, dirty);
             }
-#if defined(_DEBUG)
-            if (device == g_device)
-                profiler::EndFrame();
-#endif
             if (device == g_device)
             {
                 static HRESULT previous = D3D_OK;
