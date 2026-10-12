@@ -163,6 +163,9 @@ public:
     BOOL CopyAppearanceFrom(const CPed& source);
     void* GetFloor() const; // 0xACA10
 
+    void StartJetpack();
+    void StopJetpack();
+    bool IsInJetpackMode() const;
     void HandsUp();
     BOOL DoesHandsUp() const;
     void HoldObject(int model);

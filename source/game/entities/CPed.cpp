@@ -730,6 +730,40 @@ void* CPed::GetFloor() const
     return entity;
 }
 
+void CPed::StartJetpack()
+{
+    if (!HasCurrentNativePed() || IsInVehicle() || IsInJetpackMode())
+        return;
+    m_pendingAnimation.active = false;
+    CMatrix matrix = CMatrix::Unity();
+    GetMatrix(&matrix);
+    auto& current = *reinterpret_cast<std::uint8_t*>(0xB7CD74);
+    const auto saved = current;
+    current = m_nPlayerNumber;
+    Teleport(matrix.GetPosition());
+    reinterpret_cast<void(__cdecl*)()>(0x439600)();
+    current = saved;
+}
+
+bool CPed::IsInJetpackMode() const
+{
+    if (!HasCurrentNativePed() || InVehicle(m_pGamePed))
+        return false;
+    auto* intelligence = Read<void*>(m_pGamePed, 0x47C);
+    auto* task = Read<void*>(intelligence, 0x10);
+    return task && Read<std::uintptr_t>(task, 0) == 0x8705C4;
+}
+
+void CPed::StopJetpack()
+{
+    if (!IsInJetpackMode())
+        return;
+    auto* intelligence = Read<void*>(m_pGamePed, 0x47C);
+    auto* task = Read<void*>(intelligence, 0x10);
+    reinterpret_cast<void(__thiscall*)(void*, int)>(0x6801D0)(task, 1);
+    Write<void*>(intelligence, 0x10, nullptr);
+}
+
 void CPed::HandsUp()
 {
     if (HasCurrentNativePed() && !InVehicle(m_pGamePed) && DoesExist())

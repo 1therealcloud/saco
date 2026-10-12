@@ -433,6 +433,12 @@ void CRemotePlayer::ProcessSpecialAction()
     if (!m_pPed || m_nState != PLAYER_STATE_ONFOOT)
         return;
 
+    if (m_nSpecialAction != SPECIAL_ACTION_USEJETPACK)
+    {
+        m_pPed->StopJetpack();
+        m_bHasJetpack = FALSE;
+    }
+
     switch (m_nSpecialAction)
     {
         case SPECIAL_ACTION_NONE:
@@ -448,7 +454,8 @@ void CRemotePlayer::ProcessSpecialAction()
             break;
 
         case SPECIAL_ACTION_USEJETPACK:
-            m_bHasJetpack = TRUE;
+            m_pPed->StartJetpack();
+            m_bHasJetpack = m_pPed->IsInJetpackMode();
             break;
 
         case SPECIAL_ACTION_DANCE1:

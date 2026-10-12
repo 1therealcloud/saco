@@ -325,6 +325,7 @@ void CLocalPlayer::SetSpecialAction(char id)
     switch (static_cast<unsigned char>(id))
     {
         case SPECIAL_ACTION_NONE:
+            m_pPed->StopJetpack();
             if (m_pPed->IsHoldingStuff())
                 m_pPed->DropStuff();
             if (m_pPed->DoesDancing())
@@ -333,6 +334,9 @@ void CLocalPlayer::SetSpecialAction(char id)
                 m_pPed->EnableCellphone(FALSE);
             if (m_pPed->DoesUrinating())
                 m_pPed->StopUrinating();
+            break;
+        case SPECIAL_ACTION_USEJETPACK:
+            m_pPed->StartJetpack();
             break;
         case SPECIAL_ACTION_DANCE1:
         case SPECIAL_ACTION_DANCE2:
@@ -381,6 +385,8 @@ char CLocalPlayer::GetSpecialAction()
         return SPECIAL_ACTION_ENTER_VEHICLE;
     if (m_pPed->HasVehicleExitTask())
         return SPECIAL_ACTION_EXIT_VEHICLE;
+    if (m_pPed->IsInJetpackMode())
+        return SPECIAL_ACTION_USEJETPACK;
     if (m_pPed->DoesDancing())
         return static_cast<char>(SPECIAL_ACTION_DANCE1 + std::clamp(m_pPed->m_nDanceStyle, 0u, 3u));
     if (m_pPed->DoesHandsUp())
