@@ -58,6 +58,7 @@ namespace game::patch::streaming
 
         std::uint32_t memory_limit()
         {
+            ZoneScoped;
             MEMORYSTATUSEX status{};
             status.dwLength = sizeof(status);
 
@@ -83,6 +84,7 @@ namespace game::patch::streaming
 
         bool apply_r5_bootstrap_patches()
         {
+            ZoneScoped;
             std::uint8_t byte{};
 
             if (!::patch::read(kStreamingInitImageList, &byte, sizeof(byte)))
@@ -120,6 +122,7 @@ namespace game::patch::streaming
 
         bool validate_scan_list()
         {
+            ZoneScoped;
             const auto oldBase = static_cast<std::uint32_t>(address::scanListBase);
 
             const auto oldBasePlus4 = oldBase + 4;
@@ -158,6 +161,7 @@ namespace game::patch::streaming
 
         bool relocate_scan_list()
         {
+            ZoneScoped;
             const auto newBase = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(g_scanList.data()));
 
             const auto newBasePlus4 = newBase + 4;
@@ -204,6 +208,7 @@ namespace game::patch::streaming
 
     bool install()
     {
+        ZoneScoped;
         const std::uint32_t limit = memory_limit();
 
         if (!limit)

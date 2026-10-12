@@ -8,6 +8,7 @@
 // read registry string
 static bool ReadRegistryString(HKEY key, const char* name, char* destination, DWORD capacity)
 {
+    ZoneScoped;
     char value[MAX_PATH + 1]{};
     DWORD size = sizeof(value);
     if (RegGetValueA(key, nullptr, name, RRF_RT_REG_SZ, nullptr, value, &size) != ERROR_SUCCESS || size > capacity)
@@ -26,6 +27,7 @@ static bool IsSpace(char c)
 // read argument
 static const char* ReadArgument(const char* line, char* string)
 {
+    ZoneScoped;
     while (IsSpace(*line))
         ++line;
 
@@ -55,6 +57,7 @@ static const char* ReadArgument(const char* line, char* string)
 // get argument from command line
 void CSettings::GetFromCommandLine(const char* line, char* string)
 {
+    ZoneScoped;
     if (!string)
         return;
 
@@ -67,6 +70,7 @@ void CSettings::GetFromCommandLine(const char* line, char* string)
 // get argument from quotes
 void CSettings::GetFromQuotes(const char* line, char* string)
 {
+    ZoneScoped;
     if (!string)
         return;
 
@@ -83,6 +87,7 @@ void CSettings::GetFromQuotes(const char* line, char* string)
 // wrapper
 void CSettings::Initialize()
 {
+    ZoneScoped;
     const char* line = GetCommandLineA();
 
     while (IsSpace(*line))
@@ -106,6 +111,7 @@ void CSettings::Initialize()
 // init
 void CSettings::Initialize(const char* arguments)
 {
+    ZoneScoped;
     *this = CSettings{};
     const char* line = arguments ? arguments : "";
     while (*line)

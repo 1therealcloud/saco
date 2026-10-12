@@ -66,6 +66,7 @@ namespace
 
     void SortPlayers(std::vector<CScoreboard::PlayerInfo>& players, CScoreboard::SortMode mode)
     {
+        ZoneScoped;
         if (mode == CScoreboard::SORT_NAME)
         {
             std::stable_sort(players.begin(), players.end(), [](const CScoreboard::PlayerInfo& left, const CScoreboard::PlayerInfo& right) {
@@ -90,6 +91,7 @@ CScoreboard::CScoreboard(IDirect3DDevice9* device)
       m_fIdColumnWidth(kIdColumnWidth), m_fScoreColumnWidth(kScoreColumnWidth), m_fNameColumnWidth(kNameColumnWidth), m_pDevice(device), m_pDialog(nullptr), m_pListbox(nullptr),
       m_nCurrentOffset(0), m_bIsSorted(SORT_NONE)
 {
+    ZoneScoped;
     int width = 0;
     int height = 0;
 
@@ -113,6 +115,7 @@ CScoreboard::CScoreboard(IDirect3DDevice9* device)
 
 CScoreboard::~CScoreboard()
 {
+    ZoneScoped;
     Close(true);
     if (m_pDialog)
     {
@@ -128,6 +131,7 @@ CScoreboard::~CScoreboard()
 
 void CScoreboard::Recalc()
 {
+    ZoneScoped;
     int width = 0;
     int height = 0;
 
@@ -154,6 +158,7 @@ void CScoreboard::Recalc()
 
 void CScoreboard::GetRect(RECT* rect) const
 {
+    ZoneScoped;
     if (!rect)
         return;
 
@@ -165,6 +170,7 @@ void CScoreboard::GetRect(RECT* rect) const
 
 void CScoreboard::Close(bool hideCursor)
 {
+    ZoneScoped;
     if (!m_bIsEnabled || !m_pDialog || !m_pListbox)
         return;
 
@@ -180,6 +186,7 @@ void CScoreboard::Close(bool hideCursor)
 
 void CScoreboard::ResetDialogControls(cgui::Dialog* dialog)
 {
+    ZoneScoped;
     if (m_pDialog && m_pListbox)
         m_pDialog->RemoveControl(LISTBOX_ID);
 
@@ -224,6 +231,7 @@ void CScoreboard::ResetDialogControls(cgui::Dialog* dialog)
 
 void CScoreboard::SendNotification()
 {
+    ZoneScoped;
     if (!m_bIsEnabled || !m_pDialog || !m_pListbox)
         return;
 
@@ -245,6 +253,7 @@ void CScoreboard::SendNotification()
 
 void CScoreboard::UpdateList()
 {
+    ZoneScoped;
     PROFILE_SCOPE(Scoreboard);
     if (!m_bIsEnabled || !m_pDialog || !m_pListbox)
         return;
@@ -359,6 +368,7 @@ void CScoreboard::UpdateList()
 
 void CScoreboard::Draw()
 {
+    ZoneScoped;
     if (!m_bIsEnabled)
         return;
 
@@ -371,6 +381,7 @@ void CScoreboard::Draw()
 
 void CScoreboard::Enable()
 {
+    ZoneScoped;
     if (m_bIsEnabled || !m_pDialog || !m_pListbox)
         return;
 
@@ -388,6 +399,7 @@ void CScoreboard::Enable()
 
 bool CScoreboard::MsgProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
+    ZoneScoped;
     if (!m_bIsEnabled || !m_pDialog)
         return false;
 
@@ -402,6 +414,7 @@ bool CScoreboard::MsgProc(HWND window, UINT message, WPARAM wParam, LPARAM lPara
 
 void CScoreboard::SetSortMode(SortMode mode)
 {
+    ZoneScoped;
     if (mode < SORT_NONE || mode > SORT_SCORE)
         mode = SORT_NONE;
 
@@ -414,6 +427,7 @@ void CScoreboard::SetSortMode(SortMode mode)
 
 CScoreboard::SortMode CScoreboard::GetSortMode() const
 {
+    ZoneScoped;
     switch (m_bIsSorted)
     {
         case SORT_NAME:
@@ -437,6 +451,7 @@ void CScoreboard::GuiEvent(unsigned int event, int controlId, cgui::Control*, vo
 
 void CScoreboard::DrawHeader()
 {
+    ZoneScoped;
     ui::OpacityScope fade(m_pDialog ? m_pDialog->GetOpacity() : 1.0f);
     CFonts* fonts = g_fonts.get();
     if (!fonts)

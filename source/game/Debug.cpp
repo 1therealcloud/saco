@@ -21,6 +21,7 @@ namespace Debug
 {
     bool Initialize()
     {
+        ZoneScoped;
         if (!g_settings.m_bDebugMode)
             return true;
 
@@ -62,6 +63,7 @@ namespace Debug
 
             bool ParseCall(const std::string& text, Call& call)
             {
+                ZoneScoped;
                 call = {};
                 const char* cursor = text.c_str();
                 SkipSpace(cursor);
@@ -103,6 +105,7 @@ namespace Debug
 
             bool SetPlayerPos(std::span<const double> arguments)
             {
+                ZoneScoped;
                 auto* ped = g_game ? g_game->GetPlayerPed() : nullptr;
                 if (!ped || !ped->IsValid())
                     return false;
@@ -124,6 +127,7 @@ namespace Debug
 
             bool Execute(const Call& call)
             {
+                ZoneScoped;
                 for (const auto& function : functions)
                 {
                     if (call.name != function.name)
@@ -147,6 +151,7 @@ namespace Debug
         }
         bool Initialize(const char* file)
         {
+            ZoneScoped;
             if (!g_settings.m_bDebugMode || !file || !*file)
                 return false;
             if (g_chat)

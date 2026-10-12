@@ -52,6 +52,7 @@ namespace
 
     void CopyString(char* destination, std::size_t destinationSize, const char* source)
     {
+        ZoneScoped;
         if (!destination || destinationSize == 0)
             return;
 
@@ -72,6 +73,7 @@ namespace
 
     std::vector<std::string> SplitLines(const char* text)
     {
+        ZoneScoped;
         std::vector<std::string> lines;
         if (!text)
             return lines;
@@ -107,6 +109,7 @@ namespace
 
     std::vector<std::string> SplitColumns(const std::string& line)
     {
+        ZoneScoped;
         std::vector<std::string> columns;
         std::size_t start = 0;
 
@@ -131,6 +134,7 @@ namespace
 
     int MeasureLittle(const char* text)
     {
+        ZoneScoped;
         CFonts* fonts = g_fonts.get();
         if (!fonts || !text || !*text)
             return 0;
@@ -160,6 +164,7 @@ namespace
 
     std::string FormatColumns(CDialog* dialog, const std::vector<std::string>& columns)
     {
+        ZoneScoped;
         std::string result;
 
         for (int i = 0; i < dialog->m_nColumns; ++i)
@@ -196,6 +201,7 @@ CDialog::CDialog(IDirect3DDevice9* device)
 
 CDialog::~CDialog()
 {
+    ZoneScoped;
     if (m_pDialog)
     {
         if (m_bIsActive)
@@ -214,6 +220,7 @@ CDialog::~CDialog()
 
 void CDialog::GetScreenRect(RECT* rect) const
 {
+    ZoneScoped;
     if (!rect)
         return;
 
@@ -225,6 +232,7 @@ void CDialog::GetScreenRect(RECT* rect) const
 
 int CDialog::GetTextScreenLength(const char* text) const
 {
+    ZoneScoped;
     if (!text || !*text)
         return -1;
 
@@ -244,6 +252,7 @@ int CDialog::GetFontHeight() const
 
 void CDialog::Hide()
 {
+    ZoneScoped;
     if (m_pDialog)
     {
         m_pDialog->SetVisible(false);
@@ -258,6 +267,7 @@ void CDialog::Hide()
 
 void CDialog::ResetDialogControls(cgui::Dialog* dialog)
 {
+    ZoneScoped;
     m_pDialog = dialog;
     m_pListbox = nullptr;
     m_pEditbox = nullptr;
@@ -296,6 +306,7 @@ void CDialog::ResetDialogControls(cgui::Dialog* dialog)
 
 void CDialog::Show(int id, int type, const char* caption, const char* text, const char* leftButton, const char* rightButton, BOOL serverSide)
 {
+    ZoneScoped;
     if (id < 0)
     {
         if (m_bIsActive)
@@ -452,6 +463,7 @@ void CDialog::Show(int id, int type, const char* caption, const char* text, cons
 
 void CDialog::Close(char processButton)
 {
+    ZoneScoped;
     if (!m_bIsActive)
         return;
 
@@ -506,6 +518,7 @@ void CDialog::Close(char processButton)
 
 void CDialog::Draw()
 {
+    ZoneScoped;
     PROFILE_SCOPE(Dialog);
     if (!m_bIsActive || !m_pDialog || !m_pDialog->IsVisible())
         return;
@@ -521,6 +534,7 @@ void CDialog::Draw()
 
 void CDialog::UpdateRects()
 {
+    ZoneScoped;
     EnsureControls();
     if (!m_pDialog)
         return;
@@ -593,6 +607,7 @@ void CDialog::UpdateRects()
 
 bool CDialog::MsgProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
+    ZoneScoped;
     if (!m_bIsActive)
         return false;
 
@@ -617,6 +632,7 @@ bool CDialog::IsActive() const
 
 void CDialog::GuiEvent(unsigned int event, int controlId, cgui::Control*, void* context)
 {
+    ZoneScoped;
     auto* dialog = static_cast<CDialog*>(context);
     if (!dialog || !dialog->m_bIsActive)
         return;
@@ -642,6 +658,7 @@ void CDialog::GuiEvent(unsigned int event, int controlId, cgui::Control*, void* 
 
 void CDialog::EnsureControls()
 {
+    ZoneScoped;
     if (!CGui::IsInitialized())
         return;
 
@@ -657,6 +674,7 @@ void CDialog::EnsureControls()
 
 void CDialog::SetControlState(bool editVisible, bool listVisible)
 {
+    ZoneScoped;
     if (m_pEditbox)
     {
         m_pEditbox->SetVisible(editVisible);
@@ -672,6 +690,7 @@ void CDialog::SetControlState(bool editVisible, bool listVisible)
 
 void CDialog::SetButtons(const char* leftButton, const char* rightButton)
 {
+    ZoneScoped;
     if (!m_pDialog)
         return;
 
@@ -696,6 +715,7 @@ void CDialog::SetButtons(const char* leftButton, const char* rightButton)
 
 void CDialog::SetCaption(const char* caption)
 {
+    ZoneScoped;
     RuntimeState& state = State(this);
     state.captionHeight = 0;
 
@@ -722,6 +742,7 @@ void CDialog::SetCaption(const char* caption)
 
 bool CDialog::BuildList(const char* text, SIZE* size)
 {
+    ZoneScoped;
     if (size)
         *size = {};
 
@@ -766,6 +787,7 @@ bool CDialog::BuildList(const char* text, SIZE* size)
 
 bool CDialog::BuildTabList(const char* text, bool headers, SIZE* size)
 {
+    ZoneScoped;
     if (size)
         *size = {};
 
@@ -832,6 +854,7 @@ bool CDialog::BuildTabList(const char* text, bool headers, SIZE* size)
 
 void CDialog::RebuildListItems()
 {
+    ZoneScoped;
     RuntimeState& state = State(this);
     state.listRows.clear();
 
@@ -853,6 +876,7 @@ void CDialog::RebuildListItems()
 
 void CDialog::DrawDialogText()
 {
+    ZoneScoped;
     if (!m_szText || !*m_szText)
         return;
 
@@ -875,6 +899,7 @@ void CDialog::DrawDialogText()
 
 void CDialog::DrawColumnHeaders()
 {
+    ZoneScoped;
     if (m_nColumns <= 0)
         return;
 

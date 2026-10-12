@@ -28,6 +28,7 @@ namespace
     public:
         RenderToSurface(IDirect3DDevice9* device, UINT width, UINT height) : m_device(device), m_width(width), m_height(height)
         {
+            ZoneScoped;
             if (!m_device)
                 return;
 
@@ -40,6 +41,7 @@ namespace
 
         ~RenderToSurface()
         {
+            ZoneScoped;
             if (m_active)
                 EndScene();
 
@@ -56,6 +58,7 @@ namespace
 
         HRESULT BeginScene(IDirect3DSurface9* target)
         {
+            ZoneScoped;
             if (!IsValid() || !target || m_active)
                 return D3DERR_INVALIDCALL;
 
@@ -104,6 +107,7 @@ namespace
 
         HRESULT EndScene()
         {
+            ZoneScoped;
             if (!m_device || !m_active)
                 return D3DERR_INVALIDCALL;
 
@@ -139,11 +143,13 @@ namespace
 
     RenderToSurface* Renderer(void* renderer)
     {
+        ZoneScoped;
         return static_cast<RenderToSurface*>(renderer);
     }
 
     bool LoadSurfaceLinear(IDirect3DDevice9* device, IDirect3DSurface9* source, IDirect3DSurface9* destination)
     {
+        ZoneScoped;
         if (!device || !source || !destination)
             return false;
 
@@ -199,6 +205,7 @@ CLicensePlate::~CLicensePlate()
 
 void CLicensePlate::OnLostDevice()
 {
+    ZoneScoped;
     // Exact R5 +0x6D7B0 release order:
     //   +0x0C surface
     //   +0x08 texture
@@ -215,6 +222,7 @@ void CLicensePlate::OnLostDevice()
 
 void CLicensePlate::OnResetDevice()
 {
+    ZoneScoped;
     if (!m_pDevice)
         return;
     OnLostDevice();
@@ -255,6 +263,7 @@ void CLicensePlate::OnResetDevice()
 
 IDirect3DTexture9* CLicensePlate::Create(const char* text)
 {
+    ZoneScoped;
     CFonts* fonts = g_fonts.get();
 
     // Exact +0x6D880 early-outs.
@@ -324,6 +333,7 @@ IDirect3DTexture9* CLicensePlate::Create(const char* text)
 
 RwTexture* CLicensePlate::CreateRwTexture()
 {
+    ZoneScoped;
     if (!m_pDevice || !m_pSurface)
         return nullptr;
     IDirect3DTexture9* scaled = nullptr;

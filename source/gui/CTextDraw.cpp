@@ -44,6 +44,7 @@ namespace
 
     std::int32_t FloatToInt(float value)
     {
+        ZoneScoped;
         std::int64_t result;
         __asm
         {
@@ -151,6 +152,7 @@ namespace
 
     void DrawSprite(RwTexture* texture, const Rect& rect, D3DCOLOR color)
     {
+        ZoneScoped;
         if (!texture)
             return;
 
@@ -183,6 +185,7 @@ namespace
 
     std::uint32_t AcquireResource()
     {
+        ZoneScoped;
         for (std::uint32_t i = 0; i < RESOURCE_COUNT; ++i)
         {
             if (g_resourceUsed[i])
@@ -223,6 +226,7 @@ namespace
 
     bool ValidateTildes(const char* text, bool& containsKeys)
     {
+        ZoneScoped;
         bool inside = false;
         std::int32_t length = 0;
         bool valid = true;
@@ -257,6 +261,7 @@ namespace
 
     bool SplitTextureName(const char* text, char (&txd)[65], char (&texture)[65])
     {
+        ZoneScoped;
         txd[0] = '\0';
         texture[0] = '\0';
 
@@ -295,6 +300,7 @@ namespace
 
     game::render::textures::Texture LoadTextureByName(const char* text)
     {
+        ZoneScoped;
         char txd[65]{};
         char texture[65]{};
         if (!SplitTextureName(text, txd, texture))
@@ -319,6 +325,7 @@ namespace
 
 CTextDraw::CTextDraw(const Transmit* transmit, const char* text)
 {
+    ZoneScoped;
     std::memset(&m_data, 0, sizeof(m_data));
 
     m_data.m_fLetterWidth = transmit->m_fLetterWidth;
@@ -363,11 +370,13 @@ CTextDraw::CTextDraw(const Transmit* transmit, const char* text)
 
 CTextDraw::~CTextDraw()
 {
+    ZoneScoped;
     ReleaseResource();
 }
 
 void CTextDraw::SetText(const char* text)
 {
+    ZoneScoped;
     m_szString[0] = '\0';
     std::memset(m_szText, 0, sizeof(m_szText));
     m_data.m_bTextContainsKeys = 0;
@@ -412,6 +421,7 @@ void CTextDraw::SetText(const char* text)
 
 void CTextDraw::BeginDrawPass()
 {
+    ZoneScoped;
     if (!g_drawDepth++)
     {
         g_screenWidth = CGame::ScreenWidth();
@@ -422,12 +432,14 @@ void CTextDraw::BeginDrawPass()
 }
 void CTextDraw::EndDrawPass()
 {
+    ZoneScoped;
     if (g_drawDepth)
         --g_drawDepth;
 }
 
 void CTextDraw::Draw()
 {
+    ZoneScoped;
     m_data.m_bDrawnThisFrame = 0;
     // native fonts and sprites require an active RenderWare camera
     if (!CGame::HasFontResources())
@@ -443,6 +455,7 @@ void CTextDraw::Draw()
 
 void CTextDraw::DrawTexture()
 {
+    ZoneScoped;
     const float sx = static_cast<float>(ScreenWidth()) * HudScaleX();
     const float sy = static_cast<float>(ScreenHeight()) * HudScaleY();
 
@@ -465,6 +478,7 @@ void CTextDraw::DrawTexture()
 
 void CTextDraw::DrawText()
 {
+    ZoneScoped;
     if (!m_szText[0])
         return;
 
@@ -553,6 +567,7 @@ void CTextDraw::DrawText()
 
 void CTextDraw::LoadTexture()
 {
+    ZoneScoped;
     if (m_data.m_nStyle != 4 || m_data.m_nIndex == INVALID_RESOURCE)
         return;
 
@@ -561,6 +576,7 @@ void CTextDraw::LoadTexture()
 
 void CTextDraw::LoadPreview()
 {
+    ZoneScoped;
     if (m_data.m_nStyle != 5 || m_data.m_nIndex != INVALID_RESOURCE)
         return;
 
@@ -583,6 +599,7 @@ void CTextDraw::LoadPreview()
 
 void CTextDraw::UnloadPreview()
 {
+    ZoneScoped;
     if (m_data.m_nStyle != 5 || m_data.m_nIndex == INVALID_RESOURCE)
         return;
 
@@ -591,6 +608,7 @@ void CTextDraw::UnloadPreview()
 
 void CTextDraw::ReleaseResource()
 {
+    ZoneScoped;
     if (m_data.m_nIndex == INVALID_RESOURCE)
         return;
 
@@ -600,12 +618,14 @@ void CTextDraw::ReleaseResource()
 
 RECT CTextDraw::GetComputedRect() const
 {
+    ZoneScoped;
     return RECT{static_cast<LONG>(m_data.m_nComputedLeft), static_cast<LONG>(m_data.m_nComputedTop), static_cast<LONG>(m_data.m_nComputedRight),
                 static_cast<LONG>(m_data.m_nComputedBottom)};
 }
 
 void CTextDraw::ResetResourcePool()
 {
+    ZoneScoped;
     for (std::size_t i = 0; i < RESOURCE_COUNT; ++i)
     {
         g_resources[i].reset();
@@ -615,6 +635,7 @@ void CTextDraw::ResetResourcePool()
 
 void CTextDraw::SetComputedRect(std::int32_t left, std::int32_t top, std::int32_t right, std::int32_t bottom)
 {
+    ZoneScoped;
     m_data.m_nComputedLeft = static_cast<std::uint32_t>(left);
     m_data.m_nComputedTop = static_cast<std::uint32_t>(top);
     m_data.m_nComputedRight = static_cast<std::uint32_t>(right);

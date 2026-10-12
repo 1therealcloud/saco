@@ -244,6 +244,7 @@ namespace
 
     void DestroyPools(CNetGame::Pools*& pools)
     {
+        ZoneScoped;
         if (!pools)
             return;
 
@@ -268,6 +269,7 @@ namespace
 
     bool ReadSyncHeader(BitStream& bs, std::uint8_t expectedId, std::uint32_t& timestamp)
     {
+        ZoneScoped;
         std::uint8_t packetId{};
         timestamp = 0;
         if (!bs.Read(packetId))
@@ -302,6 +304,7 @@ namespace
 
     bool ReadOnfootData(BitStream& bs, Synchronization::OnfootData& data)
     {
+        ZoneScoped;
         bool hasLeftRight{};
         bool hasUpDown{};
         if (!bs.Read(hasLeftRight))
@@ -343,6 +346,7 @@ namespace
 
     bool ReadIncarData(BitStream& bs, Synchronization::IncarData& data)
     {
+        ZoneScoped;
         std::uint16_t vehicleHealth{};
         std::uint8_t healthArmor{};
         if (!bs.Read(data.m_nVehicle) || !bs.Read(data.m_controllerState.m_sLeftStickX) || !bs.Read(data.m_controllerState.m_sLeftStickY) ||
@@ -370,6 +374,7 @@ namespace
 
 std::uint32_t& CNetGame::RefLastPlayersUpdateRequest()
 {
+    ZoneScoped;
     return g_lastPlayersUpdateRequest;
 }
 
@@ -380,6 +385,7 @@ std::uint32_t& CNetGame::RefLagCompMode()
 
 void CNetGame::RegisterRPC()
 {
+    ZoneScoped;
     m_pRakClient->RegisterAsRemoteProcedureCall(&g_SetPlayerName, RPCHandlers::SetPlayerName);
     m_pRakClient->RegisterAsRemoteProcedureCall(&g_SetPlayerPos, RPCHandlers::SetPlayerPos);
     m_pRakClient->RegisterAsRemoteProcedureCall(&g_SetPlayerPosFindZ, RPCHandlers::SetPlayerPosFindZ);
@@ -547,6 +553,7 @@ void CNetGame::RegisterRPC()
 
 void CNetGame::UnRegisterRPC()
 {
+    ZoneScoped;
     m_pRakClient->UnregisterAsRemoteProcedureCall(&g_SetPlayerName);
     m_pRakClient->UnregisterAsRemoteProcedureCall(&g_SetPlayerPos);
     m_pRakClient->UnregisterAsRemoteProcedureCall(&g_SetPlayerPosFindZ);
@@ -716,6 +723,7 @@ CNetGame::CNetGame(const char* hostAddress, int port, const char* nick, const ch
       m_bLanMode(FALSE), m_aMapIcons{}, m_nGameState(GAME_MODE_WAITCONNECT), m_lastConnectAttempt(GetTimeNow()), m_pSettings(new(std::nothrow) Settings{}), pad_2{},
       m_pPools(nullptr)
 {
+    ZoneScoped;
     if (hostAddress)
         strncpy_s(m_szHostAddress, sizeof(m_szHostAddress), hostAddress,
                   _TRUNCATE);                                          // copy m_szHostAddress -> hostAddress
@@ -747,6 +755,7 @@ CNetGame::CNetGame(const char* hostAddress, int port, const char* nick, const ch
 
 CNetGame::~CNetGame()
 {
+    ZoneScoped;
     Log("[CNetGame::~CNetGame] net=%p, pools=%p, transport=%p", this, m_pPools, m_pRakClient);
     ResetMarkers();
 
@@ -773,6 +782,7 @@ CNetGame::~CNetGame()
 
 void CNetGame::SetState(int value)
 {
+    ZoneScoped;
     if (value == GAME_MODE_WAITCONNECT && m_nGameState == GAME_MODE_CONNECTED)
     {
         ResetObjectPool();
@@ -798,6 +808,7 @@ void CNetGame::SetState(int value)
 // init pools
 void CNetGame::InitializePools()
 {
+    ZoneScoped;
     Log("[CNetGame::InitializePools] initializing: previous=%p", m_pPools);
 
     auto* pools = new Pools{};
@@ -819,6 +830,7 @@ void CNetGame::InitializePools()
 // init default game settings
 void CNetGame::InitializeGameLogic()
 {
+    ZoneScoped;
     Log("[CNetGame::InitializeGameLogic] initializing defaults");
     if (!m_pSettings)
         return;
@@ -860,6 +872,7 @@ void CNetGame::InitializeGameLogic()
 // connect
 void CNetGame::Connect()
 {
+    ZoneScoped;
     if (!m_pRakClient || !m_szHostAddress[0] || m_nPort < 1 || m_nPort > 65535)
         return;
 
@@ -902,6 +915,7 @@ void CNetGame::SpawnScreen()
 // handle RSA public key mismatch
 void CNetGame::Packet_RSAPublicKeyMismatch(Packet*)
 {
+    ZoneScoped;
     g_chat->PrintDebug("Server authentication key mismatch.");
     SetState(GAME_MODE_WAITCONNECT);
 }
@@ -909,6 +923,7 @@ void CNetGame::Packet_RSAPublicKeyMismatch(Packet*)
 // connection banned
 void CNetGame::Packet_ConnectionBanned(Packet*)
 {
+    ZoneScoped;
     g_chat->PrintDebug("Connection rejected by server.");
     SetState(GAME_MODE_WAITCONNECT);
 }
@@ -916,12 +931,14 @@ void CNetGame::Packet_ConnectionBanned(Packet*)
 // wait for join
 void CNetGame::Packet_ConnectionRequestAcepted(Packet* packet)
 {
+    ZoneScoped;
     SetState(GAME_MODE_WAITJOIN);
 }
 
 // when server is full
 void CNetGame::Packet_NoFreeIncomingConnections(Packet*)
 {
+    ZoneScoped;
     g_chat->PrintDebug("Server is full.");
     SetState(GAME_MODE_WAITCONNECT);
 }
@@ -929,6 +946,7 @@ void CNetGame::Packet_NoFreeIncomingConnections(Packet*)
 // disconnect notification
 void CNetGame::Packet_DisconnectionNotification(Packet*)
 {
+    ZoneScoped;
     BuildingRemoval::RestoreAll();
     g_chat->PrintDebug("Server closed the connection.");
     CSrvNetStats::Reset();
@@ -938,6 +956,7 @@ void CNetGame::Packet_DisconnectionNotification(Packet*)
 // when password is invalid
 void CNetGame::Packet_InvalidPassword(Packet*)
 {
+    ZoneScoped;
     g_chat->PrintDebug("Invalid server password.");
     SetState(GAME_MODE_WAITCONNECT);
 }
@@ -945,6 +964,7 @@ void CNetGame::Packet_InvalidPassword(Packet*)
 // when server is didn't respond
 void CNetGame::Packet_ConnectionAttemptFailed(Packet*)
 {
+    ZoneScoped;
     g_chat->PrintDebug("Server did not respond. Retrying...");
     SetState(GAME_MODE_WAITCONNECT);
 }
@@ -952,6 +972,7 @@ void CNetGame::Packet_ConnectionAttemptFailed(Packet*)
 // player update
 void CNetGame::UpdatePlayers()
 {
+    ZoneScoped;
     // wait for next update interval
     const std::uint32_t now = GetTimeNow();
     if (now - RefLastPlayersUpdateRequest() < NETMODE_PLAYERS_UPDATE_DELAY) // 3000
@@ -977,6 +998,7 @@ void CNetGame::DeleteMarker(std::uint8_t index)
 // reset player pool
 void CNetGame::ResetPlayerPool()
 {
+    ZoneScoped;
     Log("[CNetGame::ResetPlayerPool]");
     if (!m_pPools)
         return;
@@ -1004,6 +1026,7 @@ void CNetGame::ResetVehiclePool()
 // reset textdraw pool
 void CNetGame::ResetTextDrawPool()
 {
+    ZoneScoped;
     Log("[CNetGame::ResetTextDrawPool]");
     if (g_textDrawSelection)
         g_textDrawSelection->Disable(false);
@@ -1016,6 +1039,7 @@ void CNetGame::ResetTextDrawPool()
 // reset object pool
 void CNetGame::ResetObjectPool()
 {
+    ZoneScoped;
     Log("[CNetGame::ResetObjectPool]");
     if (g_objectSelection)
         g_objectSelection->Enable(FALSE);
@@ -1080,6 +1104,7 @@ void CNetGame::ResetActorPool()
 // unoccupied sync
 void CNetGame::Packet_UnoccupiedSync(Packet* packet)
 {
+    ZoneScoped;
     if (m_nGameState != GAME_MODE_CONNECTED || !packet || !packet->data)
         return;
 
@@ -1097,6 +1122,7 @@ void CNetGame::Packet_UnoccupiedSync(Packet* packet)
 // bullet sync
 void CNetGame::Packet_BulletSync(Packet* packet)
 {
+    ZoneScoped;
     if (m_nGameState != GAME_MODE_CONNECTED || !packet || !packet->data)
         return;
     BitStream bs(packet->data, packet->length, false);
@@ -1112,6 +1138,7 @@ void CNetGame::Packet_BulletSync(Packet* packet)
 // aim sync
 void CNetGame::Packet_AimSync(Packet* packet)
 {
+    ZoneScoped;
     if (m_nGameState != GAME_MODE_CONNECTED || !packet || !packet->data)
         return;
 
@@ -1129,6 +1156,7 @@ void CNetGame::Packet_AimSync(Packet* packet)
 // passenger sync
 void CNetGame::Packet_PassengerSync(Packet* packet)
 {
+    ZoneScoped;
     if (m_nGameState != GAME_MODE_CONNECTED || !packet || !packet->data)
         return;
 
@@ -1146,6 +1174,7 @@ void CNetGame::Packet_PassengerSync(Packet* packet)
 // trailer sync
 void CNetGame::Packet_TrailerSync(Packet* packet)
 {
+    ZoneScoped;
     if (m_nGameState != GAME_MODE_CONNECTED || !packet || !packet->data)
         return;
 
@@ -1162,6 +1191,7 @@ void CNetGame::Packet_TrailerSync(Packet* packet)
 // markers sync
 void CNetGame::Packet_MarkersSync(Packet* packet)
 {
+    ZoneScoped;
     if (m_nGameState != GAME_MODE_CONNECTED || !packet || !packet->data)
         return;
 
@@ -1228,6 +1258,7 @@ void CNetGame::CreateMarker(std::uint8_t index, CVector position, char icon, int
 // reset all pools
 void CNetGame::ResetPools()
 {
+    ZoneScoped;
     Log("[CNetGame::ResetPools]");
 
     ResetPlayerPool();
@@ -1245,6 +1276,7 @@ void CNetGame::ResetPools()
 // shutdown for restart
 void CNetGame::ShutdownForRestart()
 {
+    ZoneScoped;
     Log("[CNetGame::ShutdownForRestart] starting");
     if (!m_pSettings)
         return;
@@ -1295,6 +1327,7 @@ void CNetGame::ShutdownForRestart()
 // player sync
 void CNetGame::Packet_PlayerSync(Packet* packet)
 {
+    ZoneScoped;
     if (m_nGameState != GAME_MODE_CONNECTED || !packet || !packet->data)
         return;
 
@@ -1312,6 +1345,7 @@ void CNetGame::Packet_PlayerSync(Packet* packet)
 // vehicle sync
 void CNetGame::Packet_VehicleSync(Packet* packet)
 {
+    ZoneScoped;
     if (m_nGameState != GAME_MODE_CONNECTED || !packet || !packet->data)
         return;
 
@@ -1329,6 +1363,7 @@ void CNetGame::Packet_VehicleSync(Packet* packet)
 // when connection lost
 void CNetGame::Packet_ConnectionLost(Packet*)
 {
+    ZoneScoped;
     BuildingRemoval::RestoreAll();
     g_chat->PrintDebug("Connection to the server was lost. Reconnecting...");
     CSrvNetStats::Reset();
@@ -1338,6 +1373,7 @@ void CNetGame::Packet_ConnectionLost(Packet*)
 // update network (network loop)
 void CNetGame::UpdateNetwork()
 {
+    ZoneScoped;
     PROFILE_SCOPE(Receive);
     if (!m_pRakClient)
         return;
@@ -1447,6 +1483,7 @@ void CNetGame::UpdateNetwork()
 // process network
 void CNetGame::Process()
 {
+    ZoneScoped;
     PROFILE_SCOPE(Network);
     UpdateNetwork();
 
@@ -1485,6 +1522,7 @@ void CNetGame::Process()
 // process game stuff
 void CNetGame::ProcessGameStuff()
 {
+    ZoneScoped;
     if (!m_pSettings)
         return;
 
@@ -1562,6 +1600,7 @@ __int64 CNetGame::GetCounter()
 
 void CNetGame::SendRconCommand(const char* command)
 {
+    ZoneScoped;
     if (!m_pRakClient || !command)
         return;
 
@@ -1580,6 +1619,7 @@ void CNetGame::SendRconCommand(const char* command)
 // handle auth key
 void CNetGame::Packet_AuthKey(Packet* packet)
 {
+    ZoneScoped;
     if (!m_pRakClient || !packet || !packet->data || packet->length < 2)
         return;
     BitStream input(packet->data, packet->length, false);
@@ -1619,6 +1659,7 @@ void CNetGame::Packet_AuthKey(Packet* packet)
 // when connection succeeded
 void CNetGame::Packet_ConnectionSucceeded(Packet* packet)
 {
+    ZoneScoped;
     if (!packet || !packet->data || !m_pRakClient || !GetPlayerPool())
         return;
 
@@ -1673,6 +1714,7 @@ bool CNetGame::ExitVehicle(std::uint16_t vehicleId)
 // VehicleDamaged
 bool CNetGame::VehicleDamaged(std::uint16_t vehicleId, std::uint32_t panels, std::uint32_t doors, std::uint8_t lights, std::uint8_t tires)
 {
+    ZoneScoped;
     if (!m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
     BitStream bs;
@@ -1687,6 +1729,7 @@ bool CNetGame::VehicleDamaged(std::uint16_t vehicleId, std::uint32_t panels, std
 // ScmEvent
 bool CNetGame::ScmEvent(std::uint32_t vehicleId, std::uint32_t param1, std::uint32_t param2, std::uint32_t eventType)
 {
+    ZoneScoped;
     if (vehicleId >= CVehiclePool::MAX_VEHICLES || eventType < 1 || eventType > 4)
         return false;
     if (!m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
@@ -1712,6 +1755,7 @@ bool CNetGame::VehicleDestroyed(std::uint16_t vehicleId)
 // SendSpawn
 bool CNetGame::SendSpawn()
 {
+    ZoneScoped;
     if (!m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
 
@@ -1722,6 +1766,7 @@ bool CNetGame::SendSpawn()
 // ChatMessage
 bool CNetGame::ChatMessage(const char* message)
 {
+    ZoneScoped;
     if (!m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
     if (!message)
@@ -1760,6 +1805,7 @@ bool CNetGame::DeathNotification(std::uint8_t reason, std::uint16_t killerId)
 // SendCommand
 bool CNetGame::SendCommand(const char* text)
 {
+    ZoneScoped;
     Log("SendCommand");
 
     if (!m_pRakClient || !text)
@@ -1790,6 +1836,7 @@ bool CNetGame::ClickPlayer(std::uint16_t playerId, std::uint8_t source)
 // DialogResponse
 bool CNetGame::DialogResponse(std::uint16_t dialogId, bool response, std::int16_t listItem, const char* inputText)
 {
+    ZoneScoped;
     if (!m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
 
@@ -1809,6 +1856,7 @@ bool CNetGame::DialogResponse(std::uint16_t dialogId, bool response, std::int16_
 // ClientCheckResponse
 bool CNetGame::ClientCheckResponse(std::uint8_t type, std::uint32_t address, std::uint8_t response)
 {
+    ZoneScoped;
     if (!m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
     BitStream bs;
@@ -1821,6 +1869,7 @@ bool CNetGame::ClientCheckResponse(std::uint8_t type, std::uint32_t address, std
 // GiveTakeDamage
 bool CNetGame::GiveTakeDamage(bool giveOrTake, std::uint16_t playerId, float damage, std::uint32_t weaponId, std::uint32_t bodyPart)
 {
+    ZoneScoped;
     if (!m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
     BitStream bs;
@@ -1835,6 +1884,7 @@ bool CNetGame::GiveTakeDamage(bool giveOrTake, std::uint16_t playerId, float dam
 // GiveActorDamage
 bool CNetGame::GiveActorDamage(bool unused, std::uint16_t actorId, float damage, std::uint32_t weaponId, std::uint32_t bodyPart)
 {
+    ZoneScoped;
     if (!m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
     BitStream bs;
@@ -1849,6 +1899,7 @@ bool CNetGame::GiveActorDamage(bool unused, std::uint16_t actorId, float damage,
 // MapMarker
 bool CNetGame::MapMarker(float x, float y, float z)
 {
+    ZoneScoped;
     if (!m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
     BitStream bs;
@@ -1902,6 +1953,7 @@ bool CNetGame::MenuQuit()
 // SelectTextDraw
 bool CNetGame::SelectTextDraw(std::uint16_t textDrawId)
 {
+    ZoneScoped;
     if (!m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
     BitStream bs;
@@ -1912,6 +1964,7 @@ bool CNetGame::SelectTextDraw(std::uint16_t textDrawId)
 // PickedUpPickup
 bool CNetGame::PickedUpPickup(std::int32_t pickupId, PickupSendMode mode)
 {
+    ZoneScoped;
     if (!m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
 
@@ -1924,6 +1977,7 @@ bool CNetGame::PickedUpPickup(std::int32_t pickupId, PickupSendMode mode)
 // SelectObject
 bool CNetGame::SelectObject(std::uint32_t selectType, std::uint16_t objectId, std::uint32_t modelId, float x, float y, float z)
 {
+    ZoneScoped;
     if (!m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
     BitStream bs;
@@ -1940,6 +1994,7 @@ bool CNetGame::SelectObject(std::uint32_t selectType, std::uint16_t objectId, st
 bool CNetGame::EditAttachedObject(std::uint32_t response, std::uint32_t index, std::uint32_t modelId, std::uint32_t boneId, const CVector& offset, const CVector& rotation,
                                   const CVector& scale, std::uint32_t color1, std::uint32_t color2)
 {
+    ZoneScoped;
     if (!m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
     BitStream bs;
@@ -1964,6 +2019,7 @@ bool CNetGame::EditAttachedObject(std::uint32_t response, std::uint32_t index, s
 // EditObject
 bool CNetGame::EditObject(bool playerObject, std::uint16_t objectId, std::uint32_t response, const CVector& position, const CVector& rotation)
 {
+    ZoneScoped;
     if (!m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
     BitStream bs;
@@ -1982,6 +2038,7 @@ bool CNetGame::EditObject(bool playerObject, std::uint16_t objectId, std::uint32
 // UpdateScoresAndPings
 bool CNetGame::UpdateScoresAndPings()
 {
+    ZoneScoped;
     if (!m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
 
@@ -1992,6 +2049,7 @@ bool CNetGame::UpdateScoresAndPings()
 // ClientJoin
 bool CNetGame::ClientJoin(std::uint32_t version, std::uint8_t mod, const char* nickname, std::uint32_t challengeResponse, const char* authKey, const char* clientVersion)
 {
+    ZoneScoped;
     if (!m_pRakClient || !m_pRakClient->IsConnected() || !nickname || !authKey || !clientVersion)
         return false;
     const auto nickLen = std::strlen(nickname);
@@ -2025,6 +2083,7 @@ bool CNetGame::NPCJoin(std::uint32_t version, std::uint8_t mod, const char* nick
 // CameraTarget
 bool CNetGame::CameraTarget(std::uint16_t objectTarget, std::uint16_t vehicleTarget, std::uint16_t playerTarget, std::uint16_t actorTarget)
 {
+    ZoneScoped;
     if (!m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
     BitStream bs;

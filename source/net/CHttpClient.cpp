@@ -29,11 +29,13 @@ CHttpClient::~CHttpClient()
 
 int CHttpClient::ProcessURL(int type, char* url, char* data, char* referer)
 {
+    ZoneScoped;
     return static_cast<int>(ProcessUrl(type, static_cast<const char*>(url), static_cast<const char*>(data), static_cast<const char*>(referer)));
 }
 
 CHttpClient::ErrorCode CHttpClient::ProcessUrl(int type, const char* url, const char* data, const char* referer)
 {
+    ZoneScoped;
     Log("[http] request type=%d, url=%s", type, url ? url : "");
     Reset();
     if (!m_initialized)
@@ -47,6 +49,7 @@ CHttpClient::ErrorCode CHttpClient::ProcessUrl(int type, const char* url, const 
 
 bool CHttpClient::GetHeaderValue(const char* headerName, char* returnBuffer, int bufferSize)
 {
+    ZoneScoped;
     if (!headerName || !returnBuffer || bufferSize <= 0 || !m_hasResponse)
         return false;
 
@@ -83,6 +86,7 @@ bool CHttpClient::GetHeaderValue(const char* headerName, char* returnBuffer, int
 
 bool CHttpClient::Connect(const char* host, int port)
 {
+    ZoneScoped;
     if (!host || !*host)
     {
         m_iError = HTTP_ERROR_BAD_HOST;
@@ -135,6 +139,7 @@ void CHttpClient::Disconnect()
 
 bool CHttpClient::SendView(std::string_view data)
 {
+    ZoneScoped;
     if (m_iSocket == INVALID_SOCKET)
     {
         m_iError = HTTP_ERROR_CANT_WRITE;
@@ -165,6 +170,7 @@ bool CHttpClient::SendView(std::string_view data)
 
 bool CHttpClient::Send(const char* buffer)
 {
+    ZoneScoped;
     return buffer && SendView(buffer);
 }
 
@@ -178,6 +184,7 @@ int CHttpClient::Receive(char* buffer, int bufferSize)
 
 void CHttpClient::InitializeRequest(int type, const char* url, const char* postData, const char* referer)
 {
+    ZoneScoped;
     if (!url)
     {
         m_iError = HTTP_ERROR_BAD_HOST;
@@ -219,6 +226,7 @@ void CHttpClient::InitializeRequest(int type, const char* url, const char* postD
 
 void CHttpClient::HandleEntity()
 {
+    ZoneScoped;
     std::array<char, RECV_BUFFER_SIZE> buffer{};
     std::string response;
 
@@ -351,6 +359,7 @@ void CHttpClient::HandleEntity()
 
 void CHttpClient::Process()
 {
+    ZoneScoped;
     if (!Connect(m_Request.host.c_str(), m_Request.port))
         return;
 
@@ -397,6 +406,7 @@ void CHttpClient::Reset()
 
 const char* CHttpClient::StrIStr(const char* haystack, const char* needle)
 {
+    ZoneScoped;
     if (!haystack || !needle)
         return nullptr;
 
@@ -429,6 +439,7 @@ const char* CHttpClient::StrIStr(const char* haystack, const char* needle)
 
 std::string CHttpClient::BuildGetRequest(const HTTP_REQUEST& request)
 {
+    ZoneScoped;
     std::string result;
     result.reserve(request.file.size() + request.host.size() + request.referer.size() + 128);
 
@@ -447,6 +458,7 @@ std::string CHttpClient::BuildGetRequest(const HTTP_REQUEST& request)
 
 std::string CHttpClient::BuildPostRequest(const HTTP_REQUEST& request)
 {
+    ZoneScoped;
     std::string result;
     result.reserve(request.file.size() + request.host.size() + request.referer.size() + request.data.size() + 192);
 
@@ -468,6 +480,7 @@ std::string CHttpClient::BuildPostRequest(const HTTP_REQUEST& request)
 
 std::string CHttpClient::BuildHeadRequest(const HTTP_REQUEST& request)
 {
+    ZoneScoped;
     std::string result;
     result.reserve(request.file.size() + request.host.size() + request.referer.size() + 128);
 

@@ -122,6 +122,7 @@ namespace game::inputhandler
 
         bool InstallWndProc(HWND window)
         {
+            ZoneScoped;
             if (!window)
                 return false;
 
@@ -166,6 +167,7 @@ namespace game::inputhandler
 
         UINT MessageKey(UINT message, WPARAM wParam, LPARAM lParam)
         {
+            ZoneScoped;
             if (message == WM_KEYDOWN || message == WM_KEYUP || message == WM_SYSKEYDOWN || message == WM_SYSKEYUP)
                 return wParam < g_consumedKeys.size() ? static_cast<UINT>(wParam) : 0;
             if (message != WM_CHAR && message != WM_SYSCHAR)
@@ -199,6 +201,7 @@ namespace game::inputhandler
 
         bool RouteScoreboard(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
         {
+            ZoneScoped;
             if (!g_scoreboard || !g_scoreboard->m_pDialog || IsMenuVisible() || IsInputActive())
                 return false;
             if (message == WM_KEYUP && wParam == VK_TAB)
@@ -221,6 +224,7 @@ namespace game::inputhandler
 
         bool RouteDialog(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
         {
+            ZoneScoped;
             if (!g_dialog || !g_dialog->m_pDialog || !IsDialogActive() || IsScoreboardActive() || IsInputActive() || IsMenuVisible())
                 return false;
             if (!g_dialog->MsgProc(window, message, wParam, lParam))
@@ -232,6 +236,7 @@ namespace game::inputhandler
 
         bool RouteTextDrawSelection(UINT message, WPARAM wParam, LPARAM lParam)
         {
+            ZoneScoped;
             if (!g_textDrawSelection)
                 return false;
             if (!IsInputActive() && !IsDialogActive() && !IsScoreboardActive() && g_textDrawSelection->MsgProc(message, static_cast<int>(wParam), static_cast<int>(lParam)))
@@ -246,6 +251,7 @@ namespace game::inputhandler
 
         bool RouteObjectEdit(UINT message, WPARAM wParam, LPARAM lParam)
         {
+            ZoneScoped;
             if (!g_objectEdit || IsInputActive() || IsDialogActive() || IsScoreboardActive() || IsMenuVisible())
                 return false;
             if (g_objectEdit->MsgProc(message, static_cast<int>(wParam), static_cast<int>(lParam)))
@@ -260,6 +266,7 @@ namespace game::inputhandler
 
         bool RouteObjectSelection(UINT message, WPARAM wParam, LPARAM lParam)
         {
+            ZoneScoped;
             if (!g_objectSelection || IsInputActive() || IsDialogActive() || IsScoreboardActive() || IsMenuVisible())
                 return false;
             if (g_objectSelection->MsgProc(message, static_cast<int>(wParam), static_cast<int>(lParam)))
@@ -280,6 +287,7 @@ namespace game::inputhandler
 
     int handle_key_up(WPARAM key)
     {
+        ZoneScoped;
         switch (key)
         {
             case VK_F1:
@@ -368,6 +376,7 @@ namespace game::inputhandler
 
     bool handle_char(WPARAM character)
     {
+        ZoneScoped;
         if (IsInputAvailable() && IsInputActive())
         {
             if (character == VK_ESCAPE)
@@ -415,6 +424,7 @@ namespace game::inputhandler
 
     LRESULT CALLBACK wnd_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
     {
+        ZoneScoped;
         if (message == WM_KILLFOCUS || (message == WM_ACTIVATEAPP && wParam == FALSE))
         {
             g_consumedKeys.fill(false);
@@ -579,6 +589,7 @@ namespace game::inputhandler
 
     void filter_game_keyboard(std::uint16_t* state)
     {
+        ZoneScoped;
         // gta stores function keys, ascii keys, then the RenderWare special keys
         for (UINT key = 1; key < g_consumedKeys.size(); ++key)
         {
@@ -607,6 +618,7 @@ namespace game::inputhandler
 
     bool install(HWND window)
     {
+        ZoneScoped;
         if (!window)
             window = *reinterpret_cast<HWND*>(kGtaWindow);
         if (!window)
@@ -640,6 +652,7 @@ namespace game::inputhandler
 
     void uninstall()
     {
+        ZoneScoped;
         if (g_readKeyboard)
         {
             MH_DisableHook(reinterpret_cast<void*>(kReadKeyboard));

@@ -51,6 +51,7 @@ namespace
 
     bool ReadFileBytes(const char* path, std::vector<std::uint8_t>& bytes)
     {
+        ZoneScoped;
         HANDLE file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (file == INVALID_HANDLE_VALUE)
             return false;
@@ -81,6 +82,7 @@ namespace
 
     bool DecodePng(const std::vector<std::uint8_t>& encoded, std::vector<std::uint8_t>& pixels, UINT& width, UINT& height)
     {
+        ZoneScoped;
         width = 0;
         height = 0;
 
@@ -157,6 +159,7 @@ CSpawnScreen::CSpawnScreen(IDirect3DDevice9* device)
     : m_bEnabled(FALSE), m_szSpawnText(nullptr), m_pFont(nullptr), m_pDevice(device), m_pTexture(nullptr), m_pStateBlockSaved(nullptr), m_pStateBlockDraw(nullptr),
       m_pSprite(nullptr)
 {
+    ZoneScoped;
     if (m_pDevice)
         m_pFont = g_fonts.get();
 
@@ -171,6 +174,7 @@ CSpawnScreen::~CSpawnScreen()
 
 void CSpawnScreen::SetText(const char* text)
 {
+    ZoneScoped;
     char* replacement = nullptr;
     if (text)
     {
@@ -184,6 +188,7 @@ void CSpawnScreen::SetText(const char* text)
 
 void CSpawnScreen::OnResetDevice()
 {
+    ZoneScoped;
     if (m_pDevice)
     {
         Release(m_pTexture);
@@ -204,6 +209,7 @@ void CSpawnScreen::OnLostDevice()
 
 void CSpawnScreen::Draw()
 {
+    ZoneScoped;
     // r5 leaves the enabled check to the caller
     if (!m_pDevice || !m_pFont || !m_szSpawnText)
         return;
@@ -268,6 +274,7 @@ void CSpawnScreen::Draw()
 
 bool CSpawnScreen::LoadLogoTexture()
 {
+    ZoneScoped;
     if (!m_pDevice)
         return false;
 
@@ -317,6 +324,7 @@ bool CSpawnScreen::LoadLogoTexture()
 
 bool CSpawnScreen::CreateStateBlocks()
 {
+    ZoneScoped;
     if (!m_pDevice)
         return false;
 

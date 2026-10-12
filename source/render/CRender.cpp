@@ -23,6 +23,7 @@ namespace
 
 CRender::CRender(IDirect3DDevice9* device) : m_device(device)
 {
+    ZoneScoped;
     if (m_device)
         m_device->AddRef();
 
@@ -31,6 +32,7 @@ CRender::CRender(IDirect3DDevice9* device) : m_device(device)
 
 CRender::~CRender()
 {
+    ZoneScoped;
     if (m_rendering)
         EndRender();
 
@@ -41,11 +43,13 @@ CRender::~CRender()
 
 bool CRender::IsValid() const
 {
+    ZoneScoped;
     return m_device != nullptr;
 }
 
 HRESULT CRender::BeginRender()
 {
+    ZoneScoped;
     if (!m_device)
         return D3DERR_INVALIDCALL;
 
@@ -61,6 +65,7 @@ HRESULT CRender::BeginRender()
 
 HRESULT CRender::EndRender()
 {
+    ZoneScoped;
     if (!m_device)
         return D3DERR_INVALIDCALL;
 
@@ -76,6 +81,7 @@ HRESULT CRender::EndRender()
 
 void CRender::OnLostDevice()
 {
+    ZoneScoped;
     if (m_rendering)
     {
         RestoreState();
@@ -89,11 +95,13 @@ void CRender::OnLostDevice()
 
 void CRender::OnResetDevice()
 {
+    ZoneScoped;
     m_vertices.clear();
 }
 
 void CRender::DrawLine(float x1, float y1, float x2, float y2, float width, D3DCOLOR color)
 {
+    ZoneScoped;
     if (!m_rendering || width <= 0.0f)
         return;
 
@@ -123,6 +131,7 @@ void CRender::DrawLine(float x1, float y1, float x2, float y2, float width, D3DC
 
 void CRender::DrawBox(float x, float y, float width, float height, D3DCOLOR color)
 {
+    ZoneScoped;
     if (!m_rendering || width == 0.0f || height == 0.0f)
         return;
 
@@ -133,6 +142,7 @@ void CRender::DrawBox(float x, float y, float width, float height, D3DCOLOR colo
 
 void CRender::DrawBorder(float x, float y, float width, float height, float borderWidth, D3DCOLOR color)
 {
+    ZoneScoped;
     if (!m_rendering || borderWidth <= 0.0f || width == 0.0f || height == 0.0f)
         return;
 
@@ -157,12 +167,14 @@ void CRender::DrawBorder(float x, float y, float width, float height, float bord
 
 void CRender::DrawBorderedBox(float x, float y, float width, float height, float borderWidth, D3DCOLOR color, D3DCOLOR borderColor)
 {
+    ZoneScoped;
     DrawBox(x, y, width, height, color);
     DrawBorder(x, y, width, height, borderWidth, borderColor);
 }
 
 void CRender::DrawPolygon(float x, float y, float width, float height, float rotation, unsigned int sides, D3DCOLOR color)
 {
+    ZoneScoped;
     if (!m_rendering || sides < 3 || width == 0.0f || height == 0.0f)
         return;
 
@@ -190,11 +202,13 @@ void CRender::DrawPolygon(float x, float y, float width, float height, float rot
 
 void CRender::DrawCircle(float x, float y, float radius, unsigned int sides, D3DCOLOR color)
 {
+    ZoneScoped;
     DrawPolygon(x, y, radius * 2.0f, radius * 2.0f, 0.0f, sides, color);
 }
 
 bool CRender::WorldToScreen(const Vector3& world, float& x, float& y, float* depth) const
 {
+    ZoneScoped;
     if (!m_device)
         return false;
 
@@ -232,6 +246,7 @@ bool CRender::WorldToScreen(const Vector3& world, float& x, float& y, float* dep
 
 bool CRender::ScreenRay(POINT point, Vector3& origin, Vector3& target) const
 {
+    ZoneScoped;
     D3DMATRIX view{}, projection{};
     D3DVIEWPORT9 viewport{};
     if (!m_device || !d3d9hook::matrices(view, projection) || FAILED(m_device->GetViewport(&viewport)) || !viewport.Width || !viewport.Height)
@@ -284,6 +299,7 @@ bool CRender::ScreenRay(POINT point, Vector3& origin, Vector3& target) const
 
 bool CRender::GetAxisDragOffset(const Vector3& world, const Vector3& axis, float pixels, bool vertical, float& offset) const
 {
+    ZoneScoped;
     D3DMATRIX view{}, projection{};
     D3DVIEWPORT9 viewport{};
     if (!m_device || !d3d9hook::matrices(view, projection) || FAILED(m_device->GetViewport(&viewport)))
@@ -307,6 +323,7 @@ bool CRender::GetAxisDragOffset(const Vector3& world, const Vector3& axis, float
 
 bool CRender::EnsureVertexBuffer(std::size_t vertexCount)
 {
+    ZoneScoped;
     if (!m_device)
         return false;
 
@@ -331,6 +348,7 @@ bool CRender::EnsureVertexBuffer(std::size_t vertexCount)
 
 HRESULT CRender::Flush()
 {
+    ZoneScoped;
     if (!m_device || m_vertices.empty())
         return D3D_OK;
 
@@ -362,6 +380,7 @@ HRESULT CRender::Flush()
 
 void CRender::AddTriangle(const Vertex& a, const Vertex& b, const Vertex& c)
 {
+    ZoneScoped;
     m_vertices.push_back(a);
     m_vertices.push_back(b);
     m_vertices.push_back(c);
@@ -369,6 +388,7 @@ void CRender::AddTriangle(const Vertex& a, const Vertex& b, const Vertex& c)
 
 void CRender::AddQuad(float left, float top, float right, float bottom, D3DCOLOR color)
 {
+    ZoneScoped;
     const Vertex a{left, top, 0.0f, 1.0f, color};
     const Vertex b{right, top, 0.0f, 1.0f, color};
     const Vertex c{right, bottom, 0.0f, 1.0f, color};
@@ -380,6 +400,7 @@ void CRender::AddQuad(float left, float top, float right, float bottom, D3DCOLOR
 
 void CRender::SaveState()
 {
+    ZoneScoped;
     ReleaseSavedState();
 
     m_device->GetTexture(0, &m_savedState.texture0);
@@ -420,6 +441,7 @@ void CRender::SaveState()
 
 void CRender::ApplyState()
 {
+    ZoneScoped;
     m_device->SetTexture(0, nullptr);
     m_device->SetVertexShader(nullptr);
     m_device->SetPixelShader(nullptr);
@@ -454,6 +476,7 @@ void CRender::ApplyState()
 
 void CRender::RestoreState()
 {
+    ZoneScoped;
     if (!m_device)
         return;
 
@@ -499,6 +522,7 @@ void CRender::RestoreState()
 
 void CRender::ReleaseSavedState()
 {
+    ZoneScoped;
     SafeRelease(m_savedState.texture0);
     SafeRelease(m_savedState.vertexShader);
     SafeRelease(m_savedState.pixelShader);
@@ -509,12 +533,14 @@ void CRender::ReleaseSavedState()
 
 void CRender::ReleaseVertexBuffer()
 {
+    ZoneScoped;
     SafeRelease(m_vertexBuffer);
     m_vertexCapacity = 0;
 }
 
 D3DMATRIX CRender::Multiply(const D3DMATRIX& a, const D3DMATRIX& b)
 {
+    ZoneScoped;
     D3DMATRIX out{};
     for (int row = 0; row < 4; ++row)
     {

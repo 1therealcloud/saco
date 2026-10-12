@@ -31,6 +31,7 @@ namespace game::bullets
 
     CVector HitOffset(void* entity, CVector point, unsigned lagCompMode)
     {
+        ZoneScoped;
         if (!entity)
             return CVector{};
         const auto* native = static_cast<const std::uint8_t*>(entity);
@@ -42,6 +43,7 @@ namespace game::bullets
 
     void Fire(CPed& ped, const Shot& shot, unsigned lagCompMode)
     {
+        ZoneScoped;
         if (!ped.HasNativePed() || !detail::instant || !detail::sniper)
             return;
         const auto slot = ped.m_nPlayerNumber;

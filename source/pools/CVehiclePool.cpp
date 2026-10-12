@@ -57,6 +57,7 @@ namespace
 
     bool IsModelAvailable(int model)
     {
+        ZoneScoped;
         // CGame::IsModelAvailable in R5 returns true for values outside [0, 20000]
         // and uses GTA opcode 0248 for normal model ids.
         if (model < 0 || model > 20000)
@@ -82,6 +83,7 @@ CVehiclePool::CVehiclePool()
 
 CVehiclePool::~CVehiclePool()
 {
+    ZoneScoped;
     // samp.dll + 0x1F060
     for (ID id = 0; id < MAX_VEHICLES; ++id)
         Delete(id);
@@ -93,6 +95,7 @@ CVehiclePool::~CVehiclePool()
 
 void CVehiclePool::UpdateCount()
 {
+    ZoneScoped;
     // samp.dll + 0x1E9B0
     int last = 0;
     for (int id = MAX_VEHICLES - 1; id > 0; --id)
@@ -108,6 +111,7 @@ void CVehiclePool::UpdateCount()
 
 BOOL CVehiclePool::Delete(ID id)
 {
+    ZoneScoped;
     // samp.dll + 0x1EA80
     if (id >= MAX_VEHICLES)
         return FALSE;
@@ -226,6 +230,7 @@ void CVehiclePool::ChangeInterior(ID id, int interior)
 
 void CVehiclePool::SetParams(ID id, bool objective, bool doorsLocked)
 {
+    ZoneScoped;
     // samp.dll + 0x1EB30
     if (id >= MAX_VEHICLES || !m_bNotEmpty[id] || !m_pObject[id] || !m_bIsActive[id])
         return;
@@ -242,6 +247,7 @@ void CVehiclePool::SetParams(ID id, bool objective, bool doorsLocked)
 
 CVehiclePool::ID CVehiclePool::Find(void* gameObject)
 {
+    ZoneScoped;
     // samp.dll + 0x1EB90. Vehicle id 0 is deliberately skipped by R5 here.
     if (!gameObject)
         return INVALID_ID;
@@ -273,6 +279,7 @@ CVehiclePool::GTAREF CVehiclePool::GetRef(void* gameObject)
 
 CVehiclePool::ID CVehiclePool::GetNearest()
 {
+    ZoneScoped;
     // samp.dll + 0x1EC00
     ID result = INVALID_ID;
     float nearestDistance = NEAREST_LOCAL_MAX_DISTANCE;
@@ -295,6 +302,7 @@ CVehiclePool::ID CVehiclePool::GetNearest()
 
 CVehiclePool::ID CVehiclePool::GetNearest(CVector point)
 {
+    ZoneScoped;
     // samp.dll + 0x1EC70
     ID result = INVALID_ID;
     float nearestDistance = NEAREST_POINT_MAX_DISTANCE;
@@ -377,6 +385,7 @@ void CVehiclePool::QueueInterior(ID id, int interior)
 
 void CVehiclePool::QueueDamage(ID id, int panels, int doors, char lights, char tires)
 {
+    ZoneScoped;
     if (!IsPending(id))
         return;
     auto& state = g_spawnAppearances[this][id];
@@ -394,6 +403,7 @@ void CVehiclePool::QueueTires(ID id, char tires)
 
 void CVehiclePool::QueueParams(ID id, const std::array<std::uint8_t, 16>& params)
 {
+    ZoneScoped;
     if (!IsPending(id))
         return;
     auto& state = g_spawnAppearances[this][id];
@@ -425,6 +435,7 @@ void CVehiclePool::QueueParams(ID id, const std::array<std::uint8_t, 16>& params
 
 void CVehiclePool::QueueSimpleParams(ID id, bool objective, bool doorsLocked)
 {
+    ZoneScoped;
     if (!IsPending(id))
         return;
 
@@ -453,6 +464,7 @@ void CVehiclePool::QueueColors(ID id, unsigned char primary, unsigned char secon
 
 void CVehiclePool::QueueComponent(ID id, std::uint16_t component, bool install)
 {
+    ZoneScoped;
     if (!IsPending(id) || component < 1000 || component > 1193)
         return;
     auto& updates = g_spawnAppearances[this][id].componentUpdates;
@@ -478,6 +490,7 @@ void CVehiclePool::ClearQueuedTrailer(ID tractor)
 
 void CVehiclePool::AddToWaitingList(const VehicleInfo* info)
 {
+    ZoneScoped;
     // samp.dll + 0x1ED10
     if (!info)
         return;
@@ -514,6 +527,7 @@ void CVehiclePool::AddToWaitingList(const VehicleInfo* info)
 
 void CVehiclePool::ConstructLicensePlates()
 {
+    ZoneScoped;
     // samp.dll + 0x1ED70
     if (!m_bNeedsToInitializeLicensePlates)
         return;
@@ -540,6 +554,7 @@ void CVehiclePool::ShutdownLicensePlates()
 
 BOOL CVehiclePool::Create(VehicleInfo* info)
 {
+    ZoneScoped;
     // samp.dll + 0x1F080
     if (!info || info->m_nId >= MAX_VEHICLES)
         return FALSE;
@@ -690,6 +705,7 @@ BOOL CVehiclePool::Create(VehicleInfo* info)
 
 BOOL CVehiclePool::CreateWithTrainConsist(VehicleInfo info)
 {
+    ZoneScoped;
     if (info.m_nType != TRAIN_STREAK_LOCO && info.m_nType != TRAIN_FREIGHT_LOCO)
         return Create(&info);
 
@@ -752,12 +768,14 @@ BOOL CVehiclePool::CreateWithTrainConsist(VehicleInfo info)
 
 void CVehiclePool::SendDestroyNotification(ID id)
 {
+    ZoneScoped;
     if (auto* netGame = g_netGame.get())
         netGame->VehicleDestroyed(id);
 }
 
 void CVehiclePool::ProcessWaitingList()
 {
+    ZoneScoped;
     PROFILE_SCOPE(VehicleWaiting);
     // samp.dll + 0x1F300
     const DWORD now = ::GetTickCount();
@@ -797,6 +815,7 @@ void CVehiclePool::ProcessWaitingList()
 
 void CVehiclePool::Process()
 {
+    ZoneScoped;
     PROFILE_SCOPE(Vehicles);
     // samp.dll + 0x1F3C0
     const DWORD now = ::GetTickCount();

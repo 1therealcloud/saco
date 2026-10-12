@@ -72,6 +72,7 @@ namespace
 
     AimStuff::Aim BuildRemoteAim(const Synchronization::AimData& data)
     {
+        ZoneScoped;
         const auto& front = data.m_aimf1;
         const double angle = std::atan2(static_cast<double>(front.x), static_cast<double>(front.y)) - 1.5707963705062866;
         const double sine = std::sin(angle);
@@ -87,6 +88,7 @@ namespace
 
     void ApplyOnfootWeapon(CPed* ped, std::uint8_t packedWeapon)
     {
+        ZoneScoped;
         if (!ped || !ped->HasNativePed())
             return;
 
@@ -163,6 +165,7 @@ namespace
 
     CObject* ResolveObject(CRemotePlayer::ID encodedId)
     {
+        ZoneScoped;
         auto* pools = g_netGame ? g_netGame->m_pPools : nullptr;
         auto* objectPool = pools ? pools->m_pObject : nullptr;
 
@@ -199,6 +202,7 @@ namespace
 
     void ProcessRemoteMarker(CRemotePlayer& player)
     {
+        ZoneScoped;
         auto* game = g_game.get();
         auto* net = g_netGame.get();
         if (!game)
@@ -206,6 +210,14 @@ namespace
 
         auto& runtime = Runtime(&player);
         const int mode = net && net->m_pSettings && net->m_nGameState == CNetGame::GAME_MODE_CONNECTED ? net->m_pSettings->m_nPlayerMarkersMode : MARKERS_MODE_OFF;
+        if (mode == MARKERS_MODE_OFF || player.m_nState == CRemotePlayer::PLAYER_STATE_WASTED)
+        {
+            if (player.m_marker)
+                game->DeleteMarker(player.m_marker);
+            player.m_marker = 0;
+            runtime.markerColor = 0;
+            return;
+        }
         const bool streamed = player.m_pPed && player.m_pPed->DoesExist() && player.m_nState != CRemotePlayer::PLAYER_STATE_WASTED;
         const D3DCOLOR color = player.GetColorAsRGBA();
         const bool show = player.m_nState != CRemotePlayer::PLAYER_STATE_WASTED && (color & 0xFFu) != 0 &&
@@ -249,6 +261,7 @@ namespace
 
 CRemotePlayer::CRemotePlayer()
 {
+    ZoneScoped;
     field_1 = 0;
     m_bDrawLabels = TRUE;
     m_bHasJetpack = FALSE;
@@ -305,6 +318,11 @@ CRemotePlayer::~CRemotePlayer()
 
 void CRemotePlayer::ProcessHead()
 {
+    ZoneScoped;
+    const TICK now = GetTickCount();
+    if (now - m_head.m_lastUpdate <= HEAD_UPDATE_MS && now - m_head.m_lastLook <= HEAD_LOOK_MS)
+        return;
+
     if (!m_pPed || !m_pPed->HasNativePed() || m_pPed->IsDead() || m_pPed->IsHoldingStuff())
         return;
 
@@ -312,7 +330,6 @@ void CRemotePlayer::ProcessHead()
     if (!FiniteVector(position))
         return;
 
-    const TICK now = GetTickCount();
     if (now - m_head.m_lastUpdate > HEAD_UPDATE_MS)
     {
         if (!FiniteVector(m_aimData.m_aimf1))
@@ -360,6 +377,10 @@ BOOL CRemotePlayer::SurfingOnObject()
 
 void CRemotePlayer::ProcessSurfing()
 {
+    ZoneScoped;
+    if (!SurfingOnVehicle())
+        return;
+
     if (!m_pPed || !m_pPed->HasNativePed() || m_pPed->IsInVehicle())
         return;
 
@@ -396,6 +417,7 @@ void CRemotePlayer::ProcessSurfing()
 
 void CRemotePlayer::OnEnterVehicle()
 {
+    ZoneScoped;
     if (!m_pPed || !m_pVehicle || !m_pVehicle->DoesExist())
         return;
 
@@ -410,6 +432,7 @@ void CRemotePlayer::OnEnterVehicle()
 
 void CRemotePlayer::OnExitVehicle()
 {
+    ZoneScoped;
     if (!m_pPed || !m_pPed->GetVehicle())
         return;
 
@@ -430,6 +453,7 @@ void CRemotePlayer::OnExitVehicle()
 
 void CRemotePlayer::ProcessSpecialAction()
 {
+    ZoneScoped;
     if (!m_pPed || m_nState != PLAYER_STATE_ONFOOT)
         return;
 
@@ -506,6 +530,7 @@ void CRemotePlayer::ProcessSpecialAction()
 
 void CRemotePlayer::UpdateOnfootSpeedAndPosition()
 {
+    ZoneScoped;
     if (!m_pPed || !FiniteVector(m_onfootTargetPosition) || !FiniteVector(m_onfootTargetSpeed))
         return;
 
@@ -536,6 +561,7 @@ void CRemotePlayer::UpdateOnfootSpeedAndPosition()
 
 void CRemotePlayer::UpdateOnfootRotation()
 {
+    ZoneScoped;
     if (!m_pPed || !FiniteQuaternion(m_onfootData.m_fQuaternion))
         return;
 
@@ -563,6 +589,7 @@ void CRemotePlayer::UpdateOnfootRotation()
 
 void CRemotePlayer::SetOnfootTargetSpeedAndPosition(CVector* position, CVector* speed)
 {
+    ZoneScoped;
     if (!position || !speed || !FiniteVector(*position) || !FiniteVector(*speed))
         return;
 
@@ -574,6 +601,7 @@ void CRemotePlayer::SetOnfootTargetSpeedAndPosition(CVector* position, CVector* 
 
 void CRemotePlayer::UpdateIncarSpeedAndPosition()
 {
+    ZoneScoped;
     if (!m_pVehicle || !m_pVehicle->DoesExist() || !FiniteVector(m_incarTargetPosition) || !FiniteVector(m_incarTargetSpeed))
         return;
 
@@ -623,6 +651,7 @@ void CRemotePlayer::UpdateIncarSpeedAndPosition()
 
 void CRemotePlayer::UpdateIncarRotation()
 {
+    ZoneScoped;
     if (!m_pVehicle || !m_pVehicle->DoesExist())
         return;
 
@@ -658,6 +687,7 @@ void CRemotePlayer::UpdateIncarRotation()
 
 void CRemotePlayer::SetIncarTargetSpeedAndPosition(CMatrix* matrix, CVector* position, CVector* speed)
 {
+    ZoneScoped;
     if (!matrix || !position || !speed || !FiniteVector(*position) || !FiniteVector(*speed))
         return;
 
@@ -675,6 +705,7 @@ void CRemotePlayer::SetIncarTargetSpeedAndPosition(CMatrix* matrix, CVector* pos
 
 void CRemotePlayer::UpdateTrain(CMatrix* matrix, CVector* speed, float trainSpeed)
 {
+    ZoneScoped;
     if (!m_pVehicle || !m_pVehicle->DoesExist() || !matrix || !speed || !FiniteVector(*speed) || !Finite(trainSpeed))
         return;
 
@@ -694,6 +725,7 @@ void CRemotePlayer::UpdateTrain(CMatrix* matrix, CVector* speed, float trainSpee
 
 void CRemotePlayer::Update(Synchronization::AimData* data)
 {
+    ZoneScoped;
     if (!data || !FiniteVector(data->m_aimf1) || !FiniteVector(data->m_aimPos) || !Finite(data->m_fAimZ))
         return;
 
@@ -715,6 +747,7 @@ void CRemotePlayer::Update(Synchronization::AimData* data)
 
 void CRemotePlayer::Update(Synchronization::UnoccupiedData* data)
 {
+    ZoneScoped;
     if (!data || data->m_nVehicleId == 0 || data->m_nVehicleId >= CVehiclePool::MAX_VEHICLES || !FiniteVector(data->m_roll) || !FiniteVector(data->m_direction) ||
         !FiniteVector(data->m_position) || !FiniteVector(data->m_speed) || !FiniteVector(data->m_turnSpeed) ||
         (m_nState == PLAYER_STATE_DRIVER && m_nVehicleId == data->m_nVehicleId))
@@ -753,6 +786,7 @@ void CRemotePlayer::Update(Synchronization::UnoccupiedData* data)
 
 void CRemotePlayer::Update(Synchronization::TrailerData* data)
 {
+    ZoneScoped;
     if (!data || data->m_nId == 0 || data->m_nId >= CVehiclePool::MAX_VEHICLES || m_nState != PLAYER_STATE_DRIVER || m_nVehicleId == INVALID_ID ||
         !FiniteVector(data->m_position) || !FiniteQuaternion(data->m_fQuaternion) || !FiniteVector(data->m_speed) || !FiniteVector(data->m_turnSpeed))
         return;
@@ -803,6 +837,7 @@ void CRemotePlayer::Update(Synchronization::TrailerData* data)
 
 void CRemotePlayer::ResetData()
 {
+    ZoneScoped;
     std::memset(&m_incarData, 0, sizeof(m_incarData));
     std::memset(&m_trailerData, 0, sizeof(m_trailerData));
     std::memset(&m_aimData, 0, sizeof(m_aimData));
@@ -881,6 +916,7 @@ D3DCOLOR CRemotePlayer::GetColorAsARGB()
 
 void CRemotePlayer::EnterVehicle(ID id, BOOL passenger)
 {
+    ZoneScoped;
     CVehicle* vehicle = ResolveVehicle(id);
     if (!m_pPed || !vehicle || !vehicle->DoesExist())
         return;
@@ -907,6 +943,7 @@ void CRemotePlayer::EnterVehicle(ID id, BOOL passenger)
 
 void CRemotePlayer::ExitVehicle(ID id)
 {
+    ZoneScoped;
     if (!m_pPed)
         return;
     auto& runtime = Runtime(this);
@@ -932,6 +969,7 @@ void CRemotePlayer::ExitVehicle(ID id)
 
 void CRemotePlayer::ChangeState(char oldState, char newState)
 {
+    ZoneScoped;
     if (oldState == newState)
         return;
 
@@ -970,6 +1008,7 @@ int CRemotePlayer::GetStatus()
 
 void CRemotePlayer::Update(Synchronization::BulletData* data)
 {
+    ZoneScoped;
     if (!data || !m_pPed || !m_pPed->HasNativePed() || !g_netGame || data->m_nWeapon < 22 || data->m_nWeapon > 34 || data->m_nTargetType > 4)
         return;
     auto finite = [](const CVector& value) {
@@ -1008,6 +1047,7 @@ void CRemotePlayer::Update(Synchronization::BulletData* data)
 
 void CRemotePlayer::Process()
 {
+    ZoneScoped;
     PROFILE_SCOPE(RemotePlayers);
     m_pVehicle = m_nVehicleId == INVALID_ID ? nullptr : ResolveVehicle(m_nVehicleId);
     ProcessRemoteMarker(*this);
@@ -1094,6 +1134,7 @@ void CRemotePlayer::Process()
     }
     else if (m_nState == PLAYER_STATE_DRIVER && m_nUpdateType == UPDATE_TYPE_INCAR)
     {
+        ZoneScoped;
         if (m_pVehicle && m_pVehicle->DoesExist())
         {
             if (!runtime.enteringVehicle && (m_pPed->GetVehicle() != m_pVehicle->GetNativeVehicleHandle() || m_pPed->GetVehicleSeatIndex() != 0))
@@ -1148,6 +1189,7 @@ void CRemotePlayer::Process()
     }
     else if (m_nState == PLAYER_STATE_PASSENGER && m_nUpdateType == UPDATE_TYPE_PASSENGER)
     {
+        ZoneScoped;
         if (!runtime.enteringVehicle && !m_pPed->HasVehicleEntryTask())
             OnEnterVehicle();
         m_nUpdateType = UPDATE_TYPE_NONE;
@@ -1248,6 +1290,7 @@ void CRemotePlayer::Process()
 
 BOOL CRemotePlayer::Spawn(int a2, int model, int a4, CVector* position, float rotation, D3DCOLOR color, char fightingStyle)
 {
+    ZoneScoped;
     (void)a2;
     (void)a4;
 
@@ -1283,6 +1326,7 @@ BOOL CRemotePlayer::Spawn(int a2, int model, int a4, CVector* position, float ro
 
 void CRemotePlayer::Update(Synchronization::OnfootData* data, TICK timestamp)
 {
+    ZoneScoped;
     if (!data || !FiniteVector(data->m_position) || !FiniteVector(data->m_speed) || !FiniteVector(data->m_surfingOffset) || !FiniteQuaternion(data->m_fQuaternion))
         return;
     if (timestamp && m_lastTimestamp && static_cast<std::int32_t>(timestamp - m_lastTimestamp) < 0)
@@ -1312,6 +1356,7 @@ void CRemotePlayer::Update(Synchronization::OnfootData* data, TICK timestamp)
 
 void CRemotePlayer::Update(Synchronization::IncarData* data, TICK timestamp)
 {
+    ZoneScoped;
     if (!data || data->m_nVehicle >= CVehiclePool::MAX_VEHICLES || !FiniteVector(data->m_position) || !FiniteVector(data->m_speed) || !FiniteQuaternion(data->m_fQuaternion) ||
         !Finite(data->m_fHealth))
         return;
@@ -1344,6 +1389,7 @@ void CRemotePlayer::Update(Synchronization::IncarData* data, TICK timestamp)
 
 void CRemotePlayer::Update(Synchronization::PassengerData* data, TICK timestamp)
 {
+    ZoneScoped;
     if (!data || data->m_nVehicleId >= CVehiclePool::MAX_VEHICLES || (data->m_nSeatId & 0x3Fu) == 0 || (data->m_nSeatId & 0x3Fu) > 7 || !FiniteVector(data->m_position))
         return;
 
@@ -1370,6 +1416,7 @@ void CRemotePlayer::Update(Synchronization::PassengerData* data, TICK timestamp)
 
 void CRemotePlayer::Remove()
 {
+    ZoneScoped;
     if (m_marker)
     {
         if (auto* game = g_game.get())
@@ -1389,6 +1436,7 @@ void CRemotePlayer::Remove()
 
 void CRemotePlayer::Kill()
 {
+    ZoneScoped;
     if (m_pPed && m_pPed->HasNativePed())
     {
         m_pPed->SetKeys(0, 0, 0);
@@ -1401,6 +1449,7 @@ void CRemotePlayer::Kill()
 
 void CRemotePlayer::Chat(const char* text)
 {
+    ZoneScoped;
     if (!text || !*text || !g_chat)
         return;
 

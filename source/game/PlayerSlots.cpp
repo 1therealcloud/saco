@@ -78,6 +78,7 @@ namespace game::players::detail
 
     void ApplyLocalControlSuppressions()
     {
+        ZoneScoped;
         auto* gameInstance = g_game.get();
         auto* player = gameInstance ? gameInstance->GetPlayerPed() : nullptr;
         if (!player)
@@ -114,6 +115,7 @@ namespace game::players::detail
 
     void SetPositionUpdate(bool enabled)
     {
+        ZoneScoped;
         WriteCode(kUpdatePositionCall, enabled ? kUpdatePositionOriginal : kNop5);
     }
 
@@ -163,6 +165,7 @@ namespace game::players
 
     bool Install()
     {
+        ZoneScoped;
         if (g_installed)
             return true;
         // r5 skips native group creation for standalone player peds (jnz -> jz)
@@ -202,6 +205,7 @@ namespace game::players
 
     int AcquireSlot()
     {
+        ZoneScoped;
         if (!g_installed)
             return -1;
         for (int slot = 2; slot < SLOT_COUNT; ++slot)

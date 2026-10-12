@@ -2,7 +2,6 @@
 
 #include "PlayerColors.h"
 
-
 namespace PlayerColors
 {
     namespace
@@ -29,6 +28,7 @@ namespace PlayerColors
 
     std::uint32_t GetColor(std::uint32_t id)
     {
+        ZoneScoped;
         switch (id)
         {
             case 1004:

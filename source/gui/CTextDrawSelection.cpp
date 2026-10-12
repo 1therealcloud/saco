@@ -33,11 +33,13 @@ namespace
 
     CTextDrawPool* GetTextDrawPool()
     {
+        ZoneScoped;
         return g_netGame && g_netGame->m_pPools ? g_netGame->m_pPools->m_pTextDraw : nullptr;
     }
 
     void EnableHud(BOOL enable)
     {
+        ZoneScoped;
         if (enable)
         {
             if (!g_hudHidden)
@@ -61,16 +63,20 @@ namespace
 }
 
 CTextDrawSelection::CTextDrawSelection() : m_bIsActive(FALSE), m_hoveredColor(0xFFFFFFFFu), m_nHoveredId(INVALID_TEXTDRAW_ID)
-{}
+{
+    ZoneScoped;
+}
 
 CTextDrawSelection::~CTextDrawSelection()
 {
+    ZoneScoped;
     if (m_bIsActive)
         Disable(false);
 }
 
 void CTextDrawSelection::ResetTextDraws()
 {
+    ZoneScoped;
     CTextDrawPool* pool = GetTextDrawPool();
     if (!pool)
         return;
@@ -91,6 +97,7 @@ void CTextDrawSelection::ResetTextDraws()
 
 void CTextDrawSelection::RawProcess()
 {
+    ZoneScoped;
     m_nHoveredId = INVALID_TEXTDRAW_ID;
     POINT point{};
     const auto window = GetGameWindow();
@@ -105,6 +112,7 @@ void CTextDrawSelection::RawProcess()
 
 void CTextDrawSelection::RawProcess(POINT point)
 {
+    ZoneScoped;
     m_nHoveredId = INVALID_TEXTDRAW_ID;
 
     CTextDrawPool* pool = GetTextDrawPool();
@@ -140,6 +148,7 @@ void CTextDrawSelection::RawProcess(POINT point)
 
 void CTextDrawSelection::Process()
 {
+    ZoneScoped;
     if (!m_bIsActive)
         return;
 
@@ -152,6 +161,7 @@ void CTextDrawSelection::Process()
 
 void CTextDrawSelection::Enable(D3DCOLOR hoveredColor)
 {
+    ZoneScoped;
     m_bIsActive = TRUE;
     m_hoveredColor = ConvertHoveredColor(hoveredColor);
     m_nHoveredId = INVALID_TEXTDRAW_ID;
@@ -161,12 +171,14 @@ void CTextDrawSelection::Enable(D3DCOLOR hoveredColor)
 
 void CTextDrawSelection::SendNotification()
 {
+    ZoneScoped;
     if (g_netGame)
         g_netGame->SelectTextDraw(m_nHoveredId);
 }
 
 void CTextDrawSelection::Disable(bool notify)
 {
+    ZoneScoped;
     if (!m_bIsActive)
         return;
     m_bIsActive = FALSE;
@@ -182,6 +194,7 @@ void CTextDrawSelection::Disable(bool notify)
 
 BOOL CTextDrawSelection::MsgProc(int uMsg, int wParam, int lParam)
 {
+    ZoneScoped;
     (void)wParam;
     (void)lParam;
 
@@ -197,5 +210,6 @@ BOOL CTextDrawSelection::MsgProc(int uMsg, int wParam, int lParam)
 
 void CTextDrawSelection::SetWindow(HWND window)
 {
+    ZoneScoped;
     g_window = window;
 }

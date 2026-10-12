@@ -27,6 +27,7 @@ BOOL CActorPool::DoesExist(ID id) const
 
 void CActorPool::UpdateLargestId()
 {
+    ZoneScoped;
     m_nLargestId = 0;
     for (int id = MAX_ACTORS - 1; id >= 0; --id)
     {
@@ -40,6 +41,7 @@ void CActorPool::UpdateLargestId()
 
 BOOL CActorPool::Delete(ID id)
 {
+    ZoneScoped;
     if (!DoesExist(id))
         return FALSE;
 
@@ -56,6 +58,7 @@ BOOL CActorPool::Delete(ID id)
 
 CActorPool::ID CActorPool::Find(const void* gamePed) const
 {
+    ZoneScoped;
     if (!gamePed)
         return INVALID_ID;
 
@@ -68,6 +71,7 @@ CActorPool::ID CActorPool::Find(const void* gamePed) const
 
 BOOL CActorPool::Create(const ActorInfo* info)
 {
+    ZoneScoped;
     if (!info || info->m_nId >= MAX_ACTORS || !std::isfinite(info->m_position.x) || !std::isfinite(info->m_position.y) || !std::isfinite(info->m_position.z) ||
         !std::isfinite(info->m_fRotation) || !std::isfinite(info->m_fHealth))
         return FALSE;

@@ -40,6 +40,7 @@ namespace
     }
     bool ReadWorldPosition(const CEntity* entity, CVector& position)
     {
+        ZoneScoped;
         if (!entity || !entity->IsValid())
             return false;
 
@@ -55,6 +56,7 @@ namespace
 
     bool LocalPosition(CVector& position)
     {
+        ZoneScoped;
         auto* game = g_game.get();
         auto* ped = game ? game->GetPlayerPed() : nullptr;
         if (!ped)
@@ -80,6 +82,7 @@ namespace
 
     float DistanceBetween(const CVector& a, const CVector& b, bool ignoreHeight = false)
     {
+        ZoneScoped;
         const float x = a.x - b.x;
         const float y = a.y - b.y;
         if (ignoreHeight)
@@ -94,6 +97,7 @@ namespace
 
     void InvertEulerR5(float* angle)
     {
+        ZoneScoped;
         __asm
         {
             mov eax, angle
@@ -117,6 +121,7 @@ bool CEntity::IsVisible() const
 
 void CEntity::GetMatrix(CMatrix* matrix) const
 {
+    ZoneScoped;
     if (!matrix || !IsValid())
         return;
     auto* native = Read<void*>(m_pGameEntity, 0x14);
@@ -130,6 +135,7 @@ void CEntity::GetMatrix(CMatrix* matrix) const
 
 void CEntity::SetMatrix(const CMatrix& matrix)
 {
+    ZoneScoped;
     if (!IsValid())
         return;
     auto* native = Read<void*>(m_pGameEntity, 0x14);
@@ -177,6 +183,7 @@ float CEntity::GetDistanceFromCentreOfMassToBaseOfModel() const
 }
 bool CEntity::IntersectsCameraRay(const CVector& origin, const CVector& target, float scale) const
 {
+    ZoneScoped;
     if (!IsValid())
         return false;
     const auto* info = ModelInfo::GetRelocated(GetModelIndex());
@@ -215,6 +222,7 @@ void CEntity::GetBoundCentre(CVector* centre) const
 }
 void CEntity::SetModelIndex(int model)
 {
+    ZoneScoped;
     if (!IsValid() || !g_game || model < 0 || model >= ModelInfo::MAX_MODELS)
         return;
 
@@ -259,6 +267,7 @@ int CEntity::GetModelIndex() const
 }
 void CEntity::Teleport(CVector position)
 {
+    ZoneScoped;
     if (!IsValid())
         return;
     const int model = GetModelIndex();
@@ -302,6 +311,7 @@ BOOL CEntity::DoesExist() const
 }
 void CEntity::Add()
 {
+    ZoneScoped;
     if (!IsValid() || DoesExist())
         return;
     SetSpeed({});
@@ -318,6 +328,7 @@ void CEntity::Remove()
 }
 BOOL CEntity::EnforceWorldBoundries(float maxX, float minX, float maxY, float minY)
 {
+    ZoneScoped;
     if (!IsValid())
         return FALSE;
     CMatrix matrix = CMatrix::Unity();
@@ -370,6 +381,7 @@ BOOL CEntity::HasExceededWorldBoundries(float maxX, float minX, float maxY, floa
 }
 void CEntity::GetEulerInverted(float* x, float* y, float* z) const
 {
+    ZoneScoped;
     if (!x || !y || !z || !IsValid())
         return;
 
@@ -404,6 +416,7 @@ void CEntity::SetCollisionFlag(BOOL enabled)
 }
 void CEntity::SetCollisionProcessed(BOOL processed)
 {
+    ZoneScoped;
     if (IsValid())
     {
         auto flags = Read<std::uint32_t>(m_pGameEntity, 0x1C);
@@ -421,6 +434,7 @@ void CEntity::DeleteRwObject()
 }
 void CEntity::UpdateRwFrame()
 {
+    ZoneScoped;
     auto* object = GetRwObject();
     auto* matrix = IsValid() ? Read<void*>(m_pGameEntity, 0x14) : nullptr;
     if (!object || !object->parent || !matrix)
@@ -431,6 +445,7 @@ void CEntity::UpdateRwFrame()
 }
 void CEntity::UpdateMatrixInWorld(const CMatrix& matrix)
 {
+    ZoneScoped;
     if (!IsValid() || !Read<void*>(m_pGameEntity, 0x14))
         return;
     const bool inWorld = DoesExist() != FALSE;

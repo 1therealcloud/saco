@@ -24,6 +24,7 @@ namespace game::patch::fps
     std::uintptr_t g_idleHandler = 0;
     bool install()
     {
+        ZoneScoped;
         if (g_installed)
             return true;
 

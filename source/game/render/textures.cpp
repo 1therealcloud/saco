@@ -27,6 +27,7 @@ namespace game::render::textures
 
     int load_dictionary(const char* name, const char* path)
     {
+        ZoneScoped;
         if (!name || !*name || !path || !*path || find_slot(name) >= 0)
             return -1;
         // the filename overload of CTxdStore::LoadTxd retries forever on a missing file
@@ -68,6 +69,7 @@ namespace game::render::textures
 
     DictionaryScope::DictionaryScope(int slot)
     {
+        ZoneScoped;
         if (slot < 0)
             return;
         auto* dictionary = gta<RwTexDictionary*(__cdecl*)(int)>(0x408340)(slot);

@@ -68,6 +68,7 @@ CObjectEdit::CObjectEdit(IDirect3DDevice9* device)
       m_bObjectXSizeYCoordDiffMoreThanX(FALSE), m_bObjectYSizeYCoordDiffMoreThanX(FALSE), m_bObjectZSizeYCoordDiffMoreThanX(FALSE), m_entityMatrix{}, m_pDevice(device),
       m_pLine(nullptr), m_pIconFontSmall(nullptr), m_pIconFontBig(nullptr), m_nProcessType(OBJECT_EDIT_PROCESS_TYPE_NONE)
 {
+    ZoneScoped;
     if (!m_pDevice)
         return;
 
@@ -85,6 +86,7 @@ CObjectEdit::CObjectEdit(IDirect3DDevice9* device)
 
 CObjectEdit::~CObjectEdit()
 {
+    ZoneScoped;
     if (m_bEnabled)
         Disable(FALSE, false);
     delete m_pIconFontBig;
@@ -105,6 +107,7 @@ CObjectEdit::~CObjectEdit()
 
 float CObjectEdit::WorldToScreen(Vector* in, float* out)
 {
+    ZoneScoped;
     if (!in || !out || !m_pLine)
         return 1.0f;
 
@@ -119,6 +122,7 @@ float CObjectEdit::WorldToScreen(Vector* in, float* out)
 
 int CObjectEdit::RenderAxes(Matrix* matrix, float lineSize)
 {
+    ZoneScoped;
     if (!matrix || !m_pLine)
         return FALSE;
 
@@ -151,6 +155,7 @@ int CObjectEdit::RenderAxes(Matrix* matrix, float lineSize)
 
 const char* CObjectEdit::GetRenderChar(BOOL axis)
 {
+    ZoneScoped;
     switch (axis)
     {
         case 0:
@@ -195,6 +200,7 @@ const char* CObjectEdit::GetRenderChar(BOOL axis)
 
 void CObjectEdit::TryChangeProcessType()
 {
+    ZoneScoped;
     if (!m_bRenderedThisFrame)
     {
         m_nProcessType = OBJECT_EDIT_PROCESS_TYPE_NONE;
@@ -236,6 +242,7 @@ void CObjectEdit::SetEditMode(ObjectEditMode mode)
 
 void CObjectEdit::ResetMousePos()
 {
+    ZoneScoped;
     HWND window = GetGameWindow();
     if (!window)
         return;
@@ -252,6 +259,7 @@ void CObjectEdit::ResetMousePos()
 
 void CObjectEdit::EnterEditObject(ID objectId, BOOL playerObject)
 {
+    ZoneScoped;
     m_bEnabled = TRUE;
     m_nEditType = OBJECT_EDIT_TYPE_OBJECT;
     SetEditMode(OBJECT_EDIT_MODE_POSITION);
@@ -276,6 +284,7 @@ void CObjectEdit::EnterEditObject(ID objectId, BOOL playerObject)
 
 void CObjectEdit::EnterEditAttachedObject(std::uint32_t index)
 {
+    ZoneScoped;
     m_bEnabled = TRUE;
     m_nEditType = OBJECT_EDIT_TYPE_ATTACHEDOBJECT;
     SetEditMode(OBJECT_EDIT_MODE_POSITION);
@@ -301,6 +310,7 @@ void CObjectEdit::EnterEditAttachedObject(std::uint32_t index)
 
 void CObjectEdit::SendEditEndNotification(int response)
 {
+    ZoneScoped;
     ObjectState state{};
     if (g_netGame && ResolveObject(state))
         g_netGame->EditObject(m_bIsPlayerObject != FALSE, m_nEditObjectId, response, CVector{state.matrix.pos.x, state.matrix.pos.y, state.matrix.pos.z},
@@ -309,6 +319,7 @@ void CObjectEdit::SendEditEndNotification(int response)
 
 void CObjectEdit::SendAttachedEditEndNotification(int response)
 {
+    ZoneScoped;
     auto* ped = g_game ? g_game->GetPlayerPed() : nullptr;
     if (!g_netGame || !ped || m_nAttachedObjectIndex >= CPed::MAX_ACCESSORIES || !ped->GetAccessoryState(m_nAttachedObjectIndex))
         return;
@@ -319,6 +330,7 @@ void CObjectEdit::SendAttachedEditEndNotification(int response)
 
 void CObjectEdit::Disable(BOOL result, bool notify)
 {
+    ZoneScoped;
     const int response = result ? 1 : 0;
     auto& runtime = g_runtime[this];
     if (!result && m_nEditType == OBJECT_EDIT_TYPE_ATTACHEDOBJECT && runtime.hasInitialAttached)
@@ -354,6 +366,7 @@ void CObjectEdit::Disable(BOOL result, bool notify)
 
 BOOL CObjectEdit::RenderControlsForObject(Matrix* objectMatrix, float lineSize)
 {
+    ZoneScoped;
     if (!objectMatrix || !m_pLine || !m_pIconFontSmall || !m_pIconFontBig)
         return FALSE;
 
@@ -425,6 +438,7 @@ BOOL CObjectEdit::RenderControlsForObject(Matrix* objectMatrix, float lineSize)
 
 void CObjectEdit::ApplyChanges(ObjectEditProcessType type, float diff)
 {
+    ZoneScoped;
     if (type < OBJECT_EDIT_PROCESS_TYPE_XAXIS || type > OBJECT_EDIT_PROCESS_TYPE_ZAXIS)
         return;
 
@@ -518,6 +532,7 @@ void CObjectEdit::ApplyChanges(ObjectEditProcessType type, float diff)
 
 void CObjectEdit::ProcessMouseMove()
 {
+    ZoneScoped;
     POINT cursor{};
     if (!GetCursorClientPoint(cursor))
         return;
@@ -588,6 +603,7 @@ void CObjectEdit::ProcessMouseMove()
 
 BOOL CObjectEdit::MsgProc(int uMsg, int wParam, int lParam)
 {
+    ZoneScoped;
     (void)lParam;
 
     if (!m_bEnabled)
@@ -674,6 +690,7 @@ BOOL CObjectEdit::MsgProc(int uMsg, int wParam, int lParam)
 
 void CObjectEdit::Render()
 {
+    ZoneScoped;
     PROFILE_SCOPE(ObjectEdit);
     m_bRenderedThisFrame = FALSE;
 
@@ -698,6 +715,7 @@ void CObjectEdit::Render()
     }
     else if (m_nEditType == OBJECT_EDIT_TYPE_ATTACHEDOBJECT)
     {
+        ZoneScoped;
         AttachedObjectState state{};
         if (ResolveAttachedObject(state))
         {
@@ -714,6 +732,7 @@ void CObjectEdit::Render()
 
 void CObjectEdit::SetPaused(bool paused)
 {
+    ZoneScoped;
     auto& state = g_runtime[this];
     if (state.paused == paused)
         return;
@@ -725,6 +744,7 @@ void CObjectEdit::SetPaused(bool paused)
 
 void CObjectEdit::OnLostDevice()
 {
+    ZoneScoped;
     m_bRenderedThisFrame = FALSE;
     m_bEditingRightNow = false;
     if (m_pLine)
@@ -752,6 +772,7 @@ const char* CObjectEdit::GetMaxSizeChar()
 
 HWND CObjectEdit::GetGameWindow() const
 {
+    ZoneScoped;
     if (!m_pDevice)
         return nullptr;
 
@@ -773,6 +794,7 @@ bool CObjectEdit::GetCursorClientPoint(POINT& point) const
 
 void CObjectEdit::SetCursorClientPoint(const POINT& point) const
 {
+    ZoneScoped;
     HWND window = GetGameWindow();
     if (!window)
         return;
@@ -784,6 +806,7 @@ void CObjectEdit::SetCursorClientPoint(const POINT& point) const
 
 bool CObjectEdit::ResolveObject(ObjectState& state) const
 {
+    ZoneScoped;
     auto* pool = g_netGame ? g_netGame->GetObjectPool() : nullptr;
     auto* object = pool ? pool->Get(m_nEditObjectId) : nullptr;
     if (!object || !object->IsValid())
@@ -801,6 +824,7 @@ bool CObjectEdit::ResolveObject(ObjectState& state) const
 
 bool CObjectEdit::ResolveAttachedObject(AttachedObjectState& state) const
 {
+    ZoneScoped;
     auto* game = g_game.get();
     auto* ped = game ? game->GetPlayerPed() : nullptr;
     if (!ped || m_nAttachedObjectIndex >= CPed::MAX_ACCESSORIES)
@@ -824,6 +848,7 @@ bool CObjectEdit::ResolveAttachedObject(AttachedObjectState& state) const
 
 void CObjectEdit::RenderControl(const POINT& center, ObjectEditProcessType type)
 {
+    ZoneScoped;
     if (!m_pIconFontSmall || !m_pIconFontBig)
         return;
 
@@ -892,6 +917,7 @@ void CObjectEdit::RenderControl(const POINT& center, ObjectEditProcessType type)
 
 void CObjectEdit::UpdateAxisDirection(const POINT& origin, const POINT& endpoint, bool& topOnLeft, BOOL& yDiffMoreThanX)
 {
+    ZoneScoped;
     const LONG dx = endpoint.x - origin.x;
     const LONG dy = endpoint.y - origin.y;
 

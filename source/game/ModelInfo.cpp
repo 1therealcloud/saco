@@ -55,22 +55,30 @@ namespace ModelInfo
 
         std::size_t AtomicSize(const void* model)
         {
+            ZoneScoped;
             if (!model)
                 return 0;
 
             switch (Read<std::uint32_t>(model, 0))
             {
-                case kAtomicVtable: return 0x20;
-                case kDamageAtomicVtable: return 0x24;
-                case kLodAtomicVtable: return 0x24;
-                case kTimeVtable: return 0x24;
-                case kLodTimeVtable: return 0x28;
-                default: return 0;
+                case kAtomicVtable:
+                    return 0x20;
+                case kDamageAtomicVtable:
+                    return 0x24;
+                case kLodAtomicVtable:
+                    return 0x24;
+                case kTimeVtable:
+                    return 0x24;
+                case kLodTimeVtable:
+                    return 0x28;
+                default:
+                    return 0;
             }
         }
 
         void* Copy(void** table, const void* source, int sourceModelId, int destination, std::size_t size, bool ped)
         {
+            ZoneScoped;
             if (table[destination] || g_ownedClones.contains(destination))
                 return nullptr;
 
@@ -158,6 +166,7 @@ namespace ModelInfo
 
     void* ClonePed(int sourceModelId, int newModelId)
     {
+        ZoneScoped;
         if (sourceModelId < 0 || !Valid(sourceModelId) || !Valid(newModelId) || sourceModelId == newModelId)
             return nullptr;
 
@@ -174,6 +183,7 @@ namespace ModelInfo
 
     void* CloneAtomic(int sourceModelId, int newModelId)
     {
+        ZoneScoped;
         if (sourceModelId < 0 || !Valid(sourceModelId) || !Valid(newModelId) || sourceModelId == newModelId)
             return nullptr;
 
@@ -184,8 +194,7 @@ namespace ModelInfo
         if (table[newModelId])
         {
             const auto it = g_ownedClones.find(newModelId);
-            return it != g_ownedClones.end() && it->second.info == table[newModelId] &&
-                   !it->second.ped && it->second.baseModelId == sourceModelId ? table[newModelId] : nullptr;
+            return it != g_ownedClones.end() && it->second.info == table[newModelId] && !it->second.ped && it->second.baseModelId == sourceModelId ? table[newModelId] : nullptr;
         }
 
         const auto* source = table[sourceModelId];
@@ -195,6 +204,7 @@ namespace ModelInfo
 
     bool DiscardUnloadedClone(int modelId)
     {
+        ZoneScoped;
         if (!IsOwnedClone(modelId))
             return false;
 
@@ -203,11 +213,9 @@ namespace ModelInfo
         const auto* info = record.info;
         const auto flags = Read<std::uint8_t>(info, kFlagsOffset);
         const auto clumpFlags = Read<std::uint8_t>(info, kFlagsOffset + 1);
-        if (Read<std::uint16_t>(info, kReferencesOffset) || Read<std::uint32_t>(info, kRwObjectOffset) ||
-            Read<std::int16_t>(info, kTxdSlotOffset) != record.inheritedTxdSlot ||
+        if (Read<std::uint16_t>(info, kReferencesOffset) || Read<std::uint32_t>(info, kRwObjectOffset) || Read<std::int16_t>(info, kTxdSlotOffset) != record.inheritedTxdSlot ||
             Read<std::uint32_t>(info, kCollisionOffset) != record.borrowedCollision || (flags & 0x20u) ||
-            (record.ped && (Read<std::uint32_t>(info, kHitCollisionOffset) || (clumpFlags & 0x08u))) ||
-            (record.damageAtomic && Read<std::uint32_t>(info, kDamagedAtomicOffset)))
+            (record.ped && (Read<std::uint32_t>(info, kHitCollisionOffset) || (clumpFlags & 0x08u))) || (record.damageAtomic && Read<std::uint32_t>(info, kDamagedAtomicOffset)))
             return false;
 
         auto** table = game::patch::modelinfo::active_table();

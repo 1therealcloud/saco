@@ -87,6 +87,7 @@ namespace BuildingRemoval
         }
         bool FindKey(void* entity, EntityKey& key)
         {
+            ZoneScoped;
             const std::pair<std::uintptr_t, std::size_t> pools[] = {{0xB74498, 0x38}, {0xB744A0, 0x38}, {0xB7449C, 0x19C}};
             for (const auto& [address, stride] : pools)
             {
@@ -109,6 +110,7 @@ namespace BuildingRemoval
         }
         void HideOnce(const EntityKey& key)
         {
+            ZoneScoped;
             if (!key.Alive())
                 return;
             auto* entity = key.Entity();
@@ -124,6 +126,7 @@ namespace BuildingRemoval
         }
         void RemoveFromPool(std::uintptr_t address, std::size_t stride, const Removal& removal)
         {
+            ZoneScoped;
             auto* pool = *reinterpret_cast<void**>(address);
             if (!pool)
                 return;
@@ -149,6 +152,7 @@ namespace BuildingRemoval
         }
         void RemoveOccluders(CVector center)
         {
+            ZoneScoped;
             const auto total = std::min(*reinterpret_cast<const std::uint32_t*>(0xC73F98), 1000u);
             auto* data = reinterpret_cast<std::uint8_t*>(0xC73FA0);
             for (std::uint32_t i = 0; i < total; ++i)
@@ -203,6 +207,7 @@ namespace BuildingRemoval
     }
     void Process()
     {
+        ZoneScoped;
         PROFILE_SCOPE(Removal);
         for (const auto& key : pending)
             if (key.Alive())
@@ -215,6 +220,7 @@ namespace BuildingRemoval
     }
     bool RemoveBuildingsInArea(int model, float x, float y, float z, float radius)
     {
+        ZoneScoped;
         if (model < -1 || model > 65535 || !Finite({x, y, z}) || !std::isfinite(radius) || radius < 0)
             return false;
         for (std::size_t i = 0; i < count; ++i)
@@ -232,6 +238,7 @@ namespace BuildingRemoval
     }
     void RestoreAll()
     {
+        ZoneScoped;
         count = 0;
         pending.clear();
         std::size_t restored = 0;

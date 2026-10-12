@@ -26,6 +26,7 @@ namespace
     // source is shorter than 400 bytes and the expanded result fits maxLength.
     std::size_t ExpandPlayerControlKeys(char* text, std::size_t maxLength)
     {
+        ZoneScoped;
         if (!text)
             return 0;
 
@@ -70,6 +71,7 @@ CLabelPool::~CLabelPool()
 
 void CLabelPool::Create(ID id, const char* text, D3DCOLOR color, CVector position, float drawDistance, bool behindWalls, ID attachedToPlayer, ID attachedToVehicle)
 {
+    ZoneScoped;
     if (id >= MAX_LABELS || !text || !std::isfinite(drawDistance) || drawDistance < 0 || !std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z))
         return;
 
@@ -96,6 +98,7 @@ void CLabelPool::Create(ID id, const char* text, D3DCOLOR color, CVector positio
 
 BOOL CLabelPool::Delete(ID id)
 {
+    ZoneScoped;
     if (id >= MAX_LABELS || !m_bNotEmpty[id])
         return FALSE;
 
@@ -110,6 +113,7 @@ BOOL CLabelPool::Delete(ID id)
 
 void CLabelPool::Draw()
 {
+    ZoneScoped;
     PROFILE_SCOPE(Labels);
     if (!g_label)
         return;
@@ -154,6 +158,7 @@ void CLabelPool::Draw()
         }
         else if (label.m_nAttachedToVehicle != INVALID_ID)
         {
+            ZoneScoped;
             auto* netGame = g_netGame.get();
             auto* vehiclePool = netGame ? netGame->GetVehiclePool() : nullptr;
             auto* vehicle = vehiclePool ? vehiclePool->Get(label.m_nAttachedToVehicle) : nullptr;

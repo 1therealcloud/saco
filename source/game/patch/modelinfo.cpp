@@ -32,6 +32,7 @@ namespace game::patch::modelinfo
 
         bool readable_span(std::uintptr_t address, std::size_t bytes)
         {
+            ZoneScoped;
             if (!address || bytes > std::numeric_limits<std::uintptr_t>::max() - address)
                 return false;
 
@@ -61,6 +62,7 @@ namespace game::patch::modelinfo
 
         bool validate_model_info_reference(const dl_reference::ModelInfoSite& site, bool firstVariant, std::uint32_t currentTable, ModelInfoReference& reference)
         {
+            ZoneScoped;
             const auto address = static_cast<std::uintptr_t>(firstVariant ? site.gta_address_variant_1 : site.gta_address_variant_2);
             const auto opcode = site.opcode;
             std::uint32_t displacement{};
@@ -71,6 +73,7 @@ namespace game::patch::modelinfo
             }
             else if (opcode == 0x8B || opcode == 0x89 || opcode == 0x39)
             {
+                ZoneScoped;
                 displacement = 3;
                 std::array<std::uint8_t, 3> prefix{};
                 if (!::patch::read(address, prefix.data(), prefix.size()) || prefix[0] != opcode)
@@ -104,6 +107,7 @@ namespace game::patch::modelinfo
 
         ModelInfoReferenceSet validate_model_info_references(bool firstVariant, std::uint32_t activeTable)
         {
+            ZoneScoped;
             ModelInfoReferenceSet result{};
             for (const auto& site : dl_reference::kModelInfoSites)
             {
@@ -138,6 +142,7 @@ namespace game::patch::modelinfo
 
         bool prepare_signed_model_info(std::uint32_t activeTable, SignedRelocationPlan& plan)
         {
+            ZoneScoped;
             if (g_signedInstalled)
                 return false;
 
@@ -184,6 +189,7 @@ namespace game::patch::modelinfo
 
         bool install_signed_model_info(std::uint32_t activeTable, const SignedRelocationPlan& plan)
         {
+            ZoneScoped;
             if (!plan.required)
                 return true;
 
@@ -310,6 +316,7 @@ namespace game::patch::modelinfo
         template <std::size_t N>
         bool resolve_store_base(const std::array<PointerSite, N>& sites, std::uint32_t& base)
         {
+            ZoneScoped;
             base = 0;
 
             for (const auto& site : sites)
@@ -336,6 +343,7 @@ namespace game::patch::modelinfo
         template <std::size_t N>
         bool relocate_store(const std::array<PointerSite, N>& sites, std::uint32_t newBase)
         {
+            ZoneScoped;
             for (const auto& site : sites)
             {
                 if (!::patch::write(site.address, newBase + site.displacement))
@@ -347,6 +355,7 @@ namespace game::patch::modelinfo
 
         std::uint32_t active_model_info_ptrs()
         {
+            ZoneScoped;
             // mov eax, [model*4 + ms_modelInfoPtrs]
             constexpr std::array<std::uint8_t, 3> prefix = {0x8B, 0x04, 0x85};
 
@@ -362,6 +371,7 @@ namespace game::patch::modelinfo
 
         bool install_atomic_store()
         {
+            ZoneScoped;
             std::uint32_t activeStore{};
             if (!resolve_store_base(kAtomicSites, activeStore))
                 return false;
@@ -394,6 +404,7 @@ namespace game::patch::modelinfo
 
         bool install_ped_store()
         {
+            ZoneScoped;
             std::uint32_t activeStore{};
             if (!resolve_store_base(kPedSites, activeStore))
                 return false;
@@ -424,6 +435,7 @@ namespace game::patch::modelinfo
 
         bool patch_txd_capacity()
         {
+            ZoneScoped;
             std::uint32_t value{};
             if (!::patch::read(address::txdCapacity, &value, sizeof(value)))
                 return false;
@@ -436,6 +448,7 @@ namespace game::patch::modelinfo
 
         bool patch_vehicle_struct_capacity()
         {
+            ZoneScoped;
             std::uint8_t value{};
             if (!::patch::read(address::vehicleStructCount, &value, sizeof(value)))
                 return false;
@@ -449,6 +462,7 @@ namespace game::patch::modelinfo
 
     bool install()
     {
+        ZoneScoped;
         const auto modelInfoPtrs = active_model_info_ptrs();
         if (!modelInfoPtrs)
             return false;

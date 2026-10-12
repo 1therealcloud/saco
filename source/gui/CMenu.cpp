@@ -99,6 +99,7 @@ void CMenu::SetColumnTitle(unsigned char column, const char* text)
 
 void CMenu::Hide()
 {
+    ZoneScoped;
     if (m_panel != kInvalidPanel)
     {
         scm::ProcessCommand(&kRemovePanel, m_panel);
@@ -126,6 +127,7 @@ char* CMenu::GetColumnTitle(unsigned char column)
 
 char* CMenu::MS(unsigned char row, unsigned char column)
 {
+    ZoneScoped;
     if (row >= MAX_MENU_ITEMS || column >= MAX_COLUMNS)
         return const_cast<char*>(kDummy);
 
@@ -137,6 +139,7 @@ char* CMenu::MS(unsigned char row, unsigned char column)
 
 char CMenu::GetActiveRow()
 {
+    ZoneScoped;
     if (!IsVisible() || !m_interaction.m_bMenu)
         return static_cast<char>(0xFF);
 
@@ -148,6 +151,7 @@ char CMenu::GetActiveRow()
 
 void CMenu::Show()
 {
+    ZoneScoped;
     if (g_activeMenu)
         g_activeMenu->Hide();
     g_activeMenu = this;
@@ -188,6 +192,7 @@ void CMenu::Show()
 
 const char* CMenu::ResolveTextKey(const char* key)
 {
+    ZoneScoped;
     if (!g_activeMenu || !key)
         return nullptr;
 

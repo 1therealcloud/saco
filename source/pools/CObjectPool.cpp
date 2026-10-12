@@ -14,6 +14,7 @@ namespace
 {
     std::uint32_t GetHighResolutionMilliseconds()
     {
+        ZoneScoped;
         static LARGE_INTEGER frequency{};
         if (!frequency.QuadPart)
             QueryPerformanceFrequency(&frequency);
@@ -43,6 +44,7 @@ CObjectPool::~CObjectPool()
 
 void CObjectPool::UpdateLargestId()
 {
+    ZoneScoped;
     // R5 keeps zero as the largest id for an empty pool.
     int largest = 0;
     for (int id = 0; id < MAX_OBJECTS; ++id)
@@ -62,6 +64,7 @@ int CObjectPool::GetCount()
 
 BOOL CObjectPool::Delete(ID id)
 {
+    ZoneScoped;
     // The original R5 comparison also accepts id == 1000, which indexes one
     // element past both arrays. Keep the observable pool semantics without
     // reproducing that memory-corruption bug.
@@ -85,6 +88,7 @@ BOOL CObjectPool::Delete(ID id)
 
 BOOL CObjectPool::Create(ID id, int model, CVector position, CVector rotation, float drawDistance)
 {
+    ZoneScoped;
     if (id >= MAX_OBJECTS || !std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z) || !std::isfinite(rotation.x) || !std::isfinite(rotation.y) ||
         !std::isfinite(rotation.z) || !std::isfinite(drawDistance) || drawDistance < 0)
         return FALSE;
@@ -116,6 +120,7 @@ BOOL CObjectPool::Create(ID id, int model, CVector position, CVector rotation, f
 
 CObject* CObjectPool::Find(const void* gameObject)
 {
+    ZoneScoped;
     // include slot zero so attachments and selection work for every valid id
     if (!gameObject)
         return nullptr;
@@ -130,6 +135,7 @@ CObject* CObjectPool::Find(const void* gameObject)
 
 int CObjectPool::GetId(const void* gameObject)
 {
+    ZoneScoped;
     if (!gameObject)
         return INVALID_ID;
     for (int id = 0; id <= m_nLargestId && id < MAX_OBJECTS; ++id)
@@ -143,6 +149,7 @@ int CObjectPool::GetId(const void* gameObject)
 
 void CObjectPool::Process()
 {
+    ZoneScoped;
     // R5 uses a millisecond high-resolution timer and converts the delta to
     // seconds before passing it to every active CObject.
     if (!g_lastProcessTick)
@@ -156,6 +163,7 @@ void CObjectPool::Process()
 
 void CObjectPool::Process(float elapsedSeconds)
 {
+    ZoneScoped;
     PROFILE_SCOPE(Objects);
     if (!std::isfinite(elapsedSeconds) || elapsedSeconds < 0)
         return;
@@ -186,6 +194,7 @@ void CObjectPool::ShutdownMaterials()
 
 void CObjectPool::Draw()
 {
+    ZoneScoped;
     for (int id = 0; id <= m_nLargestId && id < MAX_OBJECTS; ++id)
     {
         CObject* object = m_pObject[id];
@@ -196,6 +205,7 @@ void CObjectPool::Draw()
 
 void CObjectPool::DrawLast()
 {
+    ZoneScoped;
     std::array<CObject*, MAX_OBJECTS> object{};
     int count = 0;
 

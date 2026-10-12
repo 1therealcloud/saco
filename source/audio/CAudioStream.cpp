@@ -91,6 +91,7 @@ CAudioStream::~CAudioStream()
 
 BOOL CAudioStream::Reset()
 {
+    ZoneScoped;
     Stop(true);
     BASS_Free();
     m_bInitialized = false;
@@ -124,6 +125,7 @@ BOOL CAudioStream::Reset()
 
 BOOL CAudioStream::Stop(bool wait)
 {
+    ZoneScoped;
     auto& state = *m_state;
     const bool playing = state.playing.load();
     state.stop = true;
@@ -158,6 +160,7 @@ CAudioStream::Info CAudioStream::GetInfo() const
 
 BOOL CAudioStream::Play(const char* url, CVector position, float radius, bool is3d)
 {
+    ZoneScoped;
     if (!m_bInitialized || !url || !*url)
         return FALSE;
     Stop(true);
@@ -195,6 +198,7 @@ BOOL CAudioStream::Play(const char* url, CVector position, float radius, bool is
 
 void CAudioStream::ConstructInfo()
 {
+    ZoneScoped;
     auto& state = *m_state;
     const HSTREAM stream = state.stream.load();
     if (!stream)
@@ -217,6 +221,7 @@ void CAudioStream::ConstructInfo()
     }
     else if (const char* tags = BASS_ChannelGetTags(stream, BASS_TAG_OGG))
     {
+        ZoneScoped;
         const char* title = nullptr;
         const char* artist = nullptr;
         for (const char* entry = tags; *entry; entry += std::strlen(entry) + 1)
@@ -240,6 +245,7 @@ void CAudioStream::ConstructInfo()
 
 void CALLBACK CAudioStream::SyncProc(DWORD, DWORD, DWORD, void* user)
 {
+    ZoneScoped;
     auto* state = static_cast<State*>(user);
     try
     {
@@ -252,6 +258,7 @@ void CALLBACK CAudioStream::SyncProc(DWORD, DWORD, DWORD, void* user)
 
 void CAudioStream::Process(State* state)
 {
+    ZoneScoped;
     HSTREAM stream = 0;
     try
     {
@@ -333,6 +340,7 @@ void CAudioStream::Process(State* state)
 
 void CAudioStream::ControlGameRadio()
 {
+    ZoneScoped;
     Environment environment;
     if (auto* game = g_game.get())
     {
@@ -362,6 +370,7 @@ void CAudioStream::ControlGameRadio()
 
 void CAudioStream::DrawInfo()
 {
+    ZoneScoped;
     if (!m_bInitialized || !IsPlaying() || !m_fonts)
         return;
     const auto info = GetInfo();

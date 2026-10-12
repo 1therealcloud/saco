@@ -12,6 +12,7 @@
 
 CPickupPool::CPickupPool()
 {
+    ZoneScoped;
     // initialize inactive slots too; their metadata must never be indeterminate
     std::memset(m_object, 0, sizeof(m_object));
     std::memset(m_weapon, 0, sizeof(m_weapon));
@@ -27,6 +28,7 @@ CPickupPool::CPickupPool()
 
 CPickupPool::~CPickupPool()
 {
+    ZoneScoped;
     for (int i = 0; i < MAX_PICKUPS; ++i)
     {
         if (m_handle[i])
@@ -40,6 +42,7 @@ CPickupPool::~CPickupPool()
 
 void CPickupPool::Create(Pickup* data, int id)
 {
+    ZoneScoped;
     if (id < 0 || id >= MAX_PICKUPS || !data || !std::isfinite(data->m_position.x) || !std::isfinite(data->m_position.y) || !std::isfinite(data->m_position.z))
         return;
     auto* game = g_game.get();
@@ -61,6 +64,7 @@ void CPickupPool::Create(Pickup* data, int id)
 
 void CPickupPool::CreateWeapon(int model, CVector position, int ammo, ID exOwner)
 {
+    ZoneScoped;
     if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z))
         return;
     auto* game = g_game.get();
@@ -95,6 +99,7 @@ void CPickupPool::CreateWeapon(int model, CVector position, int ammo, ID exOwner
 
 void CPickupPool::Delete(int id)
 {
+    ZoneScoped;
     if (m_nCount <= 0)
         return;
 
@@ -127,6 +132,7 @@ void CPickupPool::DeleteWeapon(ID exOwner)
 
 int CPickupPool::GetIndex(int id) const
 {
+    ZoneScoped;
     if (id < 0)
         return INVALID_INDEX;
     for (int i = 0; i < MAX_PICKUPS; ++i)
@@ -140,6 +146,7 @@ int CPickupPool::GetIndex(int id) const
 
 void CPickupPool::SendNotification(int id)
 {
+    ZoneScoped;
     const int index = GetIndex(id);
     if (index == INVALID_INDEX)
         return;
@@ -161,6 +168,7 @@ void CPickupPool::SendNotification(int id)
 
 void CPickupPool::Process()
 {
+    ZoneScoped;
     PROFILE_SCOPE(Pickups);
     // Опкод 0x0214 (has_pickup_been_collected): перевіряє, чи підібрав гравець пікап
     constexpr scm::OpcodeInfo opHasCollected{0x0214, "i"};

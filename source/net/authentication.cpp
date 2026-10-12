@@ -17,6 +17,7 @@ namespace authentication
 
         void sha1_transform(std::uint32_t state[5], const std::uint8_t block[64])
         {
+            ZoneScoped;
             std::uint32_t words[80]{};
 
             for (std::size_t i = 0; i < 16; ++i)
@@ -82,6 +83,7 @@ namespace authentication
 
         std::array<std::uint8_t, kSha1Size> sha1_samp(std::string_view input)
         {
+            ZoneScoped;
             std::uint32_t state[5] = {0x67452301u, 0xEFCDAB89u, 0x98BADCFEu, 0x10325476u, 0xC3D2E1F0u};
 
             const auto* data = reinterpret_cast<const std::uint8_t*>(input.data());
@@ -141,6 +143,7 @@ namespace authentication
 
         std::string to_hex(const std::uint8_t* data, std::size_t size)
         {
+            ZoneScoped;
             std::string result;
             result.resize(size * 2);
 
@@ -156,6 +159,7 @@ namespace authentication
 
         std::string big_integer_to_hex(const std::uint8_t* data, std::size_t size)
         {
+            ZoneScoped;
             std::size_t first = 0;
 
             while (first < size && data[first] == 0)
@@ -187,6 +191,7 @@ namespace authentication
 
         std::uint8_t gpci_transform_byte(std::uint8_t value)
         {
+            ZoneScoped;
             const std::uint8_t p0 = value & 0x03;
             const std::uint8_t p1 = (value >> 2) & 0x03;
             const std::uint8_t p2 = (value >> 4) & 0x03;
@@ -201,6 +206,7 @@ namespace authentication
 
         std::array<std::uint8_t, 24> multiply_160(const std::array<std::uint8_t, kSha1Size>& input, std::uint32_t factor)
         {
+            ZoneScoped;
             std::array<std::uint8_t, 24> output{};
 
             std::uint64_t carry = 0;
@@ -228,6 +234,7 @@ namespace authentication
 
     std::optional<std::string> make_auth_key(saa::Archive& archive, std::string_view challenge)
     {
+        ZoneScoped;
         // the wire length includes the terminator; samp hashes the string up to the first null
         if (const auto end = challenge.find('\0'); end != std::string_view::npos)
             challenge = challenge.substr(0, end);
@@ -279,6 +286,7 @@ namespace authentication
 
     std::string make_gpci(std::string_view source, std::uint32_t factor)
     {
+        ZoneScoped;
         if (factor == 0)
             return "0";
 

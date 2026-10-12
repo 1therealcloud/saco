@@ -42,6 +42,7 @@ namespace game::patch::hudscalefix
 
         bool Apply(ScaleState& state)
         {
+            ZoneScoped;
             if (!g_enabled.load(std::memory_order_relaxed))
                 return false;
 
@@ -70,6 +71,7 @@ namespace game::patch::hudscalefix
 
         void Restore(const ScaleState& state)
         {
+            ZoneScoped;
             if (!state.applied)
                 return;
 
@@ -96,6 +98,7 @@ namespace game::patch::hudscalefix
 
     bool install()
     {
+        ZoneScoped;
         static bool installed = false;
         if (installed)
             return false;

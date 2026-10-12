@@ -21,6 +21,7 @@ namespace
 
 CInput::CInput(IDirect3DDevice9* device)
 {
+    ZoneScoped;
     m_pDevice = device;
     m_pGameUI = nullptr;
     m_pEditbox = nullptr;
@@ -48,6 +49,7 @@ void CInput::GetRect(RECT* rect)
 
 void CInput::Open()
 {
+    ZoneScoped;
     if (m_bEnabled)
         return;
 
@@ -65,6 +67,7 @@ void CInput::Open()
 
 void CInput::UpdateLayout()
 {
+    ZoneScoped;
     const RECT client = CGui::GetClientRect();
 
     long width = static_cast<long>(static_cast<float>(client.right) * 0.6f);
@@ -97,6 +100,7 @@ void CInput::UpdateLayout()
 
 void CInput::Close()
 {
+    ZoneScoped;
     if (!m_bEnabled)
         return;
 
@@ -114,6 +118,7 @@ void CInput::Close()
 
 void CInput::AddRecall(const char* text)
 {
+    ZoneScoped;
     if (!text)
         return;
 
@@ -129,6 +134,7 @@ void CInput::AddRecall(const char* text)
 
 void CInput::RecallUp()
 {
+    ZoneScoped;
     if (m_nCurrentRecall >= m_nTotalRecall - 1)
         return;
 
@@ -141,6 +147,7 @@ void CInput::RecallUp()
 
 void CInput::RecallDown()
 {
+    ZoneScoped;
     --m_nCurrentRecall;
 
     if (m_nCurrentRecall >= 0)
@@ -163,6 +170,7 @@ void CInput::EnableCursor()
 
 CMDPROC CInput::GetCommandHandler(const char* name)
 {
+    ZoneScoped;
     if (!name)
         return nullptr;
 
@@ -182,6 +190,7 @@ void CInput::SetDefaultCommand(CMDPROC handler)
 
 void CInput::AddCommand(const char* name, CMDPROC handler)
 {
+    ZoneScoped;
     if (!name || m_nCommandCount >= MAX_CLIENT_CMDS)
         return;
 
@@ -196,6 +205,7 @@ void CInput::AddCommand(const char* name, CMDPROC handler)
 
 BOOL CInput::MsgProc(UINT message, WPARAM wParam, LPARAM lParam)
 {
+    ZoneScoped;
     if (!m_bEnabled)
         return FALSE;
 
@@ -242,6 +252,7 @@ BOOL CInput::MsgProc(UINT message, WPARAM wParam, LPARAM lParam)
 
 void CInput::ResetDialogControls(cgui::Dialog* gameUI)
 {
+    ZoneScoped;
     if (m_pEditbox)
         Copy128(m_szInput, m_pEditbox->GetText());
     if (m_pGameUI)
@@ -275,6 +286,7 @@ void CInput::ResetDialogControls(cgui::Dialog* gameUI)
 
 void CInput::ProcessInput()
 {
+    ZoneScoped;
     if (m_pEditbox)
         Copy128(m_szInput, m_pEditbox->GetText());
     // Original obtains up to 128 bytes from CDXUTEditBox into m_szInput first.
@@ -362,6 +374,7 @@ bool CInput::IsEnabled() const
 
 void CInput::Copy128(char* destination, const char* source)
 {
+    ZoneScoped;
     if (!destination)
         return;
 

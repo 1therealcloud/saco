@@ -83,6 +83,7 @@ namespace render
     static bool g_shuttingDown = false;
     void ShutdownUi()
     {
+        ZoneScoped;
         if (g_shuttingDown)
             return;
         g_shuttingDown = true;
@@ -113,6 +114,7 @@ namespace render
 
     void RenderWorldObjects()
     {
+        ZoneScoped;
         auto* pools = g_netGame ? g_netGame->m_pPools : nullptr;
         auto* objectPool = pools ? pools->m_pObject : nullptr;
 
@@ -130,6 +132,7 @@ namespace render
 
     void RenderFadingObjects()
     {
+        ZoneScoped;
         auto* pools = g_netGame ? g_netGame->m_pPools : nullptr;
         auto* objectPool = pools ? pools->m_pObject : nullptr;
 
@@ -139,6 +142,7 @@ namespace render
 
     void DrawGangZoneOverlay(bool)
     {
+        ZoneScoped;
         auto* pools = g_netGame ? g_netGame->m_pPools : nullptr;
         auto* gangZonePool = pools ? pools->m_pGangZone : nullptr;
 
@@ -155,6 +159,7 @@ namespace render
 
     static void DrawVehicleDebugLabels()
     {
+        ZoneScoped;
         auto* pools = g_netGame ? g_netGame->m_pPools : nullptr;
         auto* vehiclePool = pools ? pools->m_pVehicle : nullptr;
 
@@ -195,6 +200,7 @@ namespace render
 
     static void UpdateFps()
     {
+        ZoneScoped;
         static ULONGLONG last = GetTickCount64();
         static unsigned int frames = 0;
         const ULONGLONG now = GetTickCount64();
@@ -212,6 +218,7 @@ namespace render
 
     void ApplyGuiFontConfig()
     {
+        ZoneScoped;
         int size = 0;
         int weight = 0;
         std::string face = "Arial";
@@ -230,6 +237,7 @@ namespace render
 
     void SetCursorMode(int mode, bool immediate)
     {
+        ZoneScoped;
         if (mode == 0 && g_classSelectionVisible)
             mode = 2;
         if (mode == 0 && g_input && g_input->IsEnabled())
@@ -254,6 +262,7 @@ namespace render
 
     void ShowClassSelection(bool visible)
     {
+        ZoneScoped;
         auto* pools = g_netGame ? g_netGame->m_pPools : nullptr;
         auto* localPlayer = pools && pools->m_pPlayer ? pools->m_pPlayer->GetLocalPlayer() : nullptr;
 
@@ -276,6 +285,7 @@ namespace render
 
     static void UpdateClassSelection(IDirect3DDevice9* device)
     {
+        ZoneScoped;
         auto* dialog = CGui::GetDialog(CGui::DialogId::ClassSelection);
         D3DVIEWPORT9 viewport{};
         if (SUCCEEDED(device->GetViewport(&viewport)))
@@ -285,6 +295,7 @@ namespace render
 
     void InitializeUi(IDirect3DDevice9* device)
     {
+        ZoneScoped;
         if (g_fonts)
             return;
         g_fonts = std::make_unique<CFonts>(device, &g_config);
@@ -339,6 +350,7 @@ namespace render
                 localPlayer->NextClass();
             else if (id == 4)
             {
+                ZoneScoped;
 #if defined(_DEBUG)
                 if (g_settings.m_bDebugMode)
                 {
@@ -368,6 +380,7 @@ namespace render
 
     static void ProcessScreenshot(IDirect3DDevice9* device)
     {
+        ZoneScoped;
         const auto capture = screenshot::ProcessPendingCapture(device, g_userDirectory);
         if (capture.requested)
         {
@@ -380,6 +393,7 @@ namespace render
 
     static void RenderCursor(IDirect3DDevice9* device)
     {
+        ZoneScoped;
         const bool active = (g_input && g_input->IsEnabled()) || (g_dialog && g_dialog->IsActive()) || (g_scoreboard && g_scoreboard->m_bIsEnabled) ||
                             (g_objectEdit && g_objectEdit->m_bEnabled) || (g_objectSelection && g_objectSelection->m_bIsActive) ||
                             (g_textDrawSelection && g_textDrawSelection->m_bIsActive) || (g_downloadWindow && g_downloadWindow->IsActive()) || g_classSelectionVisible;
@@ -398,6 +412,7 @@ namespace render
 
     void RenderNativeTextDraws()
     {
+        ZoneScoped;
         PROFILE_SCOPE(TextDraws);
         auto* pools = g_netGame ? g_netGame->m_pPools : nullptr;
         auto* textDrawPool = pools ? pools->m_pTextDraw : nullptr;
@@ -424,6 +439,7 @@ namespace render
 
     void RenderUi(IDirect3DDevice9* device)
     {
+        ZoneScoped;
 #if defined(_DEBUG)
         profiler::Scope uiProfile(profiler::Section::Ui);
 #endif
@@ -565,6 +581,7 @@ namespace render
 
     void LostUiDevice(IDirect3DDevice9*)
     {
+        ZoneScoped;
         auto* pools = g_netGame ? g_netGame->m_pPools : nullptr;
         auto* vehiclePool = pools ? pools->m_pVehicle : nullptr;
         auto* objectPool = pools ? pools->m_pObject : nullptr;
@@ -605,6 +622,7 @@ namespace render
 
     void ResetUiDevice(IDirect3DDevice9*, const D3DPRESENT_PARAMETERS&)
     {
+        ZoneScoped;
         if (g_shuttingDown)
             return;
         if (g_objectMaterialText)
@@ -664,6 +682,7 @@ namespace render
 {
     bool ResolvePlayerLabel(std::uint16_t id, CVector& position, float& localDistance, float& cameraDistance)
     {
+        ZoneScoped;
         auto* pools = g_netGame ? g_netGame->m_pPools : nullptr;
         auto* playerPool = pools ? pools->m_pPlayer : nullptr;
 
@@ -679,6 +698,7 @@ namespace render
 
     void DrawPlayerTags()
     {
+        ZoneScoped;
         auto* pools = g_netGame ? g_netGame->m_pPools : nullptr;
         auto* playerPool = pools ? pools->m_pPlayer : nullptr;
 

@@ -36,6 +36,7 @@ namespace
 
     VehicleStats GetVehicleStats(CNetGame* netGame)
     {
+        ZoneScoped;
         VehicleStats result{};
         if (!netGame || !netGame->m_pPools)
             return result;
@@ -72,6 +73,7 @@ namespace
 
     unsigned int GetLoadedVehicleModelCount()
     {
+        ZoneScoped;
         unsigned int count = 0;
         for (std::uintptr_t entry = 0x8E6C10; entry != 0x8E7C8C; entry += 0x14)
         {
@@ -88,6 +90,7 @@ namespace
 
     unsigned int GetFreeIdeCount()
     {
+        ZoneScoped;
         unsigned int count = 0;
         for (std::uintptr_t entry = 0xA9C068; entry != 0xAAE948; entry += sizeof(void*))
         {
@@ -108,6 +111,7 @@ namespace
 
     unsigned int GetPedSlotsUsed(CNetGame* netGame)
     {
+        ZoneScoped;
         if (!netGame || !netGame->m_pPools || !netGame->m_pPools->m_pPlayer)
             return 0;
 
@@ -128,6 +132,7 @@ namespace
 
     unsigned int GetCurrentSendRate(CNetGame* netGame, bool& inVehicle)
     {
+        ZoneScoped;
         inVehicle = false;
         if (!netGame || !netGame->m_pPools || !netGame->m_pPools->m_pPlayer)
             return 0;
@@ -142,6 +147,7 @@ namespace
 
     void Append(char* destination, std::size_t capacity, const char* source)
     {
+        ZoneScoped;
         if (!destination || capacity == 0 || !source)
             return;
 
@@ -155,10 +161,13 @@ namespace
 
 CNetStats::CNetStats(IDirect3DDevice9* device)
     : m_dwLastTotalBytesSent(0), m_dwLastTotalBytesRecv(0), m_dwLastUpdateTick(::GetTickCount()), m_dwBPSUpload(0), m_dwBPSDownload(0), m_pDevice(device)
-{}
+{
+    ZoneScoped;
+}
 
 void CNetStats::Draw()
 {
+    ZoneScoped;
     auto* netGame = g_netGame.get();
     if (!netGame || !netGame->m_pRakClient || !netGame->m_pRakClient->IsConnected() || !g_fonts || !m_pDevice)
         return;

@@ -40,6 +40,7 @@ namespace
 
     bool HasNativeMatrix(const CEntity* entity)
     {
+        ZoneScoped;
         if (!entity || !entity->IsValid())
             return false;
 
@@ -55,6 +56,7 @@ namespace
 
 bool CCamera::InstallProcessHook()
 {
+    ZoneScoped;
     // r5 redirects this call, not the whole gta camera function.
     if (!patch::expect_call(GTA_CAMERA_PROCESS_CALL, GTA_CAMERA_PROCESS))
         return false;
@@ -106,6 +108,7 @@ void CCamera::Fade(BOOL in)
 
 void CCamera::GetMatrix(CMatrix* pMatrix) const
 {
+    ZoneScoped;
     pMatrix->GetRight().x = m_pMatrix->right.x;
     pMatrix->GetRight().y = m_pMatrix->right.y;
     pMatrix->GetRight().z = m_pMatrix->right.z;
@@ -125,6 +128,7 @@ void CCamera::GetMatrix(CMatrix* pMatrix) const
 
 void CCamera::SetMatrix(CMatrix matrix)
 {
+    ZoneScoped;
     m_pMatrix->right.x = matrix.GetRight().x;
     m_pMatrix->right.y = matrix.GetRight().y;
     m_pMatrix->right.z = matrix.GetRight().z;
@@ -173,6 +177,7 @@ void CCamera::SetTrackVector(const CVector* from, const CVector* to, int time, s
 
 void CCamera::Attach(CEntity* owner)
 {
+    ZoneScoped;
     m_pAttachedTo = owner;
     if (!HasNativeMatrix(owner))
         return;
@@ -187,6 +192,7 @@ void CCamera::Attach(CEntity* owner)
 
 void CCamera::SetToOwner()
 {
+    ZoneScoped;
     if (!HasNativeMatrix(m_pAttachedTo))
         return;
 
@@ -200,6 +206,7 @@ void CCamera::SetToOwner()
 
 float CCamera::GetDistanceToPoint(const CVector* pPoint) const
 {
+    ZoneScoped;
     const CVector cameraPosition = GetPosition();
 
     const float x = pPoint->x - cameraPosition.x;
@@ -211,6 +218,7 @@ float CCamera::GetDistanceToPoint(const CVector* pPoint) const
 
 void CCamera::Restore()
 {
+    ZoneScoped;
     scm::ProcessCommand(&CMD_LOCK_POSITION, 0);
     scm::ProcessCommand(&CMD_RESTORE_USER_DEFINED);
 

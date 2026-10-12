@@ -60,6 +60,7 @@ namespace game::patch::pools
 
         bool patch_vehicle_pool()
         {
+            ZoneScoped;
             constexpr std::uint8_t opcode = 0x68;
             constexpr std::uint8_t vanillaCapacity = 110;
 
@@ -74,6 +75,7 @@ namespace game::patch::pools
 
         bool patch_col_store()
         {
+            ZoneScoped;
             if (!::patch::expect(kColSlotCapacityRef, kColSlotVanilla))
                 return false;
 
@@ -103,6 +105,7 @@ namespace game::patch::pools
 
         bool patch_collision_pool()
         {
+            ZoneScoped;
             constexpr std::uint8_t push = 0x68;
 
             if (!::patch::expect(address::collisionModelPool, push))
@@ -133,6 +136,7 @@ namespace game::patch::pools
 
     bool install()
     {
+        ZoneScoped;
         if (!::patch::replace(address::ptrNodeSinglePool, kPtrNodeSingleVanilla, kPtrNodeSingleSamp))
             return false;
 

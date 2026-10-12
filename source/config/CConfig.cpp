@@ -47,6 +47,7 @@ namespace
 
     std::string StripComment(const std::string& value)
     {
+        ZoneScoped;
         bool quoted = false;
         for (std::size_t i = 0; i < value.size(); ++i)
         {
@@ -68,6 +69,7 @@ namespace
 
     bool ParseInt(const std::string& text, int& value)
     {
+        ZoneScoped;
         if (text.empty())
             return false;
         char* end = nullptr;
@@ -81,6 +83,7 @@ namespace
 
     bool ParseFloat(const std::string& text, float& value)
     {
+        ZoneScoped;
         if (text.empty())
             return false;
         char* end = nullptr;
@@ -138,6 +141,7 @@ void CConfig::Reset()
 
 void CConfig::FindFirstFree()
 {
+    ZoneScoped;
     m_nFirstFree = MAX_ENTRIES;
     for (int i = 0; i < MAX_ENTRIES; ++i)
     {
@@ -151,6 +155,7 @@ void CConfig::FindFirstFree()
 
 int CConfig::GetIndex(const char* entry)
 {
+    ZoneScoped;
     if (!entry || !*entry)
         return -1;
     for (int i = 0; i < MAX_ENTRIES; ++i)
@@ -168,6 +173,7 @@ bool CConfig::DoesExist(const char* entry)
 
 int CConfig::CreateEntry(const char* name)
 {
+    ZoneScoped;
     if (!name || !*name)
         return -1;
     const int existing = GetIndex(name);
@@ -213,6 +219,7 @@ float CConfig::GetFloatValue(const char* entry)
 
 BOOL CConfig::Free(const char* entry)
 {
+    ZoneScoped;
     const int index = GetIndex(entry);
     if (index < 0 || m_entry[index].m_bReadOnly)
         return FALSE;
@@ -237,6 +244,7 @@ CConfig::ConfigEntry* CConfig::GetEntry(int index)
 
 int CConfig::GetType(const char* string)
 {
+    ZoneScoped;
     if (!string)
         return VALUE_TYPE_NONE;
     const std::string value = Trim(string);
@@ -255,6 +263,7 @@ int CConfig::GetType(const char* string)
 
 BOOL CConfig::WriteIntValue(const char* entry, int value, BOOL readOnly)
 {
+    ZoneScoped;
     int index = GetIndex(entry);
     if (index >= 0 && m_entry[index].m_bReadOnly)
         return FALSE;
@@ -273,6 +282,7 @@ BOOL CConfig::WriteIntValue(const char* entry, int value, BOOL readOnly)
 
 BOOL CConfig::WriteStringValue(const char* entry, const char* value, BOOL readOnly)
 {
+    ZoneScoped;
     if (!value)
         value = "";
     int index = GetIndex(entry);
@@ -298,6 +308,7 @@ BOOL CConfig::WriteStringValue(const char* entry, const char* value, BOOL readOn
 
 BOOL CConfig::WriteFloatValue(const char* entry, float value, BOOL readOnly)
 {
+    ZoneScoped;
     int index = GetIndex(entry);
     if (index >= 0 && m_entry[index].m_bReadOnly)
         return FALSE;
@@ -316,6 +327,7 @@ BOOL CConfig::WriteFloatValue(const char* entry, float value, BOOL readOnly)
 
 void CConfig::Write(const char* entry, char* buffer)
 {
+    ZoneScoped;
     if (!buffer)
         return;
     buffer[0] = '\0';
@@ -341,6 +353,7 @@ void CConfig::Write(const char* entry, char* buffer)
 
 BOOL CConfig::Load()
 {
+    ZoneScoped;
     if (!m_szFilename[0])
         return FALSE;
 
@@ -426,6 +439,7 @@ bool CConfig::Load(const char* path)
 
 bool CConfig::Save(const char* path) const
 {
+    ZoneScoped;
     if (!path || !*path)
         return false;
 
@@ -482,6 +496,7 @@ bool CConfig::HasParam(eParam param) const
 
 bool CConfig::GetParam(eParam param, int& value) const
 {
+    ZoneScoped;
     if (!IsValidParam(param))
         return false;
     const ParamInfo& info = kParamInfo[static_cast<std::size_t>(param)];
@@ -498,6 +513,7 @@ bool CConfig::GetParam(eParam param, int& value) const
 
 bool CConfig::GetParam(eParam param, bool& value) const
 {
+    ZoneScoped;
     if (!IsValidParam(param))
         return false;
     const ParamInfo& info = kParamInfo[static_cast<std::size_t>(param)];
@@ -514,6 +530,7 @@ bool CConfig::GetParam(eParam param, bool& value) const
 
 bool CConfig::GetParam(eParam param, std::string& value) const
 {
+    ZoneScoped;
     if (!IsValidParam(param))
         return false;
     const ParamInfo& info = kParamInfo[static_cast<std::size_t>(param)];
@@ -559,6 +576,7 @@ bool CConfig::SetParam(eParam param, const std::string& value)
 
 bool CConfig::ApplyPersistedDefaults()
 {
+    ZoneScoped;
     bool changed = false;
 
     if (!HasParam(PARAM_AUDIO_PROXY_OFF))

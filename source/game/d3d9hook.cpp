@@ -30,6 +30,7 @@ namespace d3d9hook
 
         HRESULT WINAPI present(IDirect3DDevice9* device, const RECT* source, const RECT* destination, HWND window, const RGNDATA* dirty)
         {
+            ZoneScoped;
 #if defined(_DEBUG)
             if (device == g_device)
                 profiler::BeginFrame();
@@ -39,6 +40,7 @@ namespace d3d9hook
             HRESULT result;
             {
                 PROFILE_SCOPE(Present);
+                ZoneNamedN(tracyPresent, "D3D9 Present / wait", true);
                 result = g_present(device, source, destination, window, dirty);
             }
 #if defined(_DEBUG)
@@ -51,12 +53,14 @@ namespace d3d9hook
                 if (FAILED(result) && result != previous)
                     Log("[d3d9hook:present] result=%08X", static_cast<unsigned>(result));
                 previous = result;
+                FrameMark;
             }
             return result;
         }
 
         HRESULT WINAPI reset(IDirect3DDevice9* device, D3DPRESENT_PARAMETERS* parameters)
         {
+            ZoneScoped;
             if (device == g_device && !g_deviceLost)
             {
                 g_deviceLost = true;
@@ -82,6 +86,7 @@ namespace d3d9hook
 
         HRESULT WINAPI set_transform(IDirect3DDevice9* device, D3DTRANSFORMSTATETYPE state, const D3DMATRIX* matrix)
         {
+            ZoneScoped;
             const HRESULT result = g_setTransform(device, state, matrix);
             if (device == g_device && SUCCEEDED(result) && matrix && (state == D3DTS_VIEW || state == D3DTS_PROJECTION))
             {
@@ -103,6 +108,7 @@ namespace d3d9hook
 
     bool install()
     {
+        ZoneScoped;
         if (g_installed)
             return true;
 

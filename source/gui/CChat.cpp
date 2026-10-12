@@ -28,6 +28,7 @@ namespace
 
     void CopyCString(char* destination, std::size_t destinationSize, const char* source)
     {
+        ZoneScoped;
         if (!destination || destinationSize == 0)
             return;
 
@@ -42,11 +43,13 @@ namespace
 
 CChat::CChat(IDirect3DDevice9* device, CFonts* fontRenderer, const char* logPath)
 {
+    ZoneScoped;
     Initialize(device, fontRenderer, logPath, nullptr);
 }
 
 CChat::CChat(IDirect3DDevice9* device, CFonts* fontRenderer, const char* logPath, const CConfig* config)
 {
+    ZoneScoped;
     Initialize(device, fontRenderer, logPath, config);
 }
 
@@ -59,6 +62,7 @@ CChat::~CChat()
 
 void CChat::Initialize(IDirect3DDevice9* device, CFonts* fontRenderer, const char* logPath, const CConfig* config)
 {
+    ZoneScoped;
     // Match the R5 object state. The original creates D3DX sprites here; this
     // replacement keeps those ABI slots null and renders through CFonts.
     g_layouts.erase(this);
@@ -104,6 +108,7 @@ int CChat::GetMode() const
 
 void CChat::SwitchMode()
 {
+    ZoneScoped;
     m_bRedraw = TRUE;
 
     switch (m_nMode)
@@ -125,6 +130,7 @@ void CChat::SwitchMode()
 
 void CChat::RecalcFontSize()
 {
+    ZoneScoped;
     m_nCharHeight = 0;
     m_nTimestampWidth = 0;
 
@@ -142,6 +148,7 @@ void CChat::RecalcFontSize()
 
 void CChat::OnLostDevice()
 {
+    ZoneScoped;
     // Original R5 releases render-to-surface resources here. This build has no
     // chat-owned D3DX resources, but keeps the same state transitions.
     if (m_pSurface)
@@ -164,6 +171,7 @@ void CChat::OnLostDevice()
 
 void CChat::OnResetDevice()
 {
+    ZoneScoped;
     m_bRenderToSurface = FALSE;
 
     if (m_pDevice)
@@ -181,6 +189,7 @@ long CChat::ClampScrollPosition(long position, unsigned int pageSize)
 
 void CChat::UpdateScrollbar()
 {
+    ZoneScoped;
     // DXUT R5 uses range 1..100 and page size m_nPageSize, then selects
     // 100-pageSize as the first visible slot at the bottom.
     m_nScrollbarPos = ClampScrollPosition(100 - static_cast<long>(m_nPageSize), m_nPageSize);
@@ -189,6 +198,7 @@ void CChat::UpdateScrollbar()
 
 void CChat::SyncScrollbar()
 {
+    ZoneScoped;
     if (!m_pScrollbar)
         return;
     m_pScrollbar->SetRange(1, MAX_MESSAGES);
@@ -201,6 +211,7 @@ void CChat::SyncScrollbar()
 
 void CChat::UpdateScrollbarVisibility(bool inputActive)
 {
+    ZoneScoped;
     if (!m_pScrollbar)
         return;
     // R5 CChat::Render (+0x67E00): visible while typing or away from the last page.
@@ -219,6 +230,7 @@ void CChat::SetPageSize(int value)
 
 void CChat::PageUp()
 {
+    ZoneScoped;
     if (m_pScrollbar)
         m_nScrollbarPos = m_pScrollbar->GetTrackPos();
     if (m_nMode == DISPLAY_MODE_OFF)
@@ -235,6 +247,7 @@ void CChat::PageUp()
 
 void CChat::PageDown()
 {
+    ZoneScoped;
     if (m_pScrollbar)
         m_nScrollbarPos = m_pScrollbar->GetTrackPos();
     if (m_nMode == DISPLAY_MODE_OFF)
@@ -260,6 +273,7 @@ void CChat::ScrollToBottom()
 
 void CChat::Scroll(int delta)
 {
+    ZoneScoped;
     if (m_pScrollbar)
         m_nScrollbarPos = m_pScrollbar->GetTrackPos();
     if (m_nMode == DISPLAY_MODE_OFF || delta == 0)
@@ -288,6 +302,7 @@ bool CChat::GetTimestamps() const
 
 void CChat::FilterOutInvalidChars(char* string) const
 {
+    ZoneScoped;
     if (!string)
         return;
 
@@ -302,6 +317,7 @@ void CChat::FilterOutInvalidChars(char* string) const
 
 void CChat::PushBack()
 {
+    ZoneScoped;
     // Exact R5 copy: entry[1..99] -> entry[0..98]. entry[99] is deliberately
     // left untouched and overwritten field-by-field by AddEntry().
     auto& layouts = g_layouts[this];
@@ -317,6 +333,7 @@ void CChat::PushBack()
 
 void CChat::RenderEntry(const char* text, RECT rect, D3DCOLOR color)
 {
+    ZoneScoped;
     if (!m_pFontRenderer || !text || !*text)
         return;
 
@@ -325,6 +342,7 @@ void CChat::RenderEntry(const char* text, RECT rect, D3DCOLOR color)
 
 void CChat::Log(int type, const char* text, const char* prefix)
 {
+    ZoneScoped;
     if (!m_bDoesLogExist || !m_szLogPath[0] || !text)
         return;
 
@@ -350,6 +368,7 @@ void CChat::Log(int type, const char* text, const char* prefix)
 
 void CChat::ResetDialogControls(cgui::Dialog* gameUi)
 {
+    ZoneScoped;
     if (m_pGameUi)
         m_pGameUi->RemoveControl(2);
     m_pGameUi = gameUi;
@@ -366,6 +385,7 @@ void CChat::ResetDialogControls(cgui::Dialog* gameUi)
 
 void CChat::Render()
 {
+    ZoneScoped;
     if (m_nMode == DISPLAY_MODE_OFF)
         return;
 
@@ -376,6 +396,7 @@ void CChat::Render()
 
 std::size_t CChat::FindSplitPosition(const char* text)
 {
+    ZoneScoped;
     if (!text)
         return CHAT_SPLIT_LENGTH;
 
@@ -402,6 +423,7 @@ void CChat::CopyCount(char* destination, const char* source, std::size_t count)
 
 void CChat::AddEntry(int type, const char* text, const char* prefix, D3DCOLOR textColor, D3DCOLOR prefixColor)
 {
+    ZoneScoped;
     if (!text)
         return;
 
@@ -474,6 +496,7 @@ void CChat::AddEntry(int type, const char* text, const char* prefix, D3DCOLOR te
 
 void CChat::DrawEntry(const ChatEntry& entry, long& left, long top, long bottom)
 {
+    ZoneScoped;
     if (entry.m_nType == ENTRY_TYPE_NONE)
         return;
 
@@ -531,6 +554,7 @@ void CChat::DrawEntry(const ChatEntry& entry, long& left, long top, long bottom)
 
 void CChat::Draw()
 {
+    ZoneScoped;
     PROFILE_SCOPE(Chat);
     auto& appearance = g_appearances[this];
     appearance.SetVisible(m_nMode != DISPLAY_MODE_OFF);
@@ -570,6 +594,7 @@ void CChat::Draw()
 
 void CChat::RenderToSurface()
 {
+    ZoneScoped;
     // Behavioural replacement for the R5 cache: redraw only when dirty or when
     // the logical scrollbar changed. Drawing itself stays on our direct font path.
     if (m_nMode == DISPLAY_MODE_OFF)
@@ -592,6 +617,7 @@ void CChat::AddChatMessage(const char* prefix, D3DCOLOR prefixColor, char* text)
 
 void CChat::AddChatMessage(const char* prefix, D3DCOLOR prefixColor, const char* text)
 {
+    ZoneScoped;
     if (!text)
         return;
 
@@ -604,6 +630,7 @@ void CChat::AddChatMessage(const char* prefix, D3DCOLOR prefixColor, const char*
 
 void CChat::ExpandControlKeyTokens(char* text, std::size_t capacity)
 {
+    ZoneScoped;
     if (!text || capacity == 0 || !std::strstr(text, "~k~"))
         return;
 
@@ -625,6 +652,7 @@ void CChat::ExpandControlKeyTokens(char* text, std::size_t capacity)
 
 void CChat::AddMessage(D3DCOLOR color, char* text)
 {
+    ZoneScoped;
     if (!text)
         return;
 
@@ -652,6 +680,7 @@ void CChat::AddMessage(D3DCOLOR color, const char* text)
 
 void CChat::PrintV(int type, D3DCOLOR color, const char* format, va_list args)
 {
+    ZoneScoped;
     if (!format)
         return;
 
@@ -685,6 +714,7 @@ const CChat::ChatEntry* CChat::GetEntries() const
 
 std::size_t CChat::GetEntryCount() const
 {
+    ZoneScoped;
     // R5 keeps a fixed 100-slot history and has no count field.
     std::size_t count = 0;
     for (const ChatEntry& entry : m_entry)
@@ -697,6 +727,7 @@ std::size_t CChat::GetEntryCount() const
 
 void CChat::ApplyConfig(const CConfig* config)
 {
+    ZoneScoped;
     if (!config)
         return;
 
@@ -721,6 +752,7 @@ std::int32_t CChat::GetCurrentTimestamp()
 
 void CChat::FormatTimestamp(std::int32_t timestamp, char (&buffer)[64])
 {
+    ZoneScoped;
     buffer[0] = '\0';
 
     const std::time_t value = static_cast<std::time_t>(timestamp);

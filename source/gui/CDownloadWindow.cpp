@@ -58,6 +58,7 @@ namespace
 
     void CopyString(char* destination, std::size_t size, const char* source)
     {
+        ZoneScoped;
         if (!destination || size == 0)
             return;
 
@@ -83,6 +84,7 @@ CDownloadWindow::CDownloadWindow(IDirect3DDevice9* device)
 
 CDownloadWindow::~CDownloadWindow()
 {
+    ZoneScoped;
     FreePool();
 
     if (m_pDialog)
@@ -99,6 +101,7 @@ CDownloadWindow::~CDownloadWindow()
 
 void CDownloadWindow::GetScreenRect(RECT* rect) const
 {
+    ZoneScoped;
     if (!rect)
         return;
 
@@ -110,6 +113,7 @@ void CDownloadWindow::GetScreenRect(RECT* rect) const
 
 int CDownloadWindow::DoesExist(int fileId) const
 {
+    ZoneScoped;
     for (int i = 0; i < m_nDownloadedFilesCount; ++i)
     {
         DownloadedFileInfo* info = GetFileInfo(static_cast<unsigned int>(i));
@@ -122,6 +126,7 @@ int CDownloadWindow::DoesExist(int fileId) const
 
 void CDownloadWindow::Show(int filesSum)
 {
+    ZoneScoped;
     EnsureControls();
 
     field_254 = static_cast<int>(GetTickCount());
@@ -148,6 +153,7 @@ void CDownloadWindow::Show(int filesSum)
 
 void CDownloadWindow::Hide()
 {
+    ZoneScoped;
     if (m_pDialog)
     {
         m_pDialog->SetVisible(false);
@@ -162,6 +168,7 @@ void CDownloadWindow::Hide()
 
 void CDownloadWindow::AddEntry(char fileType, int fileId, char fileState, int fileDownloaded, int fileSize, int errorCode, const char* errorText)
 {
+    ZoneScoped;
     EnsureControls();
 
     fileDownloaded = std::max(0, fileDownloaded);
@@ -280,6 +287,7 @@ void CDownloadWindow::AddEntry(char fileType, int fileId, char fileState, int fi
 
 void CDownloadWindow::Draw()
 {
+    ZoneScoped;
     if (!m_bIsWindowActive)
         return;
 
@@ -310,6 +318,7 @@ void CDownloadWindow::Draw()
 
 void CDownloadWindow::ResetDialogControl(cgui::Dialog* dialog)
 {
+    ZoneScoped;
     m_pDialog = dialog;
     m_pListbox = nullptr;
     State(this).layoutValid = false;
@@ -341,6 +350,7 @@ void CDownloadWindow::ResetDialogControl(cgui::Dialog* dialog)
 
 void CDownloadWindow::FreePool()
 {
+    ZoneScoped;
     for (int i = 0; i < m_nDownloadedFilesCount; ++i)
         std::free(m_pFilesPool[i]);
     std::free(m_pFilesPool);
@@ -355,6 +365,7 @@ void CDownloadWindow::FreePool()
 
 int CDownloadWindow::PushBack(DownloadedFileInfo* info)
 {
+    ZoneScoped;
     if (!info)
         return -1;
 
@@ -379,6 +390,7 @@ int CDownloadWindow::PushBack(DownloadedFileInfo* info)
 
 bool CDownloadWindow::DeleteFile(unsigned int id)
 {
+    ZoneScoped;
     if (id >= static_cast<unsigned int>(m_nDownloadedFilesCount))
         return false;
 
@@ -410,6 +422,7 @@ bool CDownloadWindow::DeleteFile(unsigned int id)
 
 bool CDownloadWindow::ResizePool(unsigned int count)
 {
+    ZoneScoped;
     if (count == 0)
     {
         FreePool();
@@ -456,6 +469,7 @@ bool CDownloadWindow::IsActive() const
 
 void CDownloadWindow::EnsureControls()
 {
+    ZoneScoped;
     if (m_pDialog && m_pListbox)
         return;
 
@@ -467,6 +481,7 @@ void CDownloadWindow::EnsureControls()
 
 void CDownloadWindow::UpdateRects()
 {
+    ZoneScoped;
     EnsureControls();
     if (!m_pDialog)
         return;

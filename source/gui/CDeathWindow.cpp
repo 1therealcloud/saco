@@ -24,6 +24,7 @@ namespace
 
     bool GetScreenSize(IDirect3DDevice9* device, int& width, int& height)
     {
+        ZoneScoped;
         width = 0;
         height = 0;
 
@@ -41,6 +42,7 @@ namespace
 
     void CopyName(char (&destination)[25], const char* source)
     {
+        ZoneScoped;
         destination[0] = '\0';
 
         if (!source)
@@ -70,6 +72,7 @@ CDeathWindow::CDeathWindow(IDirect3DDevice9* device)
     : m_bEnabled(TRUE), m_entry{}, m_nLongestNickWidth(0), m_position{0, 0}, m_pFont(nullptr), m_pWeaponFont1(nullptr), m_pWeaponFont2(nullptr), m_pSprite(nullptr),
       m_pDevice(device), m_bAuxFontInitialized(FALSE), m_pAuxFont1(nullptr), m_pAuxFont2(nullptr)
 {
+    ZoneScoped;
     if (g_fontUsers++ == 0)
     {
         g_weaponFontLoaded = AddFontResourceExA("gtaweap3.ttf", FR_PRIVATE, nullptr) != 0;
@@ -85,6 +88,7 @@ CDeathWindow::CDeathWindow(IDirect3DDevice9* device)
 
 CDeathWindow::~CDeathWindow()
 {
+    ZoneScoped;
     DeleteObject(m_pFont);
     DeleteObject(m_pWeaponFont1);
     DeleteObject(m_pWeaponFont2);
@@ -104,6 +108,7 @@ CDeathWindow::~CDeathWindow()
 
 void CDeathWindow::InitializeAuxFonts()
 {
+    ZoneScoped;
     if (!m_pDevice || m_bAuxFontInitialized || !g_auxFontLoaded)
         return;
 
@@ -127,6 +132,7 @@ void CDeathWindow::PushBack()
 
 void CDeathWindow::DrawText(const char* text, RECT rect, D3DCOLOR color, int format)
 {
+    ZoneScoped;
     if (!m_pFont || !text || !*text)
         return;
 
@@ -135,6 +141,7 @@ void CDeathWindow::DrawText(const char* text, RECT rect, D3DCOLOR color, int for
 
 void CDeathWindow::DrawWeaponSprite(const char* spriteId, RECT rect, D3DCOLOR color)
 {
+    ZoneScoped;
     if (!m_pWeaponFont1 || !m_pWeaponFont2 || !spriteId || !*spriteId)
         return;
 
@@ -150,6 +157,7 @@ void CDeathWindow::DrawWeaponSprite(const char* spriteId, RECT rect, D3DCOLOR co
 
 void CDeathWindow::GetWeaponSpriteRectSize(void* point)
 {
+    ZoneScoped;
     if (!point)
         return;
 
@@ -165,6 +173,7 @@ void CDeathWindow::GetWeaponSpriteRectSize(void* point)
 
 const char* CDeathWindow::GetWeaponSpriteId(char weapon)
 {
+    ZoneScoped;
     switch (static_cast<unsigned char>(weapon))
     {
         case 0:
@@ -267,6 +276,7 @@ const char* CDeathWindow::GetWeaponSpriteId(char weapon)
 
 void CDeathWindow::ResetFonts()
 {
+    ZoneScoped;
     if (!m_pDevice || !g_weaponFontLoaded)
         return;
 
@@ -335,6 +345,7 @@ void CDeathWindow::OnResetDevice()
 
 void CDeathWindow::Draw()
 {
+    ZoneScoped;
     PROFILE_SCOPE(DeathWindow);
     if (!m_bEnabled || !m_pFont || !m_pWeaponFont1 || !m_pWeaponFont2)
         return;
@@ -389,6 +400,7 @@ void CDeathWindow::Draw()
         }
         else if (!hasKiller && hasVictim)
         {
+            ZoneScoped;
             const int victimWidth = MeasureText(m_pFont, entry.m_szVictim);
 
             RECT victimRect = rect;
@@ -424,6 +436,7 @@ void CDeathWindow::Draw()
 
 void CDeathWindow::AddEntry(const char* killer, const char* victim, D3DCOLOR killerColor, D3DCOLOR victimColor, char weapon)
 {
+    ZoneScoped;
     PushBack();
 
     Entry& entry = m_entry[MAX_DEATHMESSAGES - 1];

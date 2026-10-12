@@ -124,6 +124,7 @@ namespace cgui
         HGDIOBJ g_measureOldFont = nullptr;
         void ReleaseMeasurement()
         {
+            ZoneScoped;
             if (g_measureDc && g_measureOldFont)
                 SelectObject(g_measureDc, g_measureOldFont);
             if (g_measureFont)
@@ -136,6 +137,7 @@ namespace cgui
         }
         HDC MeasurementDc()
         {
+            ZoneScoped;
             if (!g_measureDc)
             {
                 g_measureDc = CreateCompatibleDC(nullptr);
@@ -187,6 +189,7 @@ namespace cgui
 
         std::string AssetPath(const char* name)
         {
+            ZoneScoped;
             if (!name)
                 return {};
             if (g_assetDirectory.empty())
@@ -209,6 +212,7 @@ namespace cgui
 
         bool DecodePng(const char* path, std::vector<std::uint8_t>& pixels, UINT& width, UINT& height)
         {
+            ZoneScoped;
             pixels.clear();
             width = 0;
             height = 0;
@@ -284,6 +288,7 @@ namespace cgui
 
         bool CreateTextureFromPng(const char* path, IDirect3DTexture9** texture)
         {
+            ZoneScoped;
             if (!g_device || !texture)
                 return false;
             *texture = nullptr;
@@ -316,6 +321,7 @@ namespace cgui
 
         bool CreateCursorTexture(const char* path)
         {
+            ZoneScoped;
             Release(g_cursor);
             if (!CreateTextureFromPng(path, &g_cursor))
                 return false;
@@ -339,6 +345,7 @@ namespace cgui
 
         bool CreateFontAtlas()
         {
+            ZoneScoped;
             if (!g_device)
                 return false;
 
@@ -515,6 +522,7 @@ namespace cgui
         public:
             StateGuard()
             {
+                ZoneScoped;
                 FlushUi();
                 m_previousViewport = g_passViewport;
                 const auto index = g_passDepth++;
@@ -550,6 +558,7 @@ namespace cgui
 
         void ApplyUiState(IDirect3DTexture9* texture)
         {
+            ZoneScoped;
             if (g_passDepth && g_uiStateValid && g_boundTexture == texture)
                 return;
             const bool baseline = !g_passDepth || !g_uiStateValid;
@@ -596,6 +605,7 @@ namespace cgui
 
         void FlushUi()
         {
+            ZoneScoped;
             if (g_pendingVertices.empty())
                 return;
             ApplyUiState(g_pendingTexture);
@@ -642,6 +652,7 @@ namespace cgui
 
         void SubmitUi(const Vertex* vertices, std::size_t count, IDirect3DTexture9* texture, const RECT* clip)
         {
+            ZoneScoped;
             if (!g_pendingVertices.empty() && (texture != g_pendingTexture || (clip != nullptr) != g_pendingClipped || (clip && !EqualRect(clip, &g_pendingClip))))
                 FlushUi();
             g_pendingTexture = texture;
@@ -655,6 +666,7 @@ namespace cgui
 
         void DrawQuad(const RECT& rect, D3DCOLOR color, IDirect3DTexture9* texture = nullptr, const RECT* textureRect = nullptr)
         {
+            ZoneScoped;
             color = ui::FadeColor(color);
             if (!g_device || Width(rect) <= 0 || Height(rect) <= 0)
                 return;
@@ -697,6 +709,7 @@ namespace cgui
 
         void DrawGradientQuad(const RECT& rect, D3DCOLOR topLeft, D3DCOLOR topRight, D3DCOLOR bottomLeft, D3DCOLOR bottomRight)
         {
+            ZoneScoped;
             topLeft = ui::FadeColor(topLeft);
             topRight = ui::FadeColor(topRight);
             bottomLeft = ui::FadeColor(bottomLeft);
@@ -728,6 +741,7 @@ namespace cgui
 
         D3DCOLOR StateColor(D3DCOLOR base, ControlState state)
         {
+            ZoneScoped;
             // original default state colors keep normal/focus/hover/pressed unchanged,
             // use 0xC8808080 for disabled and 0 for hidden unless a control overrides it.
             switch (state)
@@ -743,6 +757,7 @@ namespace cgui
 
         D3DCOLOR ElementFontColor(ControlType type, unsigned int element, ControlState state)
         {
+            ZoneScoped;
             const SkinElement* skin = GetDefaultElement(type, element);
             if (!skin)
                 return state == ControlState::Disabled ? kDisabledTextColor : kTextColor;
@@ -762,6 +777,7 @@ namespace cgui
 
         void DrawSkin(ControlType type, unsigned int element, const RECT& destination, ControlState state)
         {
+            ZoneScoped;
             const SkinElement* skin = GetDefaultElement(type, element);
             if (!skin || !g_skin)
             {
@@ -773,6 +789,7 @@ namespace cgui
 
         void DrawNineSlice(ControlType type, const RECT& destination, ControlState state)
         {
+            ZoneScoped;
             const SkinElement* center = GetDefaultElement(type, 0);
             const SkinElement* tl = GetDefaultElement(type, 1);
             const SkinElement* top = GetDefaultElement(type, 2);
@@ -811,6 +828,7 @@ namespace cgui
 
         std::size_t NextCharacter(const char* text, std::size_t position)
         {
+            ZoneScoped;
             const unsigned char value = static_cast<unsigned char>(text[position]);
             std::size_t length = 1;
             if (GetACP() == CP_UTF8)
@@ -825,6 +843,7 @@ namespace cgui
 
         std::size_t CharacterBoundary(const char* text, std::size_t position)
         {
+            ZoneScoped;
             std::size_t current = 0;
             while (text[current] && current < position)
             {
@@ -854,6 +873,7 @@ namespace cgui
 
         bool CreateTextTexture(const char* text, IDirect3DTexture9** output, SIZE& extent)
         {
+            ZoneScoped;
             HDC dc = CreateCompatibleDC(nullptr);
             if (!dc)
                 return false;
@@ -921,6 +941,7 @@ namespace cgui
 
         int MeasureText(const char* text, std::size_t count = static_cast<std::size_t>(-1), int passwordSize = 0)
         {
+            ZoneScoped;
             if (!text)
                 return 0;
             if (!passwordSize && HasMultibyteText(text))
@@ -940,6 +961,7 @@ namespace cgui
 
         bool ReadColorTag(const char* text, D3DCOLOR& color)
         {
+            ZoneScoped;
             if (*text != '{')
                 return false;
             D3DCOLOR rgb = 0;
@@ -966,6 +988,7 @@ namespace cgui
         void DrawTextRaw(const char* text, RECT rect, D3DCOLOR color, DWORD format, std::size_t count = static_cast<std::size_t>(-1), bool colorTags = false, int passwordSize = 0,
                          const RECT* clip = nullptr)
         {
+            ZoneScoped;
             if (!g_device || !g_font.texture || !text)
                 return;
 
@@ -1035,11 +1058,13 @@ namespace cgui
 
         void DrawText(const char* text, const RECT& rect, D3DCOLOR color, DWORD format)
         {
+            ZoneScoped;
             DrawTextRaw(text, rect, color, format, static_cast<std::size_t>(-1), true);
         }
 
         void SetupDefaultElements()
         {
+            ZoneScoped;
             for (auto& elements : g_defaultElements)
                 elements.clear();
 
@@ -1106,6 +1131,7 @@ namespace cgui
 
         void SetupDialogs()
         {
+            ZoneScoped;
             D3DVIEWPORT9 viewport{};
             if (FAILED(g_device->GetViewport(&viewport)))
             {
@@ -1179,6 +1205,7 @@ namespace cgui
     }
     RECT Control::GetScreenRect() const
     {
+        ZoneScoped;
         RECT rect = GetRect();
         if (m_dialog)
         {
@@ -1198,6 +1225,7 @@ namespace cgui
     }
     ControlState Control::GetState() const
     {
+        ZoneScoped;
         if (!m_visible)
             return ControlState::Hidden;
         if (!m_enabled)
@@ -1212,11 +1240,14 @@ namespace cgui
     }
     void Control::SendEvent(unsigned int event)
     {
+        ZoneScoped;
         if (m_dialog)
             m_dialog->SendEvent(event, this);
     }
     void Control::Render()
-    {}
+    {
+        ZoneScoped;
+    }
     bool Control::MsgProc(UINT, WPARAM, LPARAM)
     {
         return false;
@@ -1226,6 +1257,7 @@ namespace cgui
     {}
     void Button::Render()
     {
+        ZoneScoped;
         if (!m_visible)
         {
             m_renderTick = GetTickCount64();
@@ -1268,6 +1300,7 @@ namespace cgui
     }
     bool Button::MsgProc(UINT message, WPARAM wParam, LPARAM lParam)
     {
+        ZoneScoped;
         if (!m_visible || !m_enabled)
             return false;
         const int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
@@ -1304,6 +1337,7 @@ namespace cgui
     {}
     void Static::Render()
     {
+        ZoneScoped;
         if (!m_visible)
             return;
         const ControlState state = GetState();
@@ -1315,6 +1349,7 @@ namespace cgui
     {}
     void CheckBox::Render()
     {
+        ZoneScoped;
         if (!m_visible)
             return;
         RECT rect = GetScreenRect();
@@ -1329,6 +1364,7 @@ namespace cgui
     }
     bool CheckBox::MsgProc(UINT message, WPARAM, LPARAM lParam)
     {
+        ZoneScoped;
         if (!m_visible || !m_enabled)
             return false;
         const int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
@@ -1356,6 +1392,7 @@ namespace cgui
     {}
     void RadioButton::Render()
     {
+        ZoneScoped;
         if (!m_visible)
             return;
         RECT rect = GetScreenRect();
@@ -1370,6 +1407,7 @@ namespace cgui
     }
     bool RadioButton::MsgProc(UINT message, WPARAM, LPARAM lParam)
     {
+        ZoneScoped;
         if (!m_visible || !m_enabled)
             return false;
         const int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
@@ -1420,6 +1458,7 @@ namespace cgui
     }
     void ComboBox::Render()
     {
+        ZoneScoped;
         if (!m_visible)
             return;
         RECT rect = GetScreenRect();
@@ -1447,6 +1486,7 @@ namespace cgui
     }
     bool ComboBox::MsgProc(UINT message, WPARAM, LPARAM lParam)
     {
+        ZoneScoped;
         if (!m_visible || !m_enabled)
             return false;
         const int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
@@ -1491,6 +1531,7 @@ namespace cgui
     }
     void Slider::SetValueFromPoint(int x)
     {
+        ZoneScoped;
         RECT rect = GetScreenRect();
         const float t = std::clamp(static_cast<float>(x - rect.left) / std::max(1, Width(rect)), 0.0f, 1.0f);
         const int next = m_min + static_cast<int>(std::lround((m_max - m_min) * t));
@@ -1502,6 +1543,7 @@ namespace cgui
     }
     void Slider::Render()
     {
+        ZoneScoped;
         if (!m_visible)
             return;
         RECT rect = GetScreenRect();
@@ -1513,6 +1555,7 @@ namespace cgui
     }
     bool Slider::MsgProc(UINT message, WPARAM, LPARAM lParam)
     {
+        ZoneScoped;
         if (!m_visible || !m_enabled)
             return false;
         const int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
@@ -1572,6 +1615,7 @@ namespace cgui
     }
     int EditBox::TextWidth(std::size_t bytes) const
     {
+        ZoneScoped;
         const int passwordSize = m_password ? std::max(1, Height(GetScreenRect()) / 3) : 0;
         if (m_widthText != m_buffer || m_widthRevision != g_fontRevision || m_widthPasswordSize != passwordSize || m_prefixWidths.empty())
         {
@@ -1605,6 +1649,7 @@ namespace cgui
     }
     void EditBox::UpdateScroll() const
     {
+        ZoneScoped;
         // r5 0x85470 and 0.2x PlaceCaret: scroll by whole characters to keep the caret visible
         m_firstVisible = CharacterBoundary(m_buffer.c_str(), std::min(m_firstVisible, m_buffer.size()));
         if (m_caret < m_firstVisible)
@@ -1623,6 +1668,7 @@ namespace cgui
     }
     bool EditBox::InsertText(const wchar_t* text)
     {
+        ZoneScoped;
         if (!text || !*text)
             return false;
         BOOL substituted = FALSE;
@@ -1680,6 +1726,7 @@ namespace cgui
     }
     bool EditBox::CopySelection()
     {
+        ZoneScoped;
         if (!HasSelection() || m_password)
             return false;
         const std::size_t first = std::min(m_caret, m_selectionAnchor);
@@ -1713,6 +1760,7 @@ namespace cgui
 
     void EditBox::PasteText()
     {
+        ZoneScoped;
         if (!OpenClipboard(GetActiveWindow()))
             return;
         HGLOBAL memory = GetClipboardData(CF_UNICODETEXT);
@@ -1763,6 +1811,7 @@ namespace cgui
     }
     void EditBox::InsertChar(char value)
     {
+        ZoneScoped;
         DeleteSelection();
         if (m_buffer.size() >= m_maxLength)
             return;
@@ -1773,6 +1822,7 @@ namespace cgui
     }
     void EditBox::MoveCaret(int delta, bool selecting)
     {
+        ZoneScoped;
         if (!selecting && HasSelection())
         {
             m_caret = delta < 0 ? std::min(m_caret, m_selectionAnchor) : std::max(m_caret, m_selectionAnchor);
@@ -1788,6 +1838,7 @@ namespace cgui
     }
     std::size_t EditBox::WordBoundary(int direction) const
     {
+        ZoneScoped;
         auto classify = [&](std::size_t index) {
             const auto ch = static_cast<unsigned char>(m_buffer[index]);
             return std::isspace(ch) ? 0 : (ch >= 0x80 || std::isalnum(ch) || ch == '_') ? 1 : 2;
@@ -1822,6 +1873,7 @@ namespace cgui
 
     void EditBox::Render()
     {
+        ZoneScoped;
         if (!m_visible)
             return;
         RECT rect = GetScreenRect();
@@ -1875,6 +1927,7 @@ namespace cgui
     }
     bool EditBox::MsgProc(UINT message, WPARAM wParam, LPARAM lParam)
     {
+        ZoneScoped;
         if (!m_visible || !m_enabled)
             return false;
         if (message == WM_LBUTTONDOWN && Contains(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)))
@@ -2059,6 +2112,7 @@ namespace cgui
     }
     void ListBox::SetItemText(int index, unsigned int column, const char* text)
     {
+        ZoneScoped;
         if (index < 0 || index >= static_cast<int>(m_items.size()))
             return;
 
@@ -2099,6 +2153,7 @@ namespace cgui
     }
     void ListBox::RemoveItem(int index)
     {
+        ZoneScoped;
         if (index < 0 || index >= static_cast<int>(m_items.size()))
             return;
         m_items.erase(m_items.begin() + index);
@@ -2112,6 +2167,7 @@ namespace cgui
     }
     void ListBox::SetSelectedIndex(int index)
     {
+        ZoneScoped;
         if (index < 0 || index >= static_cast<int>(m_items.size()))
             return;
         const int visible = std::max(1, m_height / 18);
@@ -2136,6 +2192,7 @@ namespace cgui
     }
     void ListBox::Render()
     {
+        ZoneScoped;
         if (!m_visible)
             return;
         RECT rect = GetScreenRect();
@@ -2181,6 +2238,7 @@ namespace cgui
     }
     bool ListBox::MsgProc(UINT message, WPARAM wParam, LPARAM lParam)
     {
+        ZoneScoped;
         if (!m_visible || !m_enabled)
             return false;
         if (message == WM_KEYDOWN && m_focus && !m_items.empty())
@@ -2282,6 +2340,7 @@ namespace cgui
     }
     RECT ScrollBar::GetThumbRect() const
     {
+        ZoneScoped;
         const RECT r = GetTrackRect();
         const int track = Height(r);
         const int total = std::max(1, m_end - m_start);
@@ -2295,6 +2354,7 @@ namespace cgui
     }
     void ScrollBar::SetFromPoint(int y)
     {
+        ZoneScoped;
         const RECT r = GetTrackRect();
         RECT thumb = GetThumbRect();
         const int thumbH = Height(thumb);
@@ -2309,6 +2369,7 @@ namespace cgui
     }
     void ScrollBar::RepeatArrow()
     {
+        ZoneScoped;
         if (!m_arrowDirection)
             return;
         const RECT arrow = m_arrowDirection < 0 ? GetUpRect() : GetDownRect();
@@ -2323,6 +2384,7 @@ namespace cgui
     }
     void ScrollBar::Render()
     {
+        ZoneScoped;
         if (!m_visible)
         {
             m_arrowDirection = 0;
@@ -2342,6 +2404,7 @@ namespace cgui
     }
     bool ScrollBar::MsgProc(UINT message, WPARAM wParam, LPARAM lParam)
     {
+        ZoneScoped;
         if (message == WM_CAPTURECHANGED || message == WM_KILLFOCUS)
         {
             m_dragging = false;
@@ -2401,6 +2464,7 @@ namespace cgui
 
     void Dialog::Reset()
     {
+        ZoneScoped;
         RemoveAllControls();
         m_x = m_y = m_width = m_height = 0;
         m_visible = true;
@@ -2491,6 +2555,7 @@ namespace cgui
     }
     void Dialog::RemoveControl(int id)
     {
+        ZoneScoped;
         if (m_focus && m_focus->GetId() == id)
             RequestFocus(nullptr);
         if (m_mouseOver && m_mouseOver->GetId() == id)
@@ -2515,6 +2580,7 @@ namespace cgui
     }
     void Dialog::RequestFocus(Control* control)
     {
+        ZoneScoped;
         if (m_focus == control)
             return;
         if (m_focus)
@@ -2532,6 +2598,7 @@ namespace cgui
     }
     bool Dialog::MsgProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
     {
+        ZoneScoped;
         if (!m_visible)
             return false;
 
@@ -2618,6 +2685,7 @@ namespace cgui
 
     void Dialog::Render()
     {
+        ZoneScoped;
         if (!m_visible)
             return;
         ui::OpacityScope fade(GetOpacity());
@@ -2632,12 +2700,14 @@ namespace cgui
     }
     void Dialog::SendEvent(unsigned int event, Control* control)
     {
+        ZoneScoped;
         if (m_callback && control)
             m_callback(event, control->GetId(), control, m_callbackContext);
     }
 
     bool Initialize(IDirect3DDevice9* device, const char* assetDirectory)
     {
+        ZoneScoped;
         if (!device)
             return false;
         Shutdown();
@@ -2668,6 +2738,7 @@ namespace cgui
 
     void Shutdown()
     {
+        ZoneScoped;
         ime::Shutdown();
         ReleaseMeasurement();
         for (Dialog& dialog : g_dialogs)
@@ -2699,6 +2770,7 @@ namespace cgui
     }
     RECT GetClientRect()
     {
+        ZoneScoped;
         if (g_clientDirty)
         {
             g_clientDirty = false;
@@ -2717,6 +2789,7 @@ namespace cgui
 
     void Render()
     {
+        ZoneScoped;
         PROFILE_SCOPE(Controls);
         if (!g_initialized || !g_device)
             return;
@@ -2735,6 +2808,7 @@ namespace cgui
 
     void RenderCursor(int x, int y)
     {
+        ZoneScoped;
         if (!g_initialized || !g_device || !g_cursor)
             return;
         StateGuard state;
@@ -2745,6 +2819,7 @@ namespace cgui
 
     void OnLostDevice()
     {
+        ZoneScoped;
         for (auto*& state : g_states)
             Release(state);
         g_states.clear();
@@ -2773,6 +2848,7 @@ namespace cgui
 
     bool MsgProcAll(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
     {
+        ZoneScoped;
         if (message == WM_SIZE)
             g_clientDirty = true;
         // Reverse render order so top-most dialogs get the message first.
@@ -2822,6 +2898,7 @@ namespace cgui
     }
     void SetFont(const char* face, int height, int weight)
     {
+        ZoneScoped;
         const std::string nextFace = face && *face ? face : "Arial";
         const int nextHeight = std::clamp(height, 4, 96);
         const int nextWeight = std::clamp(weight, 1, 1000);

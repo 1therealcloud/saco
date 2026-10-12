@@ -66,6 +66,7 @@ namespace
 
     float HeadingToRadians(float angle)
     {
+        ZoneScoped;
         // samp.dll::0xB5970: only (0, 360) is accepted. Values above 180
         // are represented as the equivalent negative angle.
         if (!(angle > 0.0f && angle < 360.0f))
@@ -88,6 +89,7 @@ void CActor::GetBonePosition(CVector& position, unsigned int bone, bool update) 
 
 CActor::CActor(int model, CVector position, float rotation)
 {
+    ZoneScoped;
     m_pGamePed = nullptr;
     m_pGameEntity = nullptr;
     m_handle = 0;
@@ -137,6 +139,7 @@ CActor::~CActor()
 
 void CActor::Destroy()
 {
+    ZoneScoped;
     if (IsCurrentPed(this))
     {
         using DeletingDestructor = void(__thiscall*)(void*, unsigned int);
@@ -152,6 +155,7 @@ void CActor::Destroy()
 
 void CActor::PerformAnimation(const char* animation, const char* file, float frameDelta, int lockA, int lockX, int lockY, int lockF, int time)
 {
+    ZoneScoped;
     if (!IsCurrentPed(this) || !animation || !file || std::strcmp(file, "SEX") == 0)
         return;
 
@@ -172,6 +176,7 @@ void CActor::PerformAnimation(const char* animation, const char* file, float fra
 
 void CActor::ClearAnimations()
 {
+    ZoneScoped;
     if (!IsCurrentPed(this))
         return;
 
@@ -251,6 +256,7 @@ BOOL CActor::IsOnGround() const
 
 void CActor::SetInvulnerable(bool enable)
 {
+    ZoneScoped;
     if (!IsCurrentPed(this))
         return;
 

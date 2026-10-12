@@ -119,6 +119,7 @@ EventHandlerFn g_eventHandler = nullptr;
 
 bool InstallGameLoopHook()
 {
+    ZoneScoped;
     constexpr std::uintptr_t kIdleCall = 0x748D9B;
 
     std::int32_t relative{};
@@ -133,6 +134,7 @@ bool InstallGameLoopHook()
 // initializes resources once, then waits for the debug scene to be ready
 static bool InitializeGameplay(IDirect3DDevice9* device)
 {
+    ZoneScoped;
     static std::once_flag resourcesOnce;
     std::call_once(resourcesOnce, [&] {
         // init ui
@@ -169,6 +171,7 @@ static bool InitializeGameplay(IDirect3DDevice9* device)
 // game loop
 void Process()
 {
+    ZoneScoped;
     PROFILE_SCOPE(Process);
     if (!CGame::IsPlaying())
         return;
@@ -253,6 +256,7 @@ void Process()
 // render loop
 void Frame(IDirect3DDevice9* device)
 {
+    ZoneScoped;
     CVector mapPosition{};
     if (CGame::GetMapClickPosition(mapPosition) && g_netGame && g_netGame->GetState() == CNetGame::GAME_MODE_CONNECTED)
         g_netGame->MapMarker(mapPosition.x, mapPosition.y, mapPosition.z);
@@ -277,6 +281,7 @@ void Frame(IDirect3DDevice9* device)
 
 DWORD WINAPI InitializeThread(LPVOID)
 {
+    ZoneScoped;
     // check gta version
     if (!IsGtaSa10Us())
     {

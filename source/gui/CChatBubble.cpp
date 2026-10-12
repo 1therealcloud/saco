@@ -28,6 +28,7 @@ namespace
 
     int WrapText(char* text, int lineLength, int minimumWordTail)
     {
+        ZoneScoped;
         if (!text)
             return -1;
 
@@ -89,6 +90,7 @@ CChatBubble::CChatBubble()
 
 void CChatBubble::Add(ID player, const char* text, D3DCOLOR color, float drawDistance, int lifeSpan)
 {
+    ZoneScoped;
     if (player >= MAX_PLAYERS || !text || !std::isfinite(drawDistance) || drawDistance < 0 || lifeSpan < 0)
         return;
 
@@ -116,6 +118,7 @@ void CChatBubble::Add(ID player, const char* text, D3DCOLOR color, float drawDis
 
 void CChatBubble::Draw()
 {
+    ZoneScoped;
     PROFILE_SCOPE(Bubbles);
     if (!g_label)
         return;

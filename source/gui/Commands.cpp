@@ -44,6 +44,7 @@ namespace Commands
 
         void PrintInfo(const char* format, ...)
         {
+            ZoneScoped;
             if (!g_chat)
                 return;
 
@@ -60,6 +61,7 @@ namespace Commands
 
         void PrintDebug(const char* format, ...)
         {
+            ZoneScoped;
             if (!g_chat)
                 return;
 
@@ -101,6 +103,7 @@ namespace Commands
 
         bool QueryPlayerSnapshot(PlayerSnapshot& snapshot)
         {
+            ZoneScoped;
             auto* ped = g_game ? g_game->GetPlayerPed() : nullptr;
             if (!ped || !ped->IsValid())
                 return false;
@@ -146,6 +149,7 @@ namespace Commands
     // +0x685F0
     void SetChatPageSize(const char* params)
     {
+        ZoneScoped;
         if (HasText(params))
         {
             const int value = ToInt(params);
@@ -165,6 +169,7 @@ namespace Commands
     // +0x68670
     void SetChatFontSize(const char* params)
     {
+        ZoneScoped;
         if (!HasText(params))
         {
             PrintDebug("Valid fontsize: -3 to 5");
@@ -203,6 +208,7 @@ namespace Commands
     // +0x68720 -> CNetGame helper at +0x8E90
     void DrawNameTagStatus(const char*)
     {
+        ZoneScoped;
         bool enabled = !ReadBool(CConfig::PARAM_NO_NAMETAG_STATUS, false);
         enabled = !enabled;
 
@@ -216,6 +222,7 @@ namespace Commands
     // +0x68730
     void DrawChatTimestamps(const char*)
     {
+        ZoneScoped;
         if (!g_chat)
             return;
 
@@ -254,6 +261,7 @@ namespace Commands
     // +0x688B0
     void PrintMemory(const char*)
     {
+        ZoneScoped;
         int value = 0;
         if (g_game)
             value = g_game->GetUsedMemory();
@@ -266,6 +274,7 @@ namespace Commands
     // +0x688D0
     void SetFrameLimiter(const char* params)
     {
+        ZoneScoped;
         if (!HasText(params))
             return;
 
@@ -288,6 +297,7 @@ namespace Commands
     // +0x68960
     void ToggleHeadMoves(const char*)
     {
+        ZoneScoped;
         bool enabled = g_game ? g_game->DoesHeadMoves() != FALSE : !ReadBool(CConfig::PARAM_DISABLE_HEAD_MOVE, false);
         enabled = !enabled;
         if (g_game)
@@ -312,6 +322,7 @@ namespace Commands
     // +0x68A00
     void SavePosition(const char* params)
     {
+        ZoneScoped;
         PlayerSnapshot snapshot;
         if (!QueryPlayerSnapshot(snapshot))
             return;
@@ -351,6 +362,7 @@ namespace Commands
     // +0x68B80
     void SavePositionOnly(const char* params)
     {
+        ZoneScoped;
         PlayerSnapshot snapshot;
         if (!QueryPlayerSnapshot(snapshot))
             return;
@@ -422,6 +434,7 @@ namespace Commands
     // +0x69030
     void SendRconCommand(const char* params)
     {
+        ZoneScoped;
         if (params && g_netGame)
             g_netGame->SendRconCommand(params);
     }
@@ -432,6 +445,7 @@ namespace Commands
         // +0x68500
         void TestDeathWindow(const char*)
         {
+            ZoneScoped;
             if (!g_deathWindow)
                 return;
 
@@ -458,6 +472,7 @@ namespace Commands
         // +0x68D00
         void SetPlayerSkin(const char* params)
         {
+            ZoneScoped;
             if (!DebugAvailable())
                 return;
 
@@ -480,6 +495,7 @@ namespace Commands
         // +0x68ED0
         void SetWorldWeather(const char* params)
         {
+            ZoneScoped;
             if (!DebugAvailable())
                 return;
 
@@ -497,6 +513,7 @@ namespace Commands
         // +0x68F20
         void SetWorldTime(const char* params)
         {
+            ZoneScoped;
             if (!DebugAvailable())
                 return;
 
@@ -523,6 +540,7 @@ namespace Commands
     // +0x69110
     void Setup()
     {
+        ZoneScoped;
         if (!g_input)
             return;
 

@@ -40,6 +40,7 @@ namespace
 
     void WritePng(void* context, void* data, int size)
     {
+        ZoneScoped;
         auto& file = *static_cast<File*>(context);
         auto* bytes = static_cast<const BYTE*>(data);
         while (file.ok && size > 0)
@@ -55,6 +56,7 @@ namespace
     }
     bool GetPixelSize(D3DFORMAT format, std::size_t& size)
     {
+        ZoneScoped;
         switch (format)
         {
             case D3DFMT_R8G8B8:
@@ -97,6 +99,7 @@ namespace
 
     bool ConvertToRgba(const D3DLOCKED_RECT& locked, const D3DSURFACE_DESC& description, std::vector<std::uint8_t>& rgba)
     {
+        ZoneScoped;
         std::size_t pixelSize = 0;
         if (!GetPixelSize(description.Format, pixelSize) || locked.Pitch <= 0 || !locked.pBits)
             return false;
@@ -214,6 +217,7 @@ namespace
 
     bool Capture(IDirect3DDevice9* device, std::vector<std::uint8_t>& rgba, UINT& width, UINT& height)
     {
+        ZoneScoped;
         if (!device)
             return false;
         IDirect3DSurface9* raw = nullptr;
@@ -263,6 +267,7 @@ namespace
 
     screenshot::Result SavePng(std::vector<std::uint8_t> rgba, UINT width, UINT height, const std::string& userDirectory)
     {
+        ZoneScoped;
         screenshot::Result result;
         result.requested = true;
         stbi_write_png_compression_level = 8;
@@ -326,6 +331,7 @@ namespace screenshot
 
     Result ProcessPendingCapture(IDirect3DDevice9* device, const std::string& userDirectory)
     {
+        ZoneScoped;
         if (g_save.valid())
         {
             if (g_save.wait_for(std::chrono::seconds(0)) != std::future_status::ready)

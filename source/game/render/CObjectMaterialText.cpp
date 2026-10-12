@@ -32,6 +32,7 @@ namespace
 
     DWORD GetTextFormat(std::uint8_t align)
     {
+        ZoneScoped;
         // R5 +0x70984:
         //   0 -> 0
         //   1 -> DT_CENTER | DT_VCENTER (5)
@@ -52,18 +53,22 @@ namespace
     {
     public:
         explicit RenderTargetState(IDirect3DDevice9* device) : m_device(device)
-        {}
+        {
+            ZoneScoped;
+        }
 
         RenderTargetState(const RenderTargetState&) = delete;
         RenderTargetState& operator=(const RenderTargetState&) = delete;
 
         ~RenderTargetState()
         {
+            ZoneScoped;
             Restore();
         }
 
         bool Begin(IDirect3DSurface9* renderTarget, IDirect3DSurface9* depthStencil, UINT width, UINT height)
         {
+            ZoneScoped;
             if (!m_device || m_active)
                 return false;
             if (FAILED(m_device->GetRenderTarget(0, &m_oldRenderTarget)) || FAILED(m_device->GetViewport(&m_oldViewport)))
@@ -88,6 +93,7 @@ namespace
 
         void Restore()
         {
+            ZoneScoped;
             if (!m_device || !m_active)
                 return;
 
@@ -140,6 +146,7 @@ void CObjectMaterialText::DeleteDeviceObjects()
 
 void CObjectMaterialText::RestoreDeviceObjects()
 {
+    ZoneScoped;
     // Original +0x70860:
     //   D3DXCreateSprite(m_pDevice, &m_pTextSprite);
     //   D3DXCreateSprite(m_pDevice, &m_pSprite);
@@ -152,6 +159,7 @@ void CObjectMaterialText::RestoreDeviceObjects()
 IDirect3DTexture9* CObjectMaterialText::Create(const char* text, const char* font, int fontSize, int width, int height, D3DCOLOR fontColor, D3DCOLOR backgroundColor, bool bold,
                                                std::uint8_t align)
 {
+    ZoneScoped;
     // R5 +0x708B0 has two early-outs: no D3D device, or no global GUI/font
     // subsystem. CFont is the SACO replacement for the latter, so only the
     // device can be checked before constructing it.
@@ -242,6 +250,7 @@ IDirect3DTexture9* CObjectMaterialText::Create(const char* text, const char* fon
 RwTexture* CObjectMaterialText::CreateRwTexture(const char* text, const char* font, int fontSize, int width, int height, D3DCOLOR fontColor, D3DCOLOR backgroundColor, bool bold,
                                                 std::uint8_t align)
 {
+    ZoneScoped;
     TextureResources resources;
     resources.texture = Create(text, font, fontSize, width, height, fontColor, backgroundColor, bold, align);
     if (!resources.texture || FAILED(resources.texture->GetSurfaceLevel(0, &resources.surface)))

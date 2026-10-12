@@ -33,6 +33,7 @@ namespace
 
     UINT NextPowerOfTwo(UINT value)
     {
+        ZoneScoped;
         if (value <= 1)
             return 1;
 
@@ -52,6 +53,7 @@ namespace
 
     unsigned HexValue(char value)
     {
+        ZoneScoped;
         if (value >= '0' && value <= '9')
             return static_cast<unsigned>(value - '0');
 
@@ -88,6 +90,7 @@ CFont::CFont(IDirect3DDevice9* device, int height, int width, int weight, const 
     : m_device(device), m_codePage(codePage), m_charSet(charSet), m_requestedHeight(height), m_requestedWidth(width), m_weight(weight), m_quality(quality),
       m_face(face && *face ? face : "Arial")
 {
+    ZoneScoped;
     if (m_device)
         m_device->AddRef();
 
@@ -123,6 +126,7 @@ void CFont::OnResetDevice()
 
 bool CFont::CreateFontObject()
 {
+    ZoneScoped;
     if (!m_device)
         return false;
 
@@ -169,6 +173,7 @@ bool CFont::CreateFontObject()
 
 wchar_t CFont::ByteToWide(unsigned char value) const
 {
+    ZoneScoped;
     if (m_charSet == SYMBOL_CHARSET)
         return static_cast<wchar_t>(0xF000u | value);
     if (value < 0x80)
@@ -187,6 +192,7 @@ wchar_t CFont::ByteToWide(unsigned char value) const
 
 bool CFont::CreateAtlas()
 {
+    ZoneScoped;
     m_textCache.clear();
     m_textCacheOrder.clear();
     m_textCacheBytes = 0;
@@ -387,6 +393,7 @@ bool CFont::CreateAtlas()
 
 int CFont::GetKerning(unsigned char left, unsigned char right) const
 {
+    ZoneScoped;
     if (!left || !right || m_kerning.empty())
         return 0;
 
@@ -398,6 +405,7 @@ int CFont::GetKerning(unsigned char left, unsigned char right) const
 
 bool CFont::IsColorTag(const char* text)
 {
+    ZoneScoped;
     if (!text || text[0] != '{')
         return false;
 
@@ -412,6 +420,7 @@ bool CFont::IsColorTag(const char* text)
 
 bool CFont::ParseColorTag(const char* text, D3DCOLOR& color)
 {
+    ZoneScoped;
     if (!IsColorTag(text))
         return false;
 
@@ -427,6 +436,7 @@ bool CFont::ParseColorTag(const char* text, D3DCOLOR& color)
 
 void CFont::StripColorTags(std::string& text)
 {
+    ZoneScoped;
     std::size_t write = 0;
 
     for (std::size_t read = 0; read < text.size();)
@@ -445,6 +455,7 @@ void CFont::StripColorTags(std::string& text)
 
 void CFont::BuildStyledText(const char* text, int count, D3DCOLOR baseColor, bool useColorTags, std::vector<StyledChar>& output) const
 {
+    ZoneScoped;
     output.clear();
 
     if (!text)
@@ -490,6 +501,7 @@ void CFont::BuildStyledText(const char* text, int count, D3DCOLOR baseColor, boo
 
 float CFont::MeasureRange(const std::vector<StyledChar>& text, std::size_t begin, std::size_t end, DWORD format) const
 {
+    ZoneScoped;
     float width = 0.0f;
     unsigned char previous = 0;
 
@@ -533,6 +545,7 @@ float CFont::MeasureRange(const std::vector<StyledChar>& text, std::size_t begin
 
 void CFont::BuildLines(const std::vector<StyledChar>& text, float maxWidth, DWORD format, std::vector<Line>& lines) const
 {
+    ZoneScoped;
     lines.clear();
 
     if (text.empty())
@@ -634,6 +647,7 @@ void CFont::BuildLines(const std::vector<StyledChar>& text, float maxWidth, DWOR
 int CFont::BuildVertices(const char* text, int count, RECT rect, DWORD format, D3DCOLOR color, bool useColorTags, float offsetX, float offsetY, std::vector<Vertex>& vertices,
                          SIZE* measured) const
 {
+    ZoneScoped;
     if (!text || std::strlen(text) > kMaxTextLength)
         return BuildVerticesUncached(text, count, rect, format, color, useColorTags, offsetX, offsetY, vertices, measured);
     const auto length = count < 0 ? std::strlen(text) : std::min<std::size_t>(count, std::strlen(text));
@@ -680,6 +694,7 @@ int CFont::BuildVertices(const char* text, int count, RECT rect, DWORD format, D
 int CFont::BuildVerticesUncached(const char* text, int count, RECT rect, DWORD format, D3DCOLOR color, bool useColorTags, float offsetX, float offsetY,
                                  std::vector<Vertex>& vertices, SIZE* measured) const
 {
+    ZoneScoped;
     auto& styled = m_styledText;
     BuildStyledText(text, count, color, useColorTags, styled);
 
@@ -789,6 +804,7 @@ int CFont::BuildVerticesUncached(const char* text, int count, RECT rect, DWORD f
 
 bool CFont::EnsureVertexBuffer(std::size_t vertexCount)
 {
+    ZoneScoped;
     if (!m_device)
         return false;
 
@@ -817,6 +833,7 @@ bool CFont::EnsureVertexBuffer(std::size_t vertexCount)
 
 bool CFont::EnsureIndexBuffer()
 {
+    ZoneScoped;
     if (m_indexBuffer)
         return true;
     constexpr UINT quadCount = 4096;
@@ -846,6 +863,7 @@ bool CFont::EnsureIndexBuffer()
 
 void CFont::SaveState(SavedState& state) const
 {
+    ZoneScoped;
     if (!m_device)
         return;
 
@@ -889,6 +907,7 @@ void CFont::SaveState(SavedState& state) const
 
 void CFont::ApplyFontState(const RECT* clipRect, bool clip, D3DBLEND destBlend) const
 {
+    ZoneScoped;
     m_device->SetVertexShader(nullptr);
     m_device->SetPixelShader(nullptr);
     m_device->SetFVF(kFontFvf);
@@ -935,6 +954,7 @@ void CFont::ApplyFontState(const RECT* clipRect, bool clip, D3DBLEND destBlend) 
 
 void CFont::RestoreState(SavedState& state) const
 {
+    ZoneScoped;
     if (!m_device)
         return;
 
@@ -1009,6 +1029,7 @@ void CFont::FlushBatch()
 
 int CFont::DrawVertices(std::vector<Vertex>& vertices, const RECT* clipRect, bool clip, D3DBLEND destBlend)
 {
+    ZoneScoped;
     if (vertices.empty() || !IsValid())
         return 0;
 
@@ -1036,6 +1057,7 @@ int CFont::DrawVertices(std::vector<Vertex>& vertices, const RECT* clipRect, boo
 
 int CFont::SubmitVertices(const std::vector<Vertex>& vertices, const RECT* clipRect, bool clip, D3DBLEND destBlend)
 {
+    ZoneScoped;
     if (!EnsureVertexBuffer(vertices.size()) || !EnsureIndexBuffer())
         return 0;
     void* data = nullptr;
@@ -1074,21 +1096,25 @@ int CFont::SubmitVertices(const std::vector<Vertex>& vertices, const RECT* clipR
 
 int CFont::DrawTextA(const char* text, RECT* rect, DWORD format, D3DCOLOR color)
 {
+    ZoneScoped;
     return DrawTextA(text, -1, rect, format, color, D3DBLEND_INVSRCALPHA);
 }
 
 int CFont::DrawTextA(const char* text, RECT* rect, DWORD format, D3DCOLOR color, D3DBLEND destBlend)
 {
+    ZoneScoped;
     return DrawTextA(text, -1, rect, format, color, destBlend);
 }
 
 int CFont::DrawTextA(const char* text, int count, RECT* rect, DWORD format, D3DCOLOR color)
 {
+    ZoneScoped;
     return DrawTextA(text, count, rect, format, color, D3DBLEND_INVSRCALPHA);
 }
 
 int CFont::DrawTextA(const char* text, int count, RECT* rect, DWORD format, D3DCOLOR color, D3DBLEND destBlend)
 {
+    ZoneScoped;
     if (!IsValid() || !text || !rect)
         return 0;
 
@@ -1117,6 +1143,7 @@ int CFont::DrawTextA(const char* text, int count, RECT* rect, DWORD format, D3DC
 
 int CFont::DrawTextOutlinedA(const char* text, RECT* rect, DWORD format, D3DCOLOR color, D3DCOLOR outlineColor, int outlineSize)
 {
+    ZoneScoped;
     if (!IsValid() || !text || !rect)
         return 0;
 
@@ -1167,6 +1194,7 @@ int CFont::DrawTextOutlinedA(const char* text, RECT* rect, DWORD format, D3DCOLO
 
 void CFont::DrawBox(float x, float y, float width, float height, D3DCOLOR color)
 {
+    ZoneScoped;
     if (!IsValid() || width <= 0 || height <= 0)
         return;
     const float u = 1.5f / m_atlasWidth, v = 1.5f / m_atlasHeight;
@@ -1180,6 +1208,7 @@ void CFont::DrawBox(float x, float y, float width, float height, D3DCOLOR color)
 
 SIZE CFont::GetTextSize(const char* text, DWORD format) const
 {
+    ZoneScoped;
     SIZE size{};
 
     if (!IsValid() || !text || std::strlen(text) > kMaxTextLength)
@@ -1212,6 +1241,7 @@ void CFont::ReleaseAtlas()
 
 void CFont::ReleaseFontObject()
 {
+    ZoneScoped;
     if (m_dc && m_oldFont && m_oldFont != HGDI_ERROR)
     {
         SelectObject(m_dc, m_oldFont);
@@ -1247,6 +1277,7 @@ CFonts::~CFonts()
 
 void CFonts::OnLostDevice()
 {
+    ZoneScoped;
     if (m_font)
         m_font->OnLostDevice();
 
@@ -1263,6 +1294,7 @@ void CFonts::OnLostDevice()
 
 void CFonts::OnResetDevice()
 {
+    ZoneScoped;
     if (m_font)
         m_font->OnResetDevice();
 
@@ -1280,6 +1312,7 @@ void CFonts::OnResetDevice()
 #if defined(SACO_BUILD)
 bool CFonts::ReadFontSettings(int& sizeOffset, int& weight, std::string& face) const
 {
+    ZoneScoped;
     sizeOffset = 0;
     weight = 700;
     face = "Arial";
@@ -1308,6 +1341,7 @@ bool CFonts::ReadFontSettings(int& sizeOffset, int& weight, std::string& face) c
 
 void CFonts::GetFontSettings(int& sizeOffset, int& weight, std::string& face) const
 {
+    ZoneScoped;
     sizeOffset = 0;
     weight = 700;
     face = "Arial";
@@ -1319,6 +1353,7 @@ void CFonts::GetFontSettings(int& sizeOffset, int& weight, std::string& face) co
 
 int CFonts::GetBaseFontSize() const
 {
+    ZoneScoped;
     if (!m_device)
         return 14;
 
@@ -1341,6 +1376,7 @@ int CFonts::GetBaseFontSize() const
 
 bool CFonts::Reset()
 {
+    ZoneScoped;
     if (!m_device)
         return false;
 
@@ -1384,6 +1420,7 @@ bool CFonts::Reset()
 
 void CFonts::GetTextScreenSize(SIZE* size, const char* text, int format) const
 {
+    ZoneScoped;
     if (!size)
         return;
 
@@ -1397,6 +1434,7 @@ void CFonts::GetTextScreenSize(SIZE* size, const char* text, int format) const
 
 void CFonts::GetLittleTextScreenSize(SIZE* size, const char* text, int format) const
 {
+    ZoneScoped;
     if (!size)
         return;
 
@@ -1410,6 +1448,7 @@ void CFonts::GetLittleTextScreenSize(SIZE* size, const char* text, int format) c
 
 void CFonts::DrawText(const char* text, RECT rect, D3DCOLOR color, bool shadow)
 {
+    ZoneScoped;
     if (!m_font || !text || !*text)
         return;
 
@@ -1426,6 +1465,7 @@ void CFonts::DrawText(const char* text, RECT rect, D3DCOLOR color, bool shadow)
 
 void CFonts::DrawLittleText(const char* text, RECT rect, int format, D3DCOLOR color, bool shadow)
 {
+    ZoneScoped;
     if (!m_littleFont || !text || !*text)
         return;
 
@@ -1441,6 +1481,7 @@ void CFonts::DrawLittleText(const char* text, RECT rect, int format, D3DCOLOR co
 
 void CFonts::DrawLicensePlateText(const char* text, RECT rect, D3DCOLOR color)
 {
+    ZoneScoped;
     if (!m_licensePlateFont || !text || !*text)
         return;
 
@@ -1471,6 +1512,7 @@ void CFonts::DrawLicensePlateText(const char* text, RECT rect, D3DCOLOR color)
 #if defined(_DEBUG)
 void CFonts::DrawFps(unsigned int fps, double frameTimeMs)
 {
+    ZoneScoped;
     if (!m_fpsFont)
         return;
     D3DVIEWPORT9 viewport{};
@@ -1488,6 +1530,7 @@ void CFonts::DrawFps(unsigned int fps, double frameTimeMs)
 
 void CFonts::ReleaseFonts()
 {
+    ZoneScoped;
     delete m_font;
     m_font = nullptr;
 

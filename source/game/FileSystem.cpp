@@ -73,6 +73,7 @@ namespace filesystem
 
         HANDLE AllocateHandleLocked()
         {
+            ZoneScoped;
             // r5 keeps 50 open archive files
             if (g_files.size() >= kMaxOpenFiles)
             {
@@ -99,6 +100,7 @@ namespace filesystem
 
         OpenResult OpenA(LPCSTR path, HANDLE& handle)
         {
+            ZoneScoped;
             handle = INVALID_HANDLE_VALUE;
             if (!path)
                 return OpenResult::NotFound;
@@ -135,6 +137,7 @@ namespace filesystem
         HANDLE WINAPI HookCreateFileA(LPCSTR fileName, DWORD desiredAccess, DWORD shareMode, LPSECURITY_ATTRIBUTES securityAttributes, DWORD creationDisposition,
                                       DWORD flagsAndAttributes, HANDLE templateFile)
         {
+            ZoneScoped;
             // archive files are read-only; writes and creation belong to the real filesystem
             constexpr DWORD writeAccess =
                 GENERIC_WRITE | GENERIC_ALL | MAXIMUM_ALLOWED | FILE_WRITE_DATA | FILE_APPEND_DATA | FILE_WRITE_EA | FILE_WRITE_ATTRIBUTES | DELETE | WRITE_DAC | WRITE_OWNER;
@@ -154,6 +157,7 @@ namespace filesystem
 
         BOOL WINAPI HookReadFile(HANDLE file, LPVOID buffer, DWORD bytesToRead, LPDWORD bytesRead, LPOVERLAPPED overlapped)
         {
+            ZoneScoped;
             if (!LooksVirtual(file))
                 return g_readFile(file, buffer, bytesToRead, bytesRead, overlapped);
 
@@ -201,6 +205,7 @@ namespace filesystem
 
         DWORD WINAPI HookGetFileSize(HANDLE file, LPDWORD fileSizeHigh)
         {
+            ZoneScoped;
             if (!LooksVirtual(file))
                 return g_getFileSize(file, fileSizeHigh);
 
@@ -217,6 +222,7 @@ namespace filesystem
 
         DWORD WINAPI HookSetFilePointer(HANDLE file, LONG distanceLow, PLONG distanceHigh, DWORD moveMethod)
         {
+            ZoneScoped;
             if (!LooksVirtual(file))
                 return g_setFilePointer(file, distanceLow, distanceHigh, moveMethod);
 
@@ -282,6 +288,7 @@ namespace filesystem
 
         BOOL WINAPI HookCloseHandle(HANDLE file)
         {
+            ZoneScoped;
             if (!LooksVirtual(file))
                 return g_closeHandle(file);
 
@@ -296,6 +303,7 @@ namespace filesystem
 
         DWORD WINAPI HookGetFileType(HANDLE file)
         {
+            ZoneScoped;
             if (!LooksVirtual(file))
                 return g_getFileType(file);
 
@@ -309,6 +317,7 @@ namespace filesystem
         template <typename T>
         bool CreateKernelHook(HMODULE kernel32, const char* name, LPVOID detour, T& original)
         {
+            ZoneScoped;
             const auto target = reinterpret_cast<LPVOID>(GetProcAddress(kernel32, name));
             if (!target)
             {
@@ -331,6 +340,7 @@ namespace filesystem
 
         void RemoveHooks()
         {
+            ZoneScoped;
             for (auto it = g_hookTargets.rbegin(); it != g_hookTargets.rend(); ++it)
                 MH_DisableHook(*it);
 
@@ -343,6 +353,7 @@ namespace filesystem
 
     bool install()
     {
+        ZoneScoped;
         if (g_installed)
             return true;
 

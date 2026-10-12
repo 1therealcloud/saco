@@ -16,6 +16,7 @@ namespace game::patch
 
         bool wait_for_game_ready()
         {
+            ZoneScoped;
             // hoodlum restores this byte when gta code is ready
             for (unsigned attempt = 0; attempt <= 6000; ++attempt)
             {
@@ -36,6 +37,7 @@ namespace game::patch
 
     bool install()
     {
+        ZoneScoped;
         static bool installed = false;
 
         if (installed)

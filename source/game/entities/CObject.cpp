@@ -72,6 +72,7 @@ namespace
 
     std::uint32_t MotionMilliseconds()
     {
+        ZoneScoped;
         static LARGE_INTEGER frequency{};
         if (!frequency.QuadPart)
             QueryPerformanceFrequency(&frequency);
@@ -87,6 +88,7 @@ namespace
 
     bool TimeVisible(const Runtime& runtime)
     {
+        ZoneScoped;
         if (!runtime.hourOn && !runtime.hourOff)
             return true;
 
@@ -105,6 +107,7 @@ namespace
 
     RwTexture* GetBlankTexture()
     {
+        ZoneScoped;
         if (g_blankTexture)
             return RwTextureAddRef(g_blankTexture);
 
@@ -147,6 +150,7 @@ namespace
     }
     void OnStreamingReady(const CObject& object)
     {
+        ZoneScoped;
         auto* native = object.GetNativeHandle();
         if (!native || Read<std::uint32_t>(native, 0) == 0x863C40u)
             return;
@@ -165,6 +169,7 @@ namespace
     }
     bool EnsureModelLoaded(int model, int attempts = 250)
     {
+        ZoneScoped;
         auto* info = ModelInfo::GetRelocated(model);
         if (!info)
             return false;
@@ -187,6 +192,7 @@ namespace
     }
     CMatrix Rotation(CVector rotation)
     {
+        ZoneScoped;
         // r5 uses gta's Rz * Rx * Ry rotation order
         const float x = rotation.x * RADIANS, y = rotation.y * RADIANS, z = rotation.z * RADIANS;
         const float sx = std::sin(x), cx = std::cos(x), sy = std::sin(y), cy = std::cos(y);
@@ -219,6 +225,7 @@ namespace
 
         explicit MaterialScope(CObject& value) : object(value)
         {
+            ZoneScoped;
             auto* rw = object.GetRwObject();
             if (!rw || !object.m_bHasCustomMaterial)
                 return;
@@ -235,6 +242,7 @@ namespace
         }
         void Apply(RpAtomic* atomic)
         {
+            ZoneScoped;
             auto* geometry = RpAtomicGetGeometry(atomic);
             if (!geometry || std::any_of(geometries.begin(), geometries.end(), [geometry](const auto& state) {
                     return state.geometry == geometry;
@@ -269,6 +277,7 @@ namespace
         }
         ~MaterialScope()
         {
+            ZoneScoped;
             for (auto& state : materials)
             {
                 state.material->texture = state.texture;
@@ -292,6 +301,7 @@ namespace game::objects::detail
     }
     void RenderNativeObject(void* entity, game::hooks::ObjectRenderFn draw)
     {
+        ZoneScoped;
         const auto found = g_nativeObjects.find(entity);
         if (found != g_nativeObjects.end())
         {
@@ -319,6 +329,7 @@ namespace game::objects::detail
 
 CObject::CObject(int model, CVector position, CVector rotation, float drawDistance, int customLighting, char hourOn, char hourOff)
 {
+    ZoneScoped;
     auto& runtime = g_objects[this];
     runtime.customLighting = customLighting != 0;
     runtime.hourOn = static_cast<unsigned char>(hourOn);
@@ -355,6 +366,7 @@ CObject::CObject(int model, CVector position, CVector rotation, float drawDistan
 }
 CObject::~CObject()
 {
+    ZoneScoped;
     g_nativeObjects.erase(m_pGameEntity);
     for (auto& [object, runtime] : g_objects)
         if (runtime.attachedObject == this)
@@ -401,6 +413,7 @@ void CObject::SetRotation(const CVector* rotation)
 }
 CVector CObject::GetRotation() const
 {
+    ZoneScoped;
     if (!IsValid())
         return m_rotation;
     CMatrix matrix = CMatrix::Unity();
@@ -428,6 +441,7 @@ void CObject::Rotate(CVector rotation)
 }
 void CObject::SetAttachedToVehicle(std::uint16_t id, const CVector* offset, const CVector* rotation)
 {
+    ZoneScoped;
     auto& runtime = g_objects.at(this);
     if (id == 0xFFFF)
     {
@@ -453,6 +467,7 @@ void CObject::SetAttachedToVehicle(std::uint16_t id, const CVector* offset, cons
 }
 void CObject::SetAttachedToObject(std::uint16_t id, const CVector* offset, const CVector* rotation, char syncRotation)
 {
+    ZoneScoped;
     auto& runtime = g_objects.at(this);
     if (id == 0xFFFF)
     {
@@ -484,6 +499,7 @@ void CObject::SetAttachedToObject(std::uint16_t id, const CVector* offset, const
 }
 void CObject::AttachToVehicle(CEntity* vehicle)
 {
+    ZoneScoped;
     if (!IsValid() || !vehicle || !vehicle->DoesExist())
         return;
 
@@ -504,6 +520,7 @@ void CObject::AttachToVehicle(CEntity* vehicle)
 }
 void CObject::AttachToObject(CObject* object)
 {
+    ZoneScoped;
     if (!IsValid() || !object || object == this || !object->DoesExist())
         return;
 
@@ -539,6 +556,7 @@ void CObject::AttachToObject(CObject* object)
 
 void CObject::AttachToPlayer(CPed* ped, const CVector* offset, const CVector* rotation)
 {
+    ZoneScoped;
     if (!IsValid() || !ped || !ped->DoesExist() || !offset || !rotation)
         return;
 
@@ -561,6 +579,7 @@ void CObject::SetCameraCollision(bool enable)
 
 void CObject::Detach()
 {
+    ZoneScoped;
     if (IsValid() && scm::ProcessCommand(&IS_ATTACHED, m_handle))
         scm::ProcessCommand(&DETACH_OBJECT, m_handle, 0.0, 0.0, 0.0);
     m_nAttachedToObject = m_nAttachedToVehicle = 0xFFFF;
@@ -572,6 +591,7 @@ void CObject::Detach()
 }
 BOOL CObject::AttachedToMovingEntity() const
 {
+    ZoneScoped;
     if (m_nAttachedToObject != 0xFFFF)
     {
         auto* netGame = g_netGame.get();
@@ -583,6 +603,7 @@ BOOL CObject::AttachedToMovingEntity() const
 }
 float CObject::MoveTo(CVector position, float speed, CVector rotation)
 {
+    ZoneScoped;
     if (!IsValid() || speed <= 0.0f || !std::isfinite(speed) || !std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z))
         return 0.0f;
 
@@ -633,6 +654,7 @@ float CObject::MoveTo(CVector position, float speed, CVector rotation)
 
 void CObject::Process(float elapsedSeconds)
 {
+    ZoneScoped;
     if (!IsValid())
     {
         m_bReadyToRender = false;
@@ -671,6 +693,7 @@ void CObject::Process(float elapsedSeconds)
         }
         else if (GetRwObject())
         {
+            ZoneScoped;
             ++runtime.outsideFrames;
             m_nNoDrawFrames = runtime.outsideFrames;
             if (runtime.outsideFrames >= 1000)
@@ -804,6 +827,7 @@ void CObject::Process(float elapsedSeconds)
 }
 void CObject::ClearMaterial(int index)
 {
+    ZoneScoped;
     if (m_material.m_pTextBackground[index])
         RwTextureDestroy(m_material.m_pTextBackground[index]);
     m_material.m_pTextBackground[index] = nullptr;
@@ -815,6 +839,7 @@ void CObject::ClearMaterial(int index)
 }
 void CObject::SetMaterial(int model, int index, const char* txd, const char* texture, D3DCOLOR color)
 {
+    ZoneScoped;
     if (index < 0 || index >= MAX_MATERIALS || !txd || !texture)
         return;
 
@@ -853,6 +878,7 @@ void CObject::SetMaterial(int model, int index, const char* txd, const char* tex
 
 void CObject::SetMaterialText(int index, const char* text, char size, const char* font, char fontSize, bool bold, D3DCOLOR fontColor, D3DCOLOR backgroundColor, char align)
 {
+    ZoneScoped;
     int width, height;
     if (index < 0 || index >= MAX_MATERIALS || !text || !font || !GetMaterialSize(static_cast<std::uint8_t>(size), &width, &height))
         return;
@@ -876,6 +902,7 @@ void CObject::SetMaterialText(int index, const char* text, char size, const char
 }
 bool CObject::GetMaterialSize(int size, int* width, int* height)
 {
+    ZoneScoped;
     constexpr int sizes[][2] = {{32, 32},  {64, 32},   {64, 64},   {128, 32}, {128, 64},  {128, 128}, {256, 32},
                                 {256, 64}, {256, 128}, {256, 256}, {512, 64}, {512, 128}, {512, 256}, {512, 512}};
     if (!width || !height || size < 10 || size > 140 || size % 10)
@@ -886,6 +913,7 @@ bool CObject::GetMaterialSize(int size, int* width, int* height)
 }
 void CObject::ConstructMaterialText()
 {
+    ZoneScoped;
     if (!g_objectMaterialText)
         return;
     for (int i = 0; i < MAX_MATERIALS; ++i)
@@ -906,6 +934,7 @@ void CObject::ConstructMaterialText()
 }
 void CObject::ShutdownMaterialText()
 {
+    ZoneScoped;
     for (int i = 0; i < MAX_MATERIALS; ++i)
         if (m_material.m_nType[i] == MATERIAL_TYPE_TEXT)
         {
@@ -917,6 +946,7 @@ void CObject::ShutdownMaterialText()
 }
 void CObject::Render()
 {
+    ZoneScoped;
     if (!IsValid() || !GetRwObject())
         return;
     auto* vtable = Read<void*>(m_pGameEntity, 0);
@@ -928,6 +958,7 @@ void CObject::Render()
 }
 void CObject::Draw()
 {
+    ZoneScoped;
     if (m_fDrawDistance <= 0.0f || GetDistanceToCamera() <= m_fDrawDistance)
         Render();
 }
@@ -937,12 +968,14 @@ void CObject::SetPoolManaged(bool managed)
 }
 bool CObject::InstallRenderHook()
 {
+    ZoneScoped;
     const bool renderInstalled = game::hooks::g_originalRender || hook::install(0x553260, &RenderObjectHook, &game::hooks::g_originalRender);
     const bool cameraInstalled = game::hooks::g_originalCameraIgnore || hook::install(0x563F40, &CameraToIgnoreObjectHook, &game::hooks::g_originalCameraIgnore);
     return renderInstalled && cameraInstalled;
 }
 void CObject::ProcessAll(float elapsedSeconds)
 {
+    ZoneScoped;
     for (auto& [object, runtime] : g_objects)
         if (!runtime.poolManaged)
             object->Process(elapsedSeconds);

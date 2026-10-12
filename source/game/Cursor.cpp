@@ -21,6 +21,7 @@ namespace game::cursor
 {
     void SetMode(int mode)
     {
+        ZoneScoped;
         if (mode < CURSOR_NONE || mode > CURSOR_LOCKCAM_NOCURSOR)
             return;
 

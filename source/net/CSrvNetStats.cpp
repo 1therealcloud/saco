@@ -31,11 +31,13 @@ namespace
 CSrvNetStats::CSrvNetStats(IDirect3DDevice9* device)
     : m_dwLastTotalBytesSent(0), m_dwLastTotalBytesRecv(0), m_dwLastUpdateTick(0), m_dwBPSUpload(0), m_dwBPSDownload(0), m_pDevice(device)
 {
+    ZoneScoped;
     Reset();
 }
 
 void CSrvNetStats::Draw()
 {
+    ZoneScoped;
     if (!g_active)
         return;
 
@@ -123,6 +125,7 @@ void CSrvNetStats::Draw()
 
 void CSrvNetStats::SetActive(bool active)
 {
+    ZoneScoped;
     if (g_active == active)
         return;
 
@@ -150,6 +153,7 @@ bool CSrvNetStats::HasStatistics() const
 
 void CSrvNetStats::Reset()
 {
+    ZoneScoped;
     std::memset(&g_serverStatistics, 0, sizeof(g_serverStatistics));
     g_active = false;
     g_hasStatistics = false;

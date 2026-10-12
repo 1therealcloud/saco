@@ -65,6 +65,7 @@ void CLabel::End()
 
 void CLabel::Draw(CVector* position, const char* text, D3DCOLOR color, BOOL shadow, bool testLineOfSight)
 {
+    ZoneScoped;
     if (!m_pDevice || !position || !text || !*text || !g_fonts || !g_render)
         return;
 

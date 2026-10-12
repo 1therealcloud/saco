@@ -78,6 +78,7 @@ namespace
 
     void SanitizeGameText(char* text)
     {
+        ZoneScoped;
         if (!text)
             return;
 
@@ -97,6 +98,7 @@ BOOL* CGame::ArrayUsedPlayerSlots()
 
 CGame::CGame() : m_pAudio(nullptr), m_pCamera(nullptr), m_pPlayerPed(nullptr)
 {
+    ZoneScoped;
     auto audio = std::make_unique<CAudio>();
     auto camera = std::make_unique<CCamera>();
     m_pAudio = audio.release();
@@ -143,6 +145,7 @@ float CGame::FindGroundZ(CVector point)
 
 void CGame::SetCursorMode(int mode, BOOL immediatelyHideCursor)
 {
+    ZoneScoped;
     if (mode < CURSOR_NONE || mode > CURSOR_LOCKCAM_NOCURSOR)
         return;
 
@@ -160,6 +163,7 @@ void CGame::SetCursorMode(int mode, BOOL immediatelyHideCursor)
 
 bool CGame::InitGame()
 {
+    ZoneScoped;
     if (m_bInitialized)
         return true;
 
@@ -175,6 +179,7 @@ bool CGame::InitGame()
 
 bool CGame::StartGame()
 {
+    ZoneScoped;
     if (m_bGameStarted)
         return true;
     if (!m_bInitialized || GetState() != 7)
@@ -201,6 +206,7 @@ bool CGame::StartGame()
 
 void CGame::OnGameplayReady()
 {
+    ZoneScoped;
     if (m_bGameplayReady || !m_bGameStarted || !IsPlaying())
         return;
 
@@ -256,6 +262,7 @@ BOOL CGame::IsModelAvailable(int model)
 
 void CGame::ReleaseModel(int model, bool gameFunc)
 {
+    ZoneScoped;
     // R5 sends negative IDs through its custom-model subsystem. That subsystem is not
     // implemented in this tree yet, so keep those IDs untouched until CustomModels is wired.
     if (model < 0)
@@ -302,6 +309,7 @@ void CGame::CreateExplosion(CVector position, int type, float radius)
 
 void CGame::SetWorldWeather(char weather)
 {
+    ZoneScoped;
     const auto value = static_cast<std::int32_t>(weather);
     Mem<std::int32_t>(0xC81318) = value;
     if (!m_bClockEnabled)
@@ -333,6 +341,7 @@ void CGame::DisableTrainTraffic()
 
 void CGame::RefreshRenderer(float x, float y)
 {
+    ZoneScoped;
     scm::ProcessCommand(&REFRESH_RENDERER, x, y);
 }
 
@@ -355,6 +364,7 @@ void CGame::ReleaseAnimation(const char* file)
 
 void CGame::DisplayGameText(const char* text, int type, int size)
 {
+    ZoneScoped;
     if (!text || size > 200)
         return;
 
@@ -381,6 +391,7 @@ void CGame::DeleteRacingCheckpoint()
 
 GTAREF CGame::CreateMarker(int icon, CVector position, int color, int type)
 {
+    ZoneScoped;
     GTAREF handle = 0;
     const scm::OpcodeInfo* opcode = &CREATE_MARKER;
     if (type == 1)
@@ -402,6 +413,7 @@ GTAREF CGame::CreateMarker(int icon, CVector position, int color, int type)
 
 bool CGame::SetMarkerPosition(GTAREF handle, const CVector& position)
 {
+    ZoneScoped;
     if (!handle)
         return false;
 
@@ -434,6 +446,7 @@ char CGame::GetCurrentInterior()
 
 void CGame::UpdateFarClippingPlane()
 {
+    ZoneScoped;
     float distance = 1250.0f;
     auto* player = static_cast<const std::uint8_t*>(CPed::GetLocalPedHandle());
     if (player)
@@ -470,6 +483,7 @@ int CGame::GetPlayerMoney()
 
 void CGame::PlayCrimeReport(int crime, const CVector* position, int inVehicle, int vehicleModel, int vehicleColor)
 {
+    ZoneScoped;
     if (!position || crime < 2 || crime > 22)
         return;
 
@@ -527,6 +541,7 @@ void CGame::PlayCrimeReport(int crime, const CVector* position, int inVehicle, i
 
 const char* CGame::GetWeaponName(int weapon)
 {
+    ZoneScoped;
     switch (weapon)
     {
         case 1:
@@ -624,6 +639,7 @@ const char* CGame::GetWeaponName(int weapon)
 
 GTAREF CGame::CreateWeaponPickup(int model, int ammo, CVector position)
 {
+    ZoneScoped;
     if (model < 0 || model >= ModelInfo::MAX_MODELS)
         return 0;
     if (!ModelInfo::GetRelocated(model))
@@ -654,6 +670,7 @@ GTAREF CGame::CreateWeaponPickup(int model, int ammo, CVector position)
 
 GTAREF CGame::CreatePickup(int model, int type, CVector position, GTAREF* handle)
 {
+    ZoneScoped;
     if (handle)
         *handle = 0;
     if (model < 0 || model >= ModelInfo::MAX_MODELS)
@@ -688,6 +705,7 @@ IDirect3DDevice9* CGame::GetDevice()
 
 void CGame::Restart()
 {
+    ZoneScoped;
     DisableCheckpoint();
     DeleteRacingCheckpoint();
     ResetMapIcons();
@@ -716,6 +734,7 @@ void CGame::SetNumberOfIntroTextLinesThisFrame(unsigned short value)
 
 void CGame::DrawGangZone(float* position, std::uint32_t color)
 {
+    ZoneScoped;
     if (!position)
         return;
     const int menuVisible = Mem<std::uint8_t>(0xBA67A4);
@@ -750,6 +769,7 @@ int CGame::GetStreamingMemory()
 
 void CGame::SetRequiredVehicleModels(unsigned char* modelCount)
 {
+    ZoneScoped;
     std::fill(std::begin(m_aKeepLoadedVehicleModels), std::end(m_aKeepLoadedVehicleModels), false);
     if (!modelCount)
         return;
@@ -823,6 +843,7 @@ void CGame::ResetMapIcons()
 
 void CGame::LoadAnimationsAndModels()
 {
+    ZoneScoped;
     if (!IsPlaying())
         return;
 
@@ -877,6 +898,7 @@ void CGame::DisableAutoAiming()
 
 void CGame::EnableHUD(BOOL enable)
 {
+    ZoneScoped;
     if (enable)
     {
         Mem<std::uint8_t>(0xBA6769) = 1;
@@ -891,6 +913,7 @@ void CGame::EnableHUD(BOOL enable)
 
 void CGame::SetCheckpoint(CVector* position, CVector* size)
 {
+    ZoneScoped;
     if (!position || !size)
         return;
 
@@ -921,6 +944,7 @@ void CGame::DisableCheckpoint()
 
 void CGame::CreateRacingCheckpoint()
 {
+    ZoneScoped;
     if (m_racingCheckpoint.m_handle)
     {
         scm::ProcessCommand(&DELETE_RACING_CHECKPOINT, m_racingCheckpoint.m_handle);
@@ -936,6 +960,7 @@ void CGame::CreateRacingCheckpoint()
 
 void CGame::ProcessCheckpoints()
 {
+    ZoneScoped;
     auto* player = GetPlayerPed();
     const bool hasPlayer = player && player->IsValid() && player->m_handle;
     if (m_checkpoint.m_bEnabled)
@@ -991,6 +1016,7 @@ void CGame::ResetMoney()
 
 void CGame::SetRacingCheckpoint(int type, CVector* currentPosition, CVector* nextPosition, float size)
 {
+    ZoneScoped;
     if (!currentPosition || !nextPosition)
         return;
 
@@ -1052,6 +1078,7 @@ void CGame::ToggleWidescreen(bool enable)
 
 void CGame::EnableClock(bool enable)
 {
+    ZoneScoped;
     static constexpr char kClockFormat[10] = {'%', '0', '2', 'd', ':', '%', '0', '2', 'd', '\0'};
     const std::uint8_t opcode = enable ? 0x56 : 0xC3;
     patch::write(0x52CF10, opcode);
@@ -1078,6 +1105,7 @@ void CGame::Sleep(int elapsed, int fpsLimit)
 
 CPed* CGame::CreatePed(int model, CVector position, float rotation, int, int)
 {
+    ZoneScoped;
     if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z) || !std::isfinite(rotation) || model < 0 || model >= ModelInfo::MAX_MODELS)
         return nullptr;
     auto* info = ModelInfo::GetRelocated(model);
@@ -1116,6 +1144,7 @@ BOOL CGame::RemovePed(CPed* ped)
 
 CVehicle* CGame::CreateVehicle(int model, CVector position, float rotation, BOOL hasSiren)
 {
+    ZoneScoped;
     if (model < kFirstVehicleModel || model >= kFirstVehicleModel + kVehicleModelCount || !ModelInfo::GetRelocated(model) || !std::isfinite(position.x) ||
         !std::isfinite(position.y) || !std::isfinite(position.z) || !std::isfinite(rotation))
         return nullptr;
@@ -1132,6 +1161,7 @@ CVehicle* CGame::CreateVehicle(int model, CVector position, float rotation, BOOL
 
 CObject* CGame::CreateObject(int model, CVector position, CVector rotation, float drawDistance, char hourOn, char hourOff)
 {
+    ZoneScoped;
     if (model < 0 || model >= ModelInfo::MAX_MODELS || !std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z) || !std::isfinite(rotation.x) ||
         !std::isfinite(rotation.y) || !std::isfinite(rotation.z) || !std::isfinite(drawDistance))
         return nullptr;
@@ -1147,6 +1177,7 @@ CObject* CGame::CreateObject(int model, CVector position, CVector rotation, floa
 
 void CGame::ProcessInputEnabling()
 {
+    ZoneScoped;
     if (m_nCursorMode != CURSOR_NONE)
         return;
 
@@ -1163,6 +1194,7 @@ void CGame::ProcessInputEnabling()
 
 void CGame::ProcessFrameLimiter()
 {
+    ZoneScoped;
     // game::patch::fps owns pacing and accepts changes from /fpslimit
     m_nFrameLimiter = static_cast<int>(game::patch::fps::get_limit());
 }
@@ -1244,6 +1276,7 @@ void* CGame::TraceObjectRay(const CVector& origin, const CVector& target)
 
 bool CGame::GetMapClickPosition(CVector& position)
 {
+    ZoneScoped;
     static bool rightButtonDown = false;
     const bool down = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
     const bool pressed = down && !rightButtonDown;

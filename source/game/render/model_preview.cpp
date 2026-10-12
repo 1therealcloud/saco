@@ -10,6 +10,7 @@ namespace game::render::model_preview
 {
     static void* RenderStateArgument(RwRenderState state, std::uintptr_t& value)
     {
+        ZoneScoped;
         return state == rwRENDERSTATEFOGDENSITY ? static_cast<void*>(&value) : reinterpret_cast<void*>(value);
     }
     namespace
@@ -31,6 +32,7 @@ namespace game::render::model_preview
             {}
             ~Instance()
             {
+                ZoneScoped;
                 if (object && object->type == rpCLUMP)
                     RpClumpDestroy(reinterpret_cast<RpClump*>(object));
                 else if (object && object->type == rpATOMIC)
@@ -65,6 +67,7 @@ namespace game::render::model_preview
             bool valid = false;
             explicit DeviceState(IDirect3DDevice9* value) : device(value)
             {
+                ZoneScoped;
                 if (!device || FAILED(device->CreateStateBlock(D3DSBT_ALL, &block)) || FAILED(device->GetRenderTarget(0, &target)) || FAILED(device->GetViewport(&viewport)) ||
                     FAILED(device->GetTransform(D3DTS_VIEW, &view)) || FAILED(device->GetTransform(D3DTS_PROJECTION, &projection)))
                     return;
@@ -87,6 +90,7 @@ namespace game::render::model_preview
             }
             void RestoreRenderWare()
             {
+                ZoneScoped;
                 // fog restoration reads the active camera's near/far planes
                 // keep the preview camera updating until RW states have been restored
                 for (int i = 1; i < 32; ++i)
@@ -95,6 +99,7 @@ namespace game::render::model_preview
             }
             ~DeviceState()
             {
+                ZoneScoped;
                 if (valid)
                 {
                     device->SetRenderTarget(0, target);
@@ -147,6 +152,7 @@ namespace game::render::model_preview
             bool cameraAdded = false, lightAdded = false, updating = false;
             ~Scene()
             {
+                ZoneScoped;
                 if (updating)
                     RwCameraEndUpdate(camera);
                 if (cameraAdded)
@@ -177,6 +183,7 @@ namespace game::render::model_preview
             std::array<std::uint8_t, 4> current{}, model{};
             void Set(void* vehicleInfo, int color1, int color2)
             {
+                ZoneScoped;
                 info = vehicleInfo;
                 std::memcpy(current.data(), reinterpret_cast<void*>(0xB4E3F0), 4);
                 std::memcpy(model.data(), static_cast<std::uint8_t*>(info) + 0x2D2, 4);
@@ -202,6 +209,7 @@ namespace game::render::model_preview
 
         RpAtomic* PrepareAtomic(RpAtomic* atomic, void*)
         {
+            ZoneScoped;
             const auto callback = reinterpret_cast<std::uintptr_t>(RpAtomicGetRenderCallBack(atomic));
             if (callback == 0x7331E0 || callback == 0x732820 || callback == 0x7334F0)
             {
@@ -218,6 +226,7 @@ namespace game::render::model_preview
 
     textures::Texture create(int model, CVector rotation, float zoom, std::uint32_t background, int color1, int color2)
     {
+        ZoneScoped;
         if (!std::isfinite(rotation.x) || !std::isfinite(rotation.y) || !std::isfinite(rotation.z) || !std::isfinite(zoom) || zoom <= 0 || zoom > 100 ||
             *reinterpret_cast<void**>(0xC9BCC0))
             return {};

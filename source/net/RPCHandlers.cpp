@@ -85,6 +85,7 @@ namespace
 
     bool ReadObjectMaterial(BitStream& bs, ObjectMaterialData& material)
     {
+        ZoneScoped;
         if (!bs.Read(material.type) || !bs.Read(material.slot) || material.slot >= CObject::MAX_MATERIALS)
             return false;
 
@@ -127,6 +128,7 @@ namespace
 
     void ApplyObjectMaterial(CObject* object, const ObjectMaterialData& material)
     {
+        ZoneScoped;
         if (!object)
             return;
         if (material.type == 1)
@@ -146,6 +148,7 @@ namespace
 //   uint16 level - New skill level.
 void RPCHandlers::SetPlayerSkillLevel(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -189,6 +192,7 @@ void RPCHandlers::SetPlayerSkillLevel(RPCParameters* pParams)
 //   CSTRING[4096] text - Compressed label text.
 void RPCHandlers::Create3DTextLabel(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input || !g_netGame || !g_netGame->m_pPools || !g_netGame->m_pPools->m_pLabel)
         return;
 
@@ -222,6 +226,7 @@ void RPCHandlers::Create3DTextLabel(RPCParameters* pParams)
 //   uint16 labelId - 3D text label pool ID.
 void RPCHandlers::Delete3DTextLabel(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input || !g_netGame || !g_netGame->m_pPools || !g_netGame->m_pPools->m_pLabel)
         return;
 
@@ -242,6 +247,7 @@ void RPCHandlers::Delete3DTextLabel(RPCParameters* pParams)
 //   char[textLength] text - Bubble text.
 void RPCHandlers::ChatBubble(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input || !g_chatBubble)
         return;
 
@@ -278,6 +284,7 @@ void RPCHandlers::ChatBubble(RPCParameters* pParams)
 //   CSTRING[4096] info - Compressed dialog body text.
 void RPCHandlers::ShowDialog(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input || !g_dialog)
         return;
 
@@ -328,6 +335,7 @@ void RPCHandlers::ShowDialog(RPCParameters* pParams)
 //   float radius - Checkpoint radius.
 void RPCHandlers::SetCheckpoint(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -360,6 +368,7 @@ void RPCHandlers::SetCheckpoint(RPCParameters* pParams)
 // Note: No payload fields.
 void RPCHandlers::DisableCheckpoint(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams)
         return;
 
@@ -383,6 +392,7 @@ void RPCHandlers::DisableCheckpoint(RPCParameters* pParams)
 //   float radius - Checkpoint radius.
 void RPCHandlers::SetRaceCheckpoint(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -427,6 +437,7 @@ void RPCHandlers::SetRaceCheckpoint(RPCParameters* pParams)
 // Note: No payload fields.
 void RPCHandlers::DisableRaceCheckpoint(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams)
         return;
 
@@ -444,6 +455,7 @@ void RPCHandlers::DisableRaceCheckpoint(RPCParameters* pParams)
 // Note: Each entry is: uint16 playerId, int32 score, uint32 ping.
 void RPCHandlers::UpdateScoresAndPings(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input || !g_netGame)
         return;
     auto* playerPool = g_netGame->GetPlayerPool();
@@ -476,6 +488,7 @@ void RPCHandlers::UpdateScoresAndPings(RPCParameters* pParams)
 // Note: Logical payload: RakNetStatisticsStruct (0x128 bytes in the R5 client).
 void RPCHandlers::SrvNetStats(RPCParameters* pParams)
 {
+    ZoneScoped;
     BitStream bs(pParams->input, (pParams->numberOfBitsOfData + 7u) / 8u, false);
 
     RakNetStatisticsStruct statistics{};
@@ -504,6 +517,7 @@ void RPCHandlers::GameModeRestart(RPCParameters* pParams)
 //   uint8 reason - Connection rejection reason code.
 void RPCHandlers::ConnectionRejected(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input || pParams->numberOfBitsOfData < 8)
         return;
 
@@ -550,6 +564,7 @@ void RPCHandlers::ConnectionRejected(RPCParameters* pParams)
 //   char[messageLength] message - Message text.
 void RPCHandlers::SendClientMessage(RPCParameters* pParams)
 {
+    ZoneScoped;
     const auto dataSize = static_cast<std::uint32_t>((pParams->numberOfBitsOfData + 7u) / 8u);
     if (dataSize < sizeof(std::uint32_t) * 2)
         return;
@@ -579,6 +594,7 @@ void RPCHandlers::SendClientMessage(RPCParameters* pParams)
 //   uint8 hour - World hour (0-23).
 void RPCHandlers::SetWorldTime(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -604,6 +620,7 @@ void RPCHandlers::SetWorldTime(RPCParameters* pParams)
 //   float z - World Z.
 void RPCHandlers::CreatePickup(RPCParameters* pParams)
 {
+    ZoneScoped;
     auto* pool = g_netGame ? g_netGame->GetPickupPool() : nullptr;
     if (!pool || !pParams || !pParams->input || pParams->numberOfBitsOfData < 192)
         return;
@@ -640,6 +657,7 @@ void RPCHandlers::CreatePickup(RPCParameters* pParams)
 //   int32 pickupId - Pickup pool ID.
 void RPCHandlers::DestroyPickup(RPCParameters* pParams)
 {
+    ZoneScoped;
     auto* pool = g_netGame ? g_netGame->GetPickupPool() : nullptr;
     if (!pool || !pParams || !pParams->input || pParams->numberOfBitsOfData < 32)
         return;
@@ -663,6 +681,7 @@ void RPCHandlers::DestroyPickup(RPCParameters* pParams)
 // legacy
 void RPCHandlers::DestroyWeaponPickup(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!g_netGame->m_pPools || !g_netGame->m_pPools->m_pPickup)
         return;
 
@@ -682,6 +701,7 @@ void RPCHandlers::DestroyWeaponPickup(RPCParameters* pParams)
 //   uint32 param2 - Event-specific parameter 2.
 void RPCHandlers::ScmEvent(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -765,6 +785,7 @@ void RPCHandlers::ScmEvent(RPCParameters* pParams)
 //   uint8 weatherId - GTA weather ID.
 void RPCHandlers::SetWeather(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -788,6 +809,7 @@ void RPCHandlers::SetWeather(RPCParameters* pParams)
 //   uint8 minute - Minute.
 void RPCHandlers::SetPlayerTime(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -816,6 +838,7 @@ void RPCHandlers::SetPlayerTime(RPCParameters* pParams)
 //   uint8 enabled - 1 enables the HUD clock; 0 disables it.
 void RPCHandlers::ToggleClock(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -850,6 +873,7 @@ void RPCHandlers::ToggleClock(RPCParameters* pParams)
 //   int32 time - In-game timer value.
 void RPCHandlers::SendGameTimeUpdate(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -881,6 +905,7 @@ void RPCHandlers::SendGameTimeUpdate(RPCParameters* pParams)
 // Note: DL-specific layout: customSkinId is present between baseSkinId and position.
 void RPCHandlers::WorldPlayerAdd(RPCParameters* pParams)
 {
+    ZoneScoped;
     Log("WorldPlayerAdd");
 
     if (!pParams || !pParams->input)
@@ -951,6 +976,7 @@ void RPCHandlers::WorldPlayerAdd(RPCParameters* pParams)
 //   uint16 playerId - Remote player ID.
 void RPCHandlers::DeathBroadcast(RPCParameters* pParams)
 {
+    ZoneScoped;
     Log("DeathBroadcast");
 
     if (!pParams || !pParams->input)
@@ -977,6 +1003,7 @@ void RPCHandlers::DeathBroadcast(RPCParameters* pParams)
 //   uint16 playerId - Remote player ID.
 void RPCHandlers::WorldPlayerRemove(RPCParameters* pParams)
 {
+    ZoneScoped;
     Log("WorldPlayerRemove");
 
     if (!pParams || !pParams->input)
@@ -1021,6 +1048,7 @@ void RPCHandlers::WorldPlayerRemove(RPCParameters* pParams)
 //   uint32 bodyColor2 - Extended secondary body color.
 void RPCHandlers::WorldVehicleAdd(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -1119,6 +1147,7 @@ void RPCHandlers::WorldVehicleAdd(RPCParameters* pParams)
 //   uint16 vehicleId - Vehicle pool ID.
 void RPCHandlers::WorldVehicleRemove(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -1143,6 +1172,7 @@ void RPCHandlers::WorldVehicleRemove(RPCParameters* pParams)
 //   uint8 tires - Tire damage bits.
 void RPCHandlers::UpdateVehicleDamageStatus(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -1196,6 +1226,7 @@ void RPCHandlers::UpdateVehicleDamageStatus(RPCParameters* pParams)
 //   uint8 windowBackRight - Rear-right window state.
 void RPCHandlers::SetVehicleParamsEx(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -1301,6 +1332,7 @@ void RPCHandlers::SetVehicleParamsEx(RPCParameters* pParams)
 //   uint8 isPassenger - 0 for driver entry, nonzero for passenger entry.
 void RPCHandlers::PlayerEnterVehicle(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -1332,6 +1364,7 @@ void RPCHandlers::PlayerEnterVehicle(RPCParameters* pParams)
 //   uint16 vehicleId - Vehicle ID.
 void RPCHandlers::PlayerExitVehicle(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -1364,6 +1397,7 @@ void RPCHandlers::PlayerExitVehicle(RPCParameters* pParams)
 //   char[nameLength] name - Player nickname.
 void RPCHandlers::ServerJoin(RPCParameters* pParams)
 {
+    ZoneScoped;
     auto* playerPool = g_netGame->GetPlayerPool();
     if (!playerPool)
         return;
@@ -1396,6 +1430,7 @@ void RPCHandlers::ServerJoin(RPCParameters* pParams)
 //   uint8 reason - 0 timeout, 1 quit, 2 kick/ban.
 void RPCHandlers::ServerQuit(RPCParameters* pParams)
 {
+    ZoneScoped;
     auto* playerPool = g_netGame->GetPlayerPool();
     if (!playerPool)
         return;
@@ -1445,6 +1480,7 @@ void RPCHandlers::ServerQuit(RPCParameters* pParams)
 //   uint32 vehicleFriendlyFire - Vehicle-friendly-fire setting.
 void RPCHandlers::InitGame(RPCParameters* pParams)
 {
+    ZoneScoped;
     bool zoneNames{};
     bool useCjWalk{};
     bool allowWeapons{};
@@ -1564,6 +1600,7 @@ void RPCHandlers::InitGame(RPCParameters* pParams)
 // Note: Server-to-client payload confirmed from the DL DLL; the wiki only lists the opposite-direction ChatMessage payload.
 void RPCHandlers::ChatMessage(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!g_chat)
         return;
 
@@ -1613,6 +1650,7 @@ void RPCHandlers::ChatMessage(RPCParameters* pParams)
 // Note: DL-specific layout includes customSkinId.
 void RPCHandlers::RequestClass(RPCParameters* pParams)
 {
+    ZoneScoped;
     auto* playerPool = g_netGame->GetPlayerPool();
     auto* localPlayer = playerPool ? playerPool->GetLocalPlayer() : nullptr;
     if (!localPlayer)
@@ -1684,6 +1722,7 @@ void RPCHandlers::RequestClass(RPCParameters* pParams)
 //   uint8 response - 0 denied, 1 accepted, 2 forced spawn.
 void RPCHandlers::RequestSpawn(RPCParameters* pParams)
 {
+    ZoneScoped;
     BitStream bs(pParams->input, BITS_TO_BYTES(pParams->numberOfBitsOfData), false);
 
     std::uint8_t response{};
@@ -1720,6 +1759,7 @@ void RPCHandlers::RequestSpawn(RPCParameters* pParams)
 //   uint32 index - Attached-object slot index to edit.
 void RPCHandlers::EditAttachedObject(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -1741,6 +1781,7 @@ void RPCHandlers::EditAttachedObject(RPCParameters* pParams)
 //   uint16 objectId - Object ID to edit.
 void RPCHandlers::EditObject(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -1764,6 +1805,7 @@ void RPCHandlers::EditObject(RPCParameters* pParams)
 // Note: No payload fields; enables object-selection/edit mode.
 void RPCHandlers::EnterEditObject(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams)
         return;
 
@@ -1780,6 +1822,7 @@ void RPCHandlers::EnterEditObject(RPCParameters* pParams)
 // Note: No payload fields; exits object editing.
 void RPCHandlers::CancelEdit(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams)
         return;
 
@@ -1798,6 +1841,7 @@ void RPCHandlers::CancelEdit(RPCParameters* pParams)
 //   bool enabled - Whether camera-target update notifications are enabled.
 void RPCHandlers::ToggleCameraTarget(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input || pParams->numberOfBitsOfData < 1)
         return;
 
@@ -1821,6 +1865,7 @@ void RPCHandlers::ToggleCameraTarget(RPCParameters* pParams)
 //   uint16 count - Number of bytes/elements requested.
 void RPCHandlers::ClientCheck(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -1858,6 +1903,7 @@ void RPCHandlers::ClientCheck(RPCParameters* pParams)
 // Note: DL-specific layout includes customSkinId.
 void RPCHandlers::ShowActor(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -1924,6 +1970,7 @@ void RPCHandlers::ShowActor(RPCParameters* pParams)
 //   uint16 actorId - Actor pool ID.
 void RPCHandlers::HideActor(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -1944,6 +1991,7 @@ void RPCHandlers::HideActor(RPCParameters* pParams)
 //   bool disable - True disables collisions between vehicles with drivers.
 void RPCHandlers::DisableVehicleCollisions(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input || pParams->numberOfBitsOfData < 1)
         return;
 
@@ -1970,6 +2018,7 @@ void RPCHandlers::DisableVehicleCollisions(RPCParameters* pParams)
 //   uint8 style - Map-icon style.
 void RPCHandlers::SetMapIcon(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -2008,6 +2057,7 @@ void RPCHandlers::SetMapIcon(RPCParameters* pParams)
 //   uint8 iconId - Map-icon slot to remove.
 void RPCHandlers::RemoveMapIcon(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -2029,6 +2079,7 @@ void RPCHandlers::RemoveMapIcon(RPCParameters* pParams)
 //   uint16 ammo - New ammunition count.
 void RPCHandlers::SetWeaponAmmo(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -2052,6 +2103,7 @@ void RPCHandlers::SetWeaponAmmo(RPCParameters* pParams)
 //   float gravity - New world gravity.
 void RPCHandlers::SetGravity(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -2075,6 +2127,7 @@ void RPCHandlers::SetGravity(RPCParameters* pParams)
 //   float health - New vehicle health.
 void RPCHandlers::SetVehicleHealth(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -2103,6 +2156,7 @@ void RPCHandlers::SetVehicleHealth(RPCParameters* pParams)
 //   uint16 vehicleId - Towing vehicle ID.
 void RPCHandlers::AttachTrailerToVehicle(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -2138,6 +2192,7 @@ void RPCHandlers::AttachTrailerToVehicle(RPCParameters* pParams)
 //   uint16 vehicleId - Towing vehicle ID.
 void RPCHandlers::DetachTrailerFromVehicle(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -2183,6 +2238,7 @@ void RPCHandlers::DetachTrailerFromVehicle(RPCParameters* pParams)
 // Note: DL-specific modelId is signed int32.
 void RPCHandlers::CreateObject(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -2285,6 +2341,7 @@ void RPCHandlers::CreateObject(RPCParameters* pParams)
 //   float z - Z.
 void RPCHandlers::SetObjectPos(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -2321,6 +2378,7 @@ void RPCHandlers::SetObjectPos(RPCParameters* pParams)
 //   float rotZ - Rotation Z.
 void RPCHandlers::SetObjectRotation(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -2353,6 +2411,7 @@ void RPCHandlers::SetObjectRotation(RPCParameters* pParams)
 //   uint16 objectId - Object ID.
 void RPCHandlers::DestroyObject(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -2377,6 +2436,7 @@ void RPCHandlers::DestroyObject(RPCParameters* pParams)
 //   float radius - Explosion radius.
 void RPCHandlers::CreateExplosion(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -2410,6 +2470,7 @@ void RPCHandlers::CreateExplosion(RPCParameters* pParams)
 //   uint8 show - Nonzero shows the name tag.
 void RPCHandlers::ShowPlayerNameTag(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -2443,6 +2504,7 @@ void RPCHandlers::ShowPlayerNameTag(RPCParameters* pParams)
 //   float rotZ - Target rotation Z.
 void RPCHandlers::MoveObject(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -2498,6 +2560,7 @@ void RPCHandlers::MoveObject(RPCParameters* pParams)
 //   uint16 objectId - Object ID.
 void RPCHandlers::StopObject(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -2519,6 +2582,7 @@ void RPCHandlers::StopObject(RPCParameters* pParams)
 //   uint8 tires - Tire damage bits.
 void RPCHandlers::SetVehicleTireStatus(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -2546,6 +2610,7 @@ void RPCHandlers::SetVehicleTireStatus(RPCParameters* pParams)
 //   char[plateLength] plateText - Number-plate text.
 void RPCHandlers::SetVehicleNumberPlate(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -2573,6 +2638,7 @@ void RPCHandlers::SetVehicleNumberPlate(RPCParameters* pParams)
 //   uint32 spectating - Nonzero enables spectating.
 void RPCHandlers::TogglePlayerSpectating(RPCParameters* pParams)
 {
+    ZoneScoped;
     BitStream bs(pParams->input, BITS_TO_BYTES(pParams->numberOfBitsOfData), false);
 
     std::uint32_t spectating{};
@@ -2596,6 +2662,7 @@ void RPCHandlers::TogglePlayerSpectating(RPCParameters* pParams)
 //   uint8 cameraMode - Spectator camera mode.
 void RPCHandlers::SpectatePlayer(RPCParameters* pParams)
 {
+    ZoneScoped;
     BitStream bs(pParams->input, BITS_TO_BYTES(pParams->numberOfBitsOfData), false);
 
     std::uint16_t playerId{};
@@ -2633,6 +2700,7 @@ void RPCHandlers::SpectatePlayer(RPCParameters* pParams)
 //   uint8 cameraMode - Spectator camera mode.
 void RPCHandlers::SpectateVehicle(RPCParameters* pParams)
 {
+    ZoneScoped;
     BitStream bs(pParams->input, BITS_TO_BYTES(pParams->numberOfBitsOfData), false);
 
     std::uint16_t vehicleId{};
@@ -2670,6 +2738,7 @@ void RPCHandlers::SpectateVehicle(RPCParameters* pParams)
 //   uint16 componentId - Vehicle component to remove.
 void RPCHandlers::RemoveVehicleComponent(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -2715,6 +2784,7 @@ void RPCHandlers::ForceClassSelection(RPCParameters* pParams)
 //   float rotZ - Attachment rotation Z.
 void RPCHandlers::AttachObjectToPlayer(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -2772,6 +2842,7 @@ void RPCHandlers::AttachObjectToPlayer(RPCParameters* pParams)
 //   uint8 wantedLevel - New wanted level.
 void RPCHandlers::SetPlayerWantedLevel(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -2815,6 +2886,7 @@ void RPCHandlers::SetPlayerWantedLevel(RPCParameters* pParams)
 //   char[textLength] text - TextDraw text.
 void RPCHandlers::ShowTextDraw(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input || !g_netGame || !g_netGame->m_pPools || !g_netGame->m_pPools->m_pTextDraw)
         return;
 
@@ -2853,6 +2925,7 @@ void RPCHandlers::ShowTextDraw(RPCParameters* pParams)
 //   uint16 textDrawId - TextDraw ID.
 void RPCHandlers::HideTextDraw(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input || !g_netGame || !g_netGame->m_pPools || !g_netGame->m_pPools->m_pTextDraw)
         return;
 
@@ -2870,6 +2943,7 @@ void RPCHandlers::HideTextDraw(RPCParameters* pParams)
 //   char[textLength] text - Replacement text.
 void RPCHandlers::TextDrawSetString(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input || !g_netGame || !g_netGame->m_pPools || !g_netGame->m_pPools->m_pTextDraw)
         return;
 
@@ -2899,6 +2973,7 @@ void RPCHandlers::TextDrawSetString(RPCParameters* pParams)
 //   uint32 color - Zone ARGB color.
 void RPCHandlers::AddGangZone(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!g_netGame->m_pPools || !g_netGame->m_pPools->m_pGangZone)
         return;
 
@@ -2922,6 +2997,7 @@ void RPCHandlers::AddGangZone(RPCParameters* pParams)
 //   int16 gangZoneId - Gang-zone ID.
 void RPCHandlers::GangZoneDestroy(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!g_netGame->m_pPools || !g_netGame->m_pPools->m_pGangZone)
         return;
 
@@ -2938,6 +3014,7 @@ void RPCHandlers::GangZoneDestroy(RPCParameters* pParams)
 //   uint32 color - Flash ARGB color.
 void RPCHandlers::GangZoneFlash(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!g_netGame->m_pPools || !g_netGame->m_pPools->m_pGangZone)
         return;
 
@@ -2954,6 +3031,7 @@ void RPCHandlers::GangZoneFlash(RPCParameters* pParams)
 //   int16 gangZoneId - Gang-zone ID.
 void RPCHandlers::GangZoneStopFlash(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!g_netGame->m_pPools || !g_netGame->m_pPools->m_pGangZone)
         return;
 
@@ -2979,6 +3057,7 @@ void RPCHandlers::GangZoneStopFlash(RPCParameters* pParams)
 //   uint32 time - Animation duration/time.
 void RPCHandlers::ApplyPlayerAnimation(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!g_game || !g_netGame || !pParams || !pParams->input)
         return;
 
@@ -3033,6 +3112,7 @@ void RPCHandlers::ApplyPlayerAnimation(RPCParameters* pParams)
 //   uint16 playerId - Target player ID.
 void RPCHandlers::ClearPlayerAnimation(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3061,6 +3141,7 @@ void RPCHandlers::ClearPlayerAnimation(RPCParameters* pParams)
 //   uint8 actionId - Special-action ID.
 void RPCHandlers::SetPlayerSpecialAction(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3082,6 +3163,7 @@ void RPCHandlers::SetPlayerSpecialAction(RPCParameters* pParams)
 //   uint8 enabled - Nonzero enables stunt bonuses.
 void RPCHandlers::EnableStuntBonus(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3103,6 +3185,7 @@ void RPCHandlers::EnableStuntBonus(RPCParameters* pParams)
 //   uint8 styleId - Fighting-style ID.
 void RPCHandlers::SetPlayerFightingStyle(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3136,6 +3219,7 @@ void RPCHandlers::SetPlayerFightingStyle(RPCParameters* pParams)
 //   float z - Velocity Z.
 void RPCHandlers::SetPlayerVelocity(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3166,6 +3250,7 @@ void RPCHandlers::SetPlayerVelocity(RPCParameters* pParams)
 //   float z - Velocity Z.
 void RPCHandlers::SetVehicleVelocity(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3202,6 +3287,7 @@ void RPCHandlers::SetVehicleVelocity(RPCParameters* pParams)
 //   uint8 enabled - Nonzero enables widescreen mode.
 void RPCHandlers::ToggleWidescreen(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3229,6 +3315,7 @@ void RPCHandlers::ToggleWidescreen(RPCParameters* pParams)
 //   float z - World Z.
 void RPCHandlers::PlayCrimeReport(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3283,6 +3370,7 @@ void RPCHandlers::PlayCrimeReport(RPCParameters* pParams)
 // Note: DL-specific layout includes customSkinId.
 void RPCHandlers::SetSpawnInfo(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3346,6 +3434,7 @@ void RPCHandlers::SetSpawnInfo(RPCParameters* pParams)
 //   uint8 teamId - New team ID.
 void RPCHandlers::SetPlayerTeam(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3373,6 +3462,7 @@ void RPCHandlers::SetPlayerTeam(RPCParameters* pParams)
 // Note: DL-specific layout differs from 0.3.7.
 void RPCHandlers::SetPlayerSkin(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!g_game)
         return;
 
@@ -3435,6 +3525,7 @@ void RPCHandlers::SetPlayerSkin(RPCParameters* pParams)
 //   uint8 success - Server-side rename result flag.
 void RPCHandlers::SetPlayerName(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3460,6 +3551,7 @@ void RPCHandlers::SetPlayerName(RPCParameters* pParams)
 // RPC 12: SetPlayerPos
 void RPCHandlers::SetPlayerPos(RPCParameters* pParams)
 {
+    ZoneScoped;
     Log("SetPlayerPos");
 
     float x{};
@@ -3494,6 +3586,7 @@ void RPCHandlers::SetPlayerPos(RPCParameters* pParams)
 // RPC 13: SetPlayerPosFindZ
 void RPCHandlers::SetPlayerPosFindZ(RPCParameters* pParams)
 {
+    ZoneScoped;
     Log("SetPlayerPosFindZ");
 
     CVector position{};
@@ -3518,6 +3611,7 @@ void RPCHandlers::SetPlayerPosFindZ(RPCParameters* pParams)
 // RPC 14: SetPlayerHealth
 void RPCHandlers::SetPlayerHealth(RPCParameters* pParams)
 {
+    ZoneScoped;
     Log("SetPlayerHealth");
 
     float health{};
@@ -3552,6 +3646,7 @@ void RPCHandlers::SetPlayerHealth(RPCParameters* pParams)
 //   uint8 seatId - Seat index.
 void RPCHandlers::PutPlayerInVehicle(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3583,6 +3678,7 @@ void RPCHandlers::PutPlayerInVehicle(RPCParameters* pParams)
 // Note: No payload fields.
 void RPCHandlers::RemovePlayerFromVehicle(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams)
         return;
 
@@ -3608,6 +3704,7 @@ void RPCHandlers::RemovePlayerFromVehicle(RPCParameters* pParams)
 //   uint32 color - New player color.
 void RPCHandlers::SetPlayerColor(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3634,6 +3731,7 @@ void RPCHandlers::SetPlayerColor(RPCParameters* pParams)
 //   char[messageLength] message - Game-text message.
 void RPCHandlers::ShowGameText(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3660,6 +3758,7 @@ void RPCHandlers::ShowGameText(RPCParameters* pParams)
 //   uint8 interiorId - New local-player interior ID.
 void RPCHandlers::SetInterior(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!g_game)
         return;
 
@@ -3685,6 +3784,7 @@ void RPCHandlers::SetInterior(RPCParameters* pParams)
 //   float z - Camera Z.
 void RPCHandlers::SetCameraPos(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!g_game)
         return;
 
@@ -3711,6 +3811,7 @@ void RPCHandlers::SetCameraPos(RPCParameters* pParams)
 //   uint8 cutType - Camera transition/cut type.
 void RPCHandlers::SetCameraLookAt(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!g_game)
         return;
 
@@ -3741,6 +3842,7 @@ void RPCHandlers::SetCameraLookAt(RPCParameters* pParams)
 //   float z - Z.
 void RPCHandlers::SetVehiclePos(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3775,6 +3877,7 @@ void RPCHandlers::SetVehiclePos(RPCParameters* pParams)
 //   float angle - New Z heading.
 void RPCHandlers::SetVehicleZAngle(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3804,6 +3907,7 @@ void RPCHandlers::SetVehicleZAngle(RPCParameters* pParams)
 //   uint8 doorsLocked - Door lock state.
 void RPCHandlers::SetVehicleParams(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3838,6 +3942,7 @@ void RPCHandlers::SetVehicleParams(RPCParameters* pParams)
 // Note: No payload fields.
 void RPCHandlers::SetCameraBehind(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams)
         return;
 
@@ -3860,6 +3965,7 @@ void RPCHandlers::SetCameraBehind(RPCParameters* pParams)
 //   uint8 moveable - 1 enables control; 0 freezes/disables control.
 void RPCHandlers::TogglePlayerControllable(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3883,6 +3989,7 @@ void RPCHandlers::TogglePlayerControllable(RPCParameters* pParams)
 //   float z - Sound Z.
 void RPCHandlers::PlaySound(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3915,6 +4022,7 @@ void RPCHandlers::PlaySound(RPCParameters* pParams)
 //   float minY - Minimum Y.
 void RPCHandlers::SetWorldBounds(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3950,6 +4058,7 @@ void RPCHandlers::SetWorldBounds(RPCParameters* pParams)
 //   int32 money - Money delta to add.
 void RPCHandlers::GivePlayerMoney(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -3970,6 +4079,7 @@ void RPCHandlers::GivePlayerMoney(RPCParameters* pParams)
 //   float angle - New local-player heading.
 void RPCHandlers::SetPlayerFacingAngle(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!g_game)
         return;
 
@@ -3993,6 +4103,7 @@ void RPCHandlers::SetPlayerFacingAngle(RPCParameters* pParams)
 // Note: No payload fields.
 void RPCHandlers::ResetPlayerMoney(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams)
         return;
 
@@ -4009,6 +4120,7 @@ void RPCHandlers::ResetPlayerMoney(RPCParameters* pParams)
 // Note: No payload fields.
 void RPCHandlers::ResetPlayerWeapons(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams)
         return;
 
@@ -4026,6 +4138,7 @@ void RPCHandlers::ResetPlayerWeapons(RPCParameters* pParams)
 //   uint32 ammo - In-game ammunition amount.
 void RPCHandlers::GivePlayerWeapon(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -4051,6 +4164,7 @@ void RPCHandlers::GivePlayerWeapon(RPCParameters* pParams)
 //   uint8 interiorId - Interior ID.
 void RPCHandlers::LinkVehicleToInterior(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -4079,6 +4193,7 @@ void RPCHandlers::LinkVehicleToInterior(RPCParameters* pParams)
 //   float armor - New local-player armour value.
 void RPCHandlers::SetPlayerArmour(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -4102,6 +4217,7 @@ void RPCHandlers::SetPlayerArmour(RPCParameters* pParams)
 //   uint8 reason - Death reason / in-game weapon reason code.
 void RPCHandlers::SendDeathMessage(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -4135,6 +4251,7 @@ void RPCHandlers::SendDeathMessage(RPCParameters* pParams)
 // Payload: fixed 32-byte shop name buffer, as read by R5 and DL.
 void RPCHandlers::SetShopName(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input || pParams->numberOfBitsOfData < 32u * 8u)
         return;
 
@@ -4157,6 +4274,7 @@ void RPCHandlers::SetShopName(RPCParameters* pParams)
 //   int32 drunkLevel - Drunk-level value.
 void RPCHandlers::SetPlayerDrunkLevel(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -4177,6 +4295,7 @@ void RPCHandlers::SetPlayerDrunkLevel(RPCParameters* pParams)
 //   uint32 weaponId - Selected in-game weapon ID.
 void RPCHandlers::SetArmedWeapon(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -4215,6 +4334,7 @@ void RPCHandlers::SetArmedWeapon(RPCParameters* pParams)
 // Note: DL-specific modelId is signed int32.
 void RPCHandlers::SetPlayerAttachedObject(RPCParameters* pParams)
 {
+    ZoneScoped;
     auto* players = g_netGame ? g_netGame->GetPlayerPool() : nullptr;
     if (!players || !pParams || !pParams->input)
         return;
@@ -4266,6 +4386,7 @@ void RPCHandlers::SetPlayerAttachedObject(RPCParameters* pParams)
 //   uint8 usePosition - Nonzero enables positional playback.
 void RPCHandlers::PlayAudioStream(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -4297,6 +4418,7 @@ void RPCHandlers::PlayAudioStream(RPCParameters* pParams)
 // Note: No payload fields.
 void RPCHandlers::StopAudioStream(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams)
         return;
 
@@ -4317,6 +4439,7 @@ void RPCHandlers::StopAudioStream(RPCParameters* pParams)
 //   float radius - Removal radius.
 void RPCHandlers::RemoveBuilding(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -4348,6 +4471,7 @@ void RPCHandlers::RemoveBuilding(RPCParameters* pParams)
 //   uint16 objectId - Object ID to attach the camera to.
 void RPCHandlers::AttachCameraToObject(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -4388,6 +4512,7 @@ void RPCHandlers::AttachCameraToObject(RPCParameters* pParams)
 //   uint8 cutType - Interpolation/cut mode.
 void RPCHandlers::InterpolateCamera(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -4452,6 +4577,7 @@ void RPCHandlers::InterpolateCamera(RPCParameters* pParams)
 //   uint32 hoverColor - Hover RGBA color.
 void RPCHandlers::ToggleSelectTextDraw(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -4482,6 +4608,7 @@ void RPCHandlers::ToggleSelectTextDraw(RPCParameters* pParams)
 // Note: Material-text variant wire order: uint16 objectId, uint8 materialType, uint8 materialIndex, uint8 materialSize, uint8 fontNameLen, char[fontNameLen] fontName, uint8 fontSize, uint8 bold, uint32 fontColor, uint32 backgroundColor, uint8 align, CSTRING[2048] text.
 void RPCHandlers::SetPlayerObjectMaterial(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
     BitStream bs(pParams->input, BITS_TO_BYTES(pParams->numberOfBitsOfData), false);
@@ -4522,6 +4649,7 @@ void RPCHandlers::SetPlayerObjectMaterial(RPCParameters* pParams)
 //   uint32 time - Animation duration/time.
 void RPCHandlers::ApplyActorAnimation(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -4565,6 +4693,7 @@ void RPCHandlers::ApplyActorAnimation(RPCParameters* pParams)
 //   uint16 actorId - Actor ID.
 void RPCHandlers::ClearActorAnimation(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -4587,6 +4716,7 @@ void RPCHandlers::ClearActorAnimation(RPCParameters* pParams)
 //   float angle - Actor facing angle.
 void RPCHandlers::SetActorFacingAngle(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -4614,6 +4744,7 @@ void RPCHandlers::SetActorFacingAngle(RPCParameters* pParams)
 //   float z - Z.
 void RPCHandlers::SetActorPos(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -4645,6 +4776,7 @@ void RPCHandlers::SetActorPos(RPCParameters* pParams)
 //   float health - Actor health.
 void RPCHandlers::SetActorHealth(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -4668,6 +4800,7 @@ void RPCHandlers::SetActorHealth(RPCParameters* pParams)
 // menu strings are fixed 32-byte buffers, not length-prefixed strings
 void RPCHandlers::InitMenu(RPCParameters* pParams)
 {
+    ZoneScoped;
     auto* pool = g_netGame ? g_netGame->GetMenuPool() : nullptr;
     if (!pool || !pParams || !pParams->input)
         return;
@@ -4716,6 +4849,7 @@ void RPCHandlers::InitMenu(RPCParameters* pParams)
 //   uint8 menuId - Menu ID to show.
 void RPCHandlers::ShowMenu(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -4736,6 +4870,7 @@ void RPCHandlers::ShowMenu(RPCParameters* pParams)
 //   uint8 menuId - Menu ID to hide.
 void RPCHandlers::HideMenu(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!pParams || !pParams->input)
         return;
 
@@ -4753,6 +4888,7 @@ void RPCHandlers::HideMenu(RPCParameters* pParams)
 // 0.3.DL-only RPC 48. Only informs the download subsystem about the virtual world.
 void RPCHandlers::SetPlayerVirtualWorld(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!g_DLClient || !pParams || !pParams->input)
         return;
     BitStream bs(pParams->input, BITS_TO_BYTES(pParams->numberOfBitsOfData), false);
@@ -4765,6 +4901,7 @@ void RPCHandlers::SetPlayerVirtualWorld(RPCParameters* pParams)
 // 0.3.DL-only RPC 179: model metadata, in wire order.
 void RPCHandlers::ModelInfo(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!g_DLClient || !pParams || !pParams->input)
         return;
     BitStream bs(pParams->input, BITS_TO_BYTES(pParams->numberOfBitsOfData), false);
@@ -4780,6 +4917,7 @@ void RPCHandlers::ModelInfo(RPCParameters* pParams)
 // 0.3.DL-only RPC 183: variant 1 binary file, variant 6 HTTP URL.
 void RPCHandlers::ModelFile(RPCParameters* pParams)
 {
+    ZoneScoped;
     if (!g_DLClient || !pParams || !pParams->input)
         return;
     BitStream bs(pParams->input, BITS_TO_BYTES(pParams->numberOfBitsOfData), false);
@@ -4799,6 +4937,7 @@ void RPCHandlers::ModelFile(RPCParameters* pParams)
     }
     else if (arg == 6)
     {
+        ZoneScoped;
         std::uint8_t length{};
         if (!bs.Read(fileType) || !bs.Read(crc) || !bs.Read(length) || bs.GetNumberOfUnreadBits() < length * 8u)
             return;

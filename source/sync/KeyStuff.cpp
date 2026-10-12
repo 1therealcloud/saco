@@ -4,7 +4,6 @@
 
 #include "game/CPad.h"
 
-
 namespace KeyStuff
 {
     namespace
@@ -96,6 +95,7 @@ namespace KeyStuff
 
     void UpdateKeys()
     {
+        ZoneScoped;
         std::memcpy(&g_localPlayerKeys, RefInternalKeys(), kPadSize);
         g_savedDriveByLeft = *RefDriveByLeft();
         g_savedDriveByRight = *RefDriveByRight();
@@ -110,6 +110,7 @@ namespace KeyStuff
 
     void SetKeys(int player, const CPad* keys)
     {
+        ZoneScoped;
         if (!keys || player < 0 || static_cast<std::size_t>(player) >= kPlayerCount)
             return;
         std::memcpy(&g_playerKeys[player], keys, kPadSize);

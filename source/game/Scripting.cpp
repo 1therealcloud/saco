@@ -53,6 +53,7 @@ namespace scm
 {
     void initialize()
     {
+        ZoneScoped;
         if (g_thread)
             return;
 
@@ -66,6 +67,7 @@ namespace scm
 
     int ExecBuffer()
     {
+        ZoneScoped;
         if (!g_thread || !g_processOneCommand || !g_bufferReady || g_executing)
             return 0;
 
@@ -92,6 +94,7 @@ namespace scm
 
     int ProcessCommand(const OpcodeInfo* opcode, ...)
     {
+        ZoneScoped;
         if (!opcode || !g_thread || !g_processOneCommand || g_executing || !std::memchr(opcode->params, 0, sizeof(opcode->params)))
             return 0;
 
@@ -186,6 +189,7 @@ namespace scm
 
     void handle_09c6(EventType type, std::uint32_t param1, std::uint32_t param2, std::uint32_t param3)
     {
+        ZoneScoped;
         auto* netGame = g_netGame.get();
         auto* vehiclePool = netGame && netGame->m_pPools ? netGame->m_pPools->m_pVehicle : nullptr;
         if (vehiclePool)
@@ -259,6 +263,7 @@ namespace scm
 
     bool handle_09d3()
     {
+        ZoneScoped;
         const auto findPlayerPed = reinterpret_cast<void*(__cdecl*)(int)>(0x56E210);
         const auto* ped = static_cast<const std::uint8_t*>(findPlayerPed(-1));
         if (!ped)
@@ -283,6 +288,7 @@ namespace scm
 
     bool install()
     {
+        ZoneScoped;
         initialize();
 
         if (!g_thread || !g_processOneCommand)

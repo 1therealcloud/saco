@@ -56,6 +56,7 @@ namespace
 
     void* __fastcall EnterVehicleTaskHook(void* task, void*, void* vehicle)
     {
+        ZoneScoped;
         const auto caller = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
         void* result = g_enterVehicleTask(task, vehicle);
         if (caller == 0x570A20 || caller == 0x570A99)
@@ -70,6 +71,7 @@ namespace
 
     void* __fastcall ExitVehicleTaskHook(void* task, void*, void* vehicle, int door, int delay, bool sensible, bool force)
     {
+        ZoneScoped;
         const auto caller = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
         void* result = g_exitVehicleTask(task, vehicle, door, delay, sensible, force);
         if (caller == 0x5704A1 || caller == 0x5703FC)
@@ -96,6 +98,7 @@ using game::patch::hudscalefix::ScopedScaleFix;
 
 void __fastcall VehicleAudioHook(void* audio, void*)
 {
+    ZoneScoped;
     using namespace game::patch::vehicle::detail;
     // Audio must resolve the local listener, even inside remote vehicle control.
     auto& current = *reinterpret_cast<std::uint8_t*>(0xB7CD74);
@@ -129,6 +132,7 @@ void __fastcall VehicleAudioHook(void* audio, void*)
 
 void __cdecl ShutdownHook()
 {
+    ZoneScoped;
     // g_game is created during bootstrap; net/ui may not exist if loading failed
     if (g_game)
     {
@@ -216,6 +220,7 @@ void* __fastcall PlayerInfoHook(void* ped, void*)
 
 void* __fastcall ShadowHook(void* manager, void*, void* ped)
 {
+    ZoneScoped;
     if (!FindSlot(ped))
         return g_shadow(manager, ped);
     // GTA reserves one shadow for PLAYER1; remote players need separate pool entries
@@ -229,6 +234,7 @@ void* __fastcall ShadowHook(void* manager, void*, void* ped)
 
 void __fastcall ProcessControlHook(void* ped, void*)
 {
+    ZoneScoped;
     PROFILE_SCOPE(PedControl);
     const int slot = FindSlot(ped);
     auto& current = *reinterpret_cast<std::uint8_t*>(0xB7CD74);
@@ -297,6 +303,7 @@ namespace
 
     bool VehicleUsesNativeVerticalPhysics(const std::uint8_t* vehicle)
     {
+        ZoneScoped;
         auto* matrix = *reinterpret_cast<const CMatrix* const*>(vehicle + 0x14);
         auto* local = *reinterpret_cast<const std::uint8_t* const*>(0xB7CD98);
         auto* localMatrix = local ? *reinterpret_cast<const CMatrix* const*>(local + 0x14) : nullptr;
@@ -316,6 +323,7 @@ namespace
 
     void __fastcall VehicleControlHook(void* native, void*)
     {
+        ZoneScoped;
         const auto vtable = *static_cast<const std::uintptr_t*>(native);
         const auto method = std::find_if(g_vehicleControlMethods.begin(), g_vehicleControlMethods.end(), [vtable](const auto& entry) {
             return entry.vtable == vtable;
@@ -375,6 +383,7 @@ namespace
 
 bool game::hooks::InstallVehicleControlHooks()
 {
+    ZoneScoped;
     for (auto& method : g_vehicleControlMethods)
     {
         auto* entry = reinterpret_cast<game::players::detail::ControlFn*>(method.vtable + 0x28);
@@ -391,6 +400,7 @@ bool game::hooks::InstallVehicleControlHooks()
 
 std::uint32_t __fastcall WeaponSkillHook(void* ped, void*)
 {
+    ZoneScoped;
     const int slot = FindSlot(ped);
     const bool switchStats = slot && *reinterpret_cast<const std::uint8_t*>(0xB7CD74) == 0;
     if (switchStats)
@@ -411,12 +421,14 @@ std::uint32_t __fastcall WeaponSkillHook(void* ped, void*)
 
 void __cdecl DrawRadarHook()
 {
+    ZoneScoped;
     ScopedScaleFix fix(true);
     g_drawRadar();
 }
 
 void __cdecl DrawCrossHairsHook()
 {
+    ZoneScoped;
     // R5 only applies the HUD scale correction to this crosshair camera mode.
     const auto cameraMode = *reinterpret_cast<const volatile std::uint8_t*>(0x00B6F1A8);
     ScopedScaleFix fix(cameraMode == 0x35);
@@ -429,6 +441,7 @@ namespace game::hooks
 
     bool InstallRenderHooks()
     {
+        ZoneScoped;
         return hook::install(0x584770, &RadarTraceColorHook, &g_radarColor) && hook::install(0x53E230, &NativeTextHook, &g_text) && hook::install(0x586650, &GangZoneRadarHook) &&
                hook::install(0x553AA0, &WorldRenderHook, &g_world) && hook::install(0x5531E0, &FadingRenderHook, &g_fading);
     }
@@ -487,6 +500,7 @@ __declspec(naked) void PickupCollectedHook()
 
 void __cdecl WorldRenderHook()
 {
+    ZoneScoped;
     PROFILE_SCOPE(World);
     game::hooks::g_world();
     render::RenderWorldObjects();
@@ -494,6 +508,7 @@ void __cdecl WorldRenderHook()
 
 void __cdecl FadingRenderHook()
 {
+    ZoneScoped;
     PROFILE_SCOPE(Fading);
     game::hooks::g_fading();
     render::RenderFadingObjects();
@@ -520,6 +535,7 @@ std::uint32_t __cdecl RadarTraceColorHook(std::uint32_t color, bool bright, bool
 
 static void __cdecl UpdateAttachedCamera()
 {
+    ZoneScoped;
     if (auto* game = g_game.get())
         if (auto* camera = game->GetCamera())
             camera->SetToOwner();
@@ -548,6 +564,7 @@ const char* __fastcall MenuTextHook(void* text, void*, const char* key)
 
 static void __cdecl Dispatch09C6(void* script)
 {
+    ZoneScoped;
     const auto collectParameters = reinterpret_cast<void(__thiscall*)(void*, short)>(0x464080);
     collectParameters(script, 4);
 
@@ -630,6 +647,7 @@ void __cdecl PoolsShutdownHook()
 
 void __cdecl RenderObjectHook(void* entity)
 {
+    ZoneScoped;
     game::objects::detail::RenderNativeObject(entity, game::hooks::g_originalRender);
 }
 
@@ -689,6 +707,7 @@ __declspec(naked) void EmptyVertexStreamRelockHook()
 
 bool __fastcall UsesSirenHook(void* vehicle, void*)
 {
+    ZoneScoped;
     using namespace game::patch::vehicle::detail;
     if (nextVehicleHasSiren)
     {
@@ -704,6 +723,7 @@ bool __fastcall UsesSirenHook(void* vehicle, void*)
 
 void __fastcall TrailerProcessHook(void* vehicle, void*)
 {
+    ZoneScoped;
     float health{};
     void* tractor = nullptr;
     if (vehicle)
@@ -721,6 +741,7 @@ void __fastcall TrailerProcessHook(void* vehicle, void*)
 bool __fastcall FireInstantHitHook(void* weapon, void*, void* owner, CVector* origin, CVector* muzzle, void* target, CVector* targetPosition, CVector* driveBy, bool crosshair,
                                    int extra)
 {
+    ZoneScoped;
     using namespace game::bullets::detail;
     if (FindSlot(owner) && !remoteShot)
         return false;
@@ -733,6 +754,7 @@ bool __fastcall FireInstantHitHook(void* weapon, void*, void* owner, CVector* or
 
 bool __fastcall FireSniperHook(void* weapon, void*, void* owner, void* target, CVector* targetPosition)
 {
+    ZoneScoped;
     using namespace game::bullets::detail;
     if (FindSlot(owner) && !remoteShot)
         return false;
@@ -754,6 +776,7 @@ void __cdecl SniperBulletHook(void* owner, int weapon, CVector position, CVector
 bool __cdecl BulletTraceHook(const CVector& origin, const CVector& target, void* point, void** entity, bool buildings, bool vehicles, bool peds, bool objects, bool dummies,
                              bool seeThrough, bool cameraIgnore, bool shootThrough)
 {
+    ZoneScoped;
     using namespace game::bullets::detail;
     const auto caller = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
     if (!shooter || caller < 0x730000 || caller >= 0x744000)
@@ -806,6 +829,7 @@ bool __fastcall DamageAffectsPedHook(void* event, void*, void* victim)
 
 void __fastcall ComputeDamageResponseHook(game::bullets::detail::DamageCalculator* calculator, void*, void* victim, void* response, bool speak)
 {
+    ZoneScoped;
     auto* pools = g_netGame ? g_netGame->m_pPools : nullptr;
     auto* players = pools ? pools->m_pPlayer : nullptr;
     auto* local = players ? players->GetLocalPlayer() : nullptr;

@@ -19,6 +19,7 @@ namespace
 
     bool AllowsRead(DWORD protect)
     {
+        ZoneScoped;
         if (protect & (PAGE_GUARD | PAGE_NOACCESS))
             return false;
         switch (protect & 0xFF)
@@ -37,6 +38,7 @@ namespace
 
     bool AllowsWrite(DWORD protect)
     {
+        ZoneScoped;
         if (protect & (PAGE_GUARD | PAGE_NOACCESS))
             return false;
         switch (protect & 0xFF)
@@ -53,6 +55,7 @@ namespace
 
     bool ValidateSpan(const void* data, std::size_t size, bool write)
     {
+        ZoneScoped;
         if (!size)
             return true;
         if (!data)
@@ -83,6 +86,7 @@ namespace
 
     std::int32_t __cdecl VertexDeclarationInstColorHook(std::uint8_t* mem, const std::uint8_t* color, std::int32_t numVerts, std::uint32_t stride)
     {
+        ZoneScoped;
         if (numVerts <= 0)
             return FALSE;
 
@@ -107,6 +111,7 @@ namespace
 
     bool InstallRenderWareCrashFix()
     {
+        ZoneScoped;
         // unused streams have zero stride; do not allocate or lock a buffer for them
         return hook::install(kVertexDeclarationInstColor, &VertexDeclarationInstColorHook, &g_vertexDeclarationInstColor) &&
                ::patch::jump(0x757C3C, reinterpret_cast<const void*>(&EmptyVertexStreamAllocateHook), 6) &&
@@ -203,6 +208,7 @@ namespace game::patch::base
 {
     bool install()
     {
+        ZoneScoped;
         // skips the intro game-state reset
         if (!::patch::nop(0x747483, 6))
             return false;

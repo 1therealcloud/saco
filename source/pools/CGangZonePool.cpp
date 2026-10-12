@@ -19,6 +19,7 @@ CGangZonePool::CGangZonePool() : m_pObject{}, m_bNotEmpty{}
 
 CGangZonePool::~CGangZonePool()
 {
+    ZoneScoped;
     for (std::size_t i = 0; i < MAX_GANGZONES; ++i)
     {
         if (!m_pObject[i])
@@ -31,6 +32,7 @@ CGangZonePool::~CGangZonePool()
 
 void CGangZonePool::Create(std::uint16_t id, float left, float top, float right, float bottom, std::uint32_t color)
 {
+    ZoneScoped;
     if (id >= MAX_GANGZONES || !std::isfinite(left) || !std::isfinite(top) || !std::isfinite(right) || !std::isfinite(bottom))
         return;
     if (m_pObject[id])
@@ -75,6 +77,7 @@ void CGangZonePool::StopFlashing(std::uint16_t id)
 
 void CGangZonePool::Delete(std::uint16_t id)
 {
+    ZoneScoped;
     if (id >= MAX_GANGZONES)
         return;
     GangZone* zone = m_pObject[id];
@@ -88,6 +91,7 @@ void CGangZonePool::Delete(std::uint16_t id)
 
 void CGangZonePool::Draw()
 {
+    ZoneScoped;
     auto* game = g_game.get();
     if (!game)
         return;

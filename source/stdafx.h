@@ -16,6 +16,7 @@
 #include <Windows.h>
 #include <MinHook.h>
 #include <d3d9.h>
+#include <tracy/Tracy.hpp>
 
 #include <algorithm>
 #include <array>

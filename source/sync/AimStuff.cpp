@@ -114,6 +114,7 @@ namespace AimStuff
 
     void UpdateCameraExtZoomAndAspectRatio()
     {
+        ZoneScoped;
         g_localPlayerCameraExtZoom = *RefInternalCameraExtZoom();
         g_localPlayerAspectRatio = *RefInternalAspectRatio();
     }
@@ -171,6 +172,7 @@ namespace AimStuff
 
     void Initialize()
     {
+        ZoneScoped;
         std::memset(&g_localPlayerAim, 0, sizeof(g_localPlayerAim));
         std::memset(g_playerAim.data(), 0, sizeof(g_playerAim));
 
@@ -182,6 +184,7 @@ namespace AimStuff
 
     void UpdateAim()
     {
+        ZoneScoped;
         std::memcpy(&g_localPlayerAim, RefInternalAim(), sizeof(Aim));
     }
 
@@ -234,6 +237,7 @@ namespace AimStuff
 
     void UpdatePlayerStats()
     {
+        ZoneScoped;
         std::memcpy(g_localPlayerStats.data(), g_internalPlayerStats + kPlayerStatOffset, kProcessControlStatCount * sizeof(float));
     }
 

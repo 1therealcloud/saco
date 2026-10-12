@@ -12,6 +12,7 @@ namespace
 
 CTextDrawPool::CTextDrawPool()
 {
+    ZoneScoped;
     for (std::size_t i = 0; i < MAX_SLOTS; ++i)
     {
         m_pObject[i] = nullptr;
@@ -23,6 +24,7 @@ CTextDrawPool::CTextDrawPool()
 
 CTextDrawPool::~CTextDrawPool()
 {
+    ZoneScoped;
     for (std::size_t i = 0; i < MAX_SLOTS; ++i)
     {
         CTextDraw* object = m_pObject[i];
@@ -40,6 +42,7 @@ CTextDrawPool::~CTextDrawPool()
 
 void CTextDrawPool::Delete(std::uint16_t id)
 {
+    ZoneScoped;
     if (id >= MAX_SLOTS)
         return;
     CTextDraw* object = m_pObject[id];
@@ -57,6 +60,7 @@ void CTextDrawPool::Delete(std::uint16_t id)
 
 void CTextDrawPool::Draw()
 {
+    ZoneScoped;
     for (const auto i : m_activeIds)
         if (m_pObject[i])
             m_pObject[i]->m_data.m_bDrawnThisFrame = 0;
@@ -74,6 +78,7 @@ void CTextDrawPool::Draw()
 
 CTextDraw* CTextDrawPool::Create(int id, const CTextDraw::Transmit* transmit, const char* text)
 {
+    ZoneScoped;
     if (id < 0 || id >= MAX_SLOTS || !transmit)
         return nullptr;
     const std::uint16_t index = static_cast<std::uint16_t>(id);
@@ -91,6 +96,7 @@ CTextDraw* CTextDrawPool::Create(int id, const CTextDraw::Transmit* transmit, co
 
 void CTextDrawPool::LoadPreviews()
 {
+    ZoneScoped;
     for (const auto i : m_activeIds)
     {
         if (m_bNotEmpty[i])
@@ -100,6 +106,7 @@ void CTextDrawPool::LoadPreviews()
 
 void CTextDrawPool::UnloadPreviews()
 {
+    ZoneScoped;
     for (const auto i : m_activeIds)
     {
         if (m_bNotEmpty[i])
@@ -109,6 +116,7 @@ void CTextDrawPool::UnloadPreviews()
 
 CTextDraw* CTextDrawPool::Get(std::uint16_t id) const
 {
+    ZoneScoped;
     if (id >= MAX_SLOTS || !m_bNotEmpty[id])
         return nullptr;
 
@@ -117,10 +125,12 @@ CTextDraw* CTextDrawPool::Get(std::uint16_t id) const
 
 CTextDrawPool* CTextDrawPool::GetActivePool()
 {
+    ZoneScoped;
     return g_activePool;
 }
 
 void CTextDrawPool::SetDrawBlockState(const std::uint32_t* state)
 {
+    ZoneScoped;
     g_drawBlockState = state;
 }

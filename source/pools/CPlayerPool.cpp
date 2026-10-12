@@ -28,6 +28,7 @@ CPlayerPool::~CPlayerPool()
 
 void CPlayerPool::UpdateLargestId()
 {
+    ZoneScoped;
     int largest = 0;
     for (int id = 0; id < MAX_PLAYERS; ++id)
     {
@@ -39,6 +40,7 @@ void CPlayerPool::UpdateLargestId()
 
 void CPlayerPool::Process()
 {
+    ZoneScoped;
     for (int id = 0; id <= m_nLargestId && id < MAX_PLAYERS; ++id)
     {
         if (!m_bNotEmpty[id])
@@ -55,6 +57,7 @@ void CPlayerPool::Process()
 
 CPlayerPool::ID CPlayerPool::Find(const void* gamePed)
 {
+    ZoneScoped;
     if (!gamePed)
         return INVALID_ID;
 
@@ -80,6 +83,7 @@ CPlayerPool::ID CPlayerPool::Find(const void* gamePed)
 
 void CPlayerPool::Deactivate()
 {
+    ZoneScoped;
     if (m_localInfo.m_pObject)
     {
         m_localInfo.m_pObject->m_bIsActive = FALSE;
@@ -96,6 +100,7 @@ void CPlayerPool::Deactivate()
 
 void CPlayerPool::ForceCollision()
 {
+    ZoneScoped;
     for (int id = 0; id <= m_nLargestId && id < MAX_PLAYERS; ++id)
     {
         m_bPrevCollisionFlag[id] = FALSE;
@@ -111,6 +116,7 @@ void CPlayerPool::ForceCollision()
 
 void CPlayerPool::RestoreCollision()
 {
+    ZoneScoped;
     for (int id = 0; id <= m_nLargestId && id < MAX_PLAYERS; ++id)
     {
         CRemotePlayer* player = GetPlayer(static_cast<ID>(id));
@@ -123,6 +129,7 @@ void CPlayerPool::RestoreCollision()
 
 BOOL CPlayerPool::Delete(ID id, int reason)
 {
+    ZoneScoped;
     (void)reason;
 
     if (id >= MAX_PLAYERS || (!m_bNotEmpty[id] && !m_pObject[id]))
@@ -146,6 +153,7 @@ BOOL CPlayerPool::Delete(ID id, int reason)
 
 BOOL CPlayerPool::Create(ID id, const char* name, BOOL isNPC)
 {
+    ZoneScoped;
     if (id >= MAX_PLAYERS || id == m_localInfo.m_nId || !name)
         return FALSE;
 
@@ -211,6 +219,7 @@ void CPlayerPool::SetLocalPlayerName(const char* name)
 
 void CPlayerPool::SetName(ID id, const char* name)
 {
+    ZoneScoped;
     if (!name)
         return;
     if (id == m_localInfo.m_nId && id != INVALID_ID)
@@ -224,6 +233,7 @@ void CPlayerPool::SetName(ID id, const char* name)
 
 void CPlayerPool::SetScore(ID id, int value)
 {
+    ZoneScoped;
     if (id == m_localInfo.m_nId && id != INVALID_ID)
     {
         m_localInfo.m_nScore = value;
@@ -235,6 +245,7 @@ void CPlayerPool::SetScore(ID id, int value)
 
 void CPlayerPool::SetPing(ID id, int value)
 {
+    ZoneScoped;
     if (id == m_localInfo.m_nId && id != INVALID_ID)
     {
         m_localInfo.m_nPing = value;
@@ -246,6 +257,7 @@ void CPlayerPool::SetPing(ID id, int value)
 
 void CPlayerPool::SetTeam(ID id, std::uint8_t team)
 {
+    ZoneScoped;
     if (id == m_localInfo.m_nId && id != INVALID_ID)
     {
         if (m_localInfo.m_pObject)
@@ -258,6 +270,7 @@ void CPlayerPool::SetTeam(ID id, std::uint8_t team)
 
 void CPlayerPool::SetColor(ID id, D3DCOLOR color)
 {
+    ZoneScoped;
     if (id == m_localInfo.m_nId && id != INVALID_ID)
     {
         if (m_localInfo.m_pObject)
@@ -276,6 +289,7 @@ void CPlayerPool::SetNameTagVisible(ID id, BOOL visible)
 
 void CPlayerPool::SetAt(ID id, CPlayerInfo* object)
 {
+    ZoneScoped;
     if (id >= MAX_PLAYERS || id == m_localInfo.m_nId)
         return;
     if (m_pObject[id] == object)
@@ -334,6 +348,7 @@ int CPlayerPool::GetLocalPlayerScore()
 
 int CPlayerPool::GetCount(BOOL includeNPC)
 {
+    ZoneScoped;
     int count = 0;
     for (int id = 0; id <= m_nLargestId && id < MAX_PLAYERS; ++id)
     {
@@ -353,6 +368,7 @@ CLocalPlayer* CPlayerPool::GetLocalPlayer()
 
 CObject* CPlayerPool::FindAccessory(const void* gameObject)
 {
+    ZoneScoped;
     if (!gameObject)
         return nullptr;
 

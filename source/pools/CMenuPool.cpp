@@ -28,6 +28,7 @@ CMenu* CMenuPool::GetAt(std::uint8_t id) const
 
 CMenu* CMenuPool::Create(std::uint8_t id, float x, float y, char columns, float firstColumnWidth, float secondColumnWidth, const CMenu::Interaction* interaction)
 {
+    ZoneScoped;
     if (id >= MAX_MENUS)
         return nullptr;
     auto* menu = new (std::nothrow) CMenu(x, y, columns, firstColumnWidth, secondColumnWidth, interaction);
@@ -42,6 +43,7 @@ CMenu* CMenuPool::Create(std::uint8_t id, float x, float y, char columns, float 
 
 BOOL CMenuPool::Delete(std::uint8_t id)
 {
+    ZoneScoped;
     if (id >= MAX_MENUS || !m_pObject[id])
         return FALSE;
     Hide(id);
@@ -53,6 +55,7 @@ BOOL CMenuPool::Delete(std::uint8_t id)
 
 void CMenuPool::Show(std::uint8_t id)
 {
+    ZoneScoped;
     CMenu* menu = GetAt(id);
     if (!menu)
         return;
@@ -66,6 +69,7 @@ void CMenuPool::Show(std::uint8_t id)
 
 void CMenuPool::Hide(std::uint8_t id)
 {
+    ZoneScoped;
     if (id >= MAX_MENUS || id != m_nCurrent)
         return;
     if (CMenu* menu = GetAt(id))
@@ -78,6 +82,7 @@ void CMenuPool::Hide(std::uint8_t id)
 
 char* CMenuPool::GetTextPointer(const char* text)
 {
+    ZoneScoped;
     CMenu* menu = GetAt(m_nCurrent);
     if (!menu || !menu->IsVisible() || !text)
         return nullptr;
@@ -98,6 +103,7 @@ char* CMenuPool::GetTextPointer(const char* text)
 
 void CMenuPool::Process()
 {
+    ZoneScoped;
     PROFILE_SCOPE(Menus);
     if (m_nCurrent == INVALID_MENU)
         return;
@@ -111,6 +117,7 @@ void CMenuPool::Process()
 
 void CMenuPool::Process(const CControllerState& current, const CControllerState& previous)
 {
+    ZoneScoped;
     CMenu* menu = GetAt(m_nCurrent);
     if (!menu || !menu->IsVisible())
     {

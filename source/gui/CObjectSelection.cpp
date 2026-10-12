@@ -32,6 +32,7 @@ CObjectSelection::~CObjectSelection()
 
 CObjectSelection::ID CObjectSelection::DefineObject()
 {
+    ZoneScoped;
     auto* pool = g_netGame ? g_netGame->GetObjectPool() : nullptr;
     auto* window = g_game ? static_cast<HWND>(g_game->GetWindowHandle()) : nullptr;
     POINT point{};
@@ -44,6 +45,7 @@ CObjectSelection::ID CObjectSelection::DefineObject()
 
 void CObjectSelection::DrawLabels()
 {
+    ZoneScoped;
     if (m_nHoveredObject == INVALID_OBJECT_ID)
         return;
 
@@ -85,6 +87,7 @@ void CObjectSelection::DrawLabels()
 
 void CObjectSelection::Enable(BOOL enable)
 {
+    ZoneScoped;
     enable = enable != FALSE;
     if (m_bIsActive == enable)
         return;
@@ -97,6 +100,7 @@ void CObjectSelection::Enable(BOOL enable)
 
 void CObjectSelection::Draw()
 {
+    ZoneScoped;
     if (!m_bIsActive)
         return;
 
@@ -112,6 +116,7 @@ void CObjectSelection::Draw()
 
 void CObjectSelection::SendNotification()
 {
+    ZoneScoped;
     m_nHoveredObject = DefineObject();
     auto* pool = g_netGame ? g_netGame->GetObjectPool() : nullptr;
     auto* object = pool ? pool->Get(m_nHoveredObject) : nullptr;
@@ -125,6 +130,7 @@ void CObjectSelection::SendNotification()
 
 BOOL CObjectSelection::MsgProc(int uMsg, int wParam, int lParam)
 {
+    ZoneScoped;
     (void)wParam;
     (void)lParam;
 

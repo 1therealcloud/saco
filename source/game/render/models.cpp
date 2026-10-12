@@ -14,6 +14,7 @@ namespace game::render::models
 
     Model load(const char* path, int textureSlot)
     {
+        ZoneScoped;
         if (!path || !*path)
             return {};
         const textures::DictionaryScope dictionary(textureSlot);

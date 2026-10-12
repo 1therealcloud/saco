@@ -27,6 +27,7 @@ namespace
 
     bool ProjectTagPoint(IDirect3DDevice9* device, CRender* render, const CVector& position, float distanceToCamera, LONG& x, LONG& y)
     {
+        ZoneScoped;
         if (!device || !render)
             return false;
 
@@ -48,6 +49,7 @@ namespace
     template <class Renderer>
     void DrawBar(Renderer* render, float x, float y, float value, D3DCOLOR background, D3DCOLOR fill)
     {
+        ZoneScoped;
         if (!render || !std::isfinite(value))
             return;
 
@@ -68,6 +70,7 @@ CPlayerTags::CPlayerTags(IDirect3DDevice9* device) : m_pDevice(device), m_pState
 
 CPlayerTags::~CPlayerTags()
 {
+    ZoneScoped;
     g_labelBatch.reset();
 
     if (m_pStates)
@@ -100,6 +103,7 @@ void CPlayerTags::EndLabel()
 
 void CPlayerTags::DrawTag(CVector* position, const char* text, D3DCOLOR color, float health, float armour, float distanceToCamera, bool drawStatus, int status)
 {
+    ZoneScoped;
     LONG x = 0, y = 0;
     if (!position || !text || !*text || !g_fonts || !g_render || !ProjectTagPoint(m_pDevice, g_render.get(), *position, distanceToCamera, x, y))
         return;
@@ -123,6 +127,7 @@ void CPlayerTags::DrawTag(CVector* position, const char* text, D3DCOLOR color, f
 
 void CPlayerTags::DrawLabel(CVector* position, const char* text, D3DCOLOR color, float distanceToCamera, bool drawStatus, int status)
 {
+    ZoneScoped;
     if (!position || !text || !*text || !g_fonts || !g_render)
         return;
 
@@ -136,6 +141,7 @@ void CPlayerTags::DrawLabel(CVector* position, const char* text, D3DCOLOR color,
 
 void CPlayerTags::DrawLabelAt(LONG x, LONG y, const char* text, D3DCOLOR color, bool drawStatus, int status)
 {
+    ZoneScoped;
     SIZE size{};
     g_fonts->GetLittleTextScreenSize(&size, text, 0);
 
@@ -176,6 +182,7 @@ void CPlayerTags::DrawLabelAt(LONG x, LONG y, const char* text, D3DCOLOR color, 
 
 void CPlayerTags::DrawHealthBar(CVector* position, float health, float armour, float distanceToCamera)
 {
+    ZoneScoped;
     if (!position || !g_render || health <= 0.0f)
         return;
 
@@ -189,6 +196,7 @@ void CPlayerTags::DrawHealthBar(CVector* position, float health, float armour, f
 
 void CPlayerTags::DrawHealthBarAt(LONG x, LONG y, float health, float armour, bool fontBars)
 {
+    ZoneScoped;
     const bool hasArmour = armour > 0.0f;
     const float baseY = static_cast<float>(y + 18);
     const float healthY = baseY + (hasArmour ? 8.0f : 0.0f);
@@ -211,6 +219,7 @@ void CPlayerTags::DrawHealthBarAt(LONG x, LONG y, float health, float armour, bo
 
 void CPlayerTags::OnLostDevice()
 {
+    ZoneScoped;
     g_labelBatch.reset();
 
     if (m_pStates)

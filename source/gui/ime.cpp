@@ -56,6 +56,7 @@ namespace cgui::ime
 
         void ClearComposition()
         {
+            ZoneScoped;
             g_composing = false;
             g_composition.clear();
             g_attributes.clear();
@@ -78,6 +79,7 @@ namespace cgui::ime
 
         void Attach()
         {
+            ZoneScoped;
             if (g_attached || !g_edit || !IsWindow(g_window) || GetForegroundWindow() != GetAncestor(g_window, GA_ROOT))
                 return;
             const bool useIme = g_enabled;
@@ -99,6 +101,7 @@ namespace cgui::ime
 
         void RefreshFocus()
         {
+            ZoneScoped;
             if (!cgui::IsInitialized())
                 return;
             constexpr DialogId order[] = {DialogId::GameUI, DialogId::Auxiliary, DialogId::Secondary, DialogId::Dialog};
@@ -117,6 +120,7 @@ namespace cgui::ime
 
         std::wstring ReadString(DWORD index)
         {
+            ZoneScoped;
             const LONG bytes = ImmGetCompositionStringW(g_context, index, nullptr, 0);
             if (bytes <= 0 || bytes > 65536 || bytes % sizeof(wchar_t))
                 return {};
@@ -128,6 +132,7 @@ namespace cgui::ime
 
         void ReadCandidates(DWORD index)
         {
+            ZoneScoped;
             g_candidates.clear();
             g_candidateHits.clear();
             g_candidateRect = {};
@@ -172,6 +177,7 @@ namespace cgui::ime
 
         void UpdateFont(const char* face, int height, int weight)
         {
+            ZoneScoped;
             if (g_fontFace == face && g_fontHeight == height && g_fontWeight == weight)
                 return;
             g_fontFace = face;
@@ -183,6 +189,7 @@ namespace cgui::ime
 
         std::wstring Indicator()
         {
+            ZoneScoped;
             const HKL layout = GetKeyboardLayout(0);
             if (!ImmIsIME(layout) || !ImmGetOpenStatus(g_context))
             {
@@ -210,6 +217,7 @@ namespace cgui::ime
 
         void ReadAttributes()
         {
+            ZoneScoped;
             const LONG bytes = ImmGetCompositionStringW(g_context, GCS_COMPATTR, nullptr, 0);
             g_attributes.clear();
             if (bytes <= 0 || bytes > 65536)
@@ -228,6 +236,7 @@ namespace cgui::ime
 
         bool CreateTexture(IDirect3DDevice9* device)
         {
+            ZoneScoped;
             HDC dc = CreateCompatibleDC(nullptr);
             if (!dc)
                 return false;
@@ -375,6 +384,7 @@ namespace cgui::ime
 
         void DrawQuad(IDirect3DDevice9* device, RECT destination, D3DCOLOR color, IDirect3DTexture9* texture = nullptr, const RECT* source = nullptr)
         {
+            ZoneScoped;
             color = ui::FadeColor(color);
             if (destination.right <= destination.left || destination.bottom <= destination.top)
                 return;
@@ -419,6 +429,7 @@ namespace cgui::ime
 
         void SendKey(WORD key)
         {
+            ZoneScoped;
             INPUT input[2]{};
             input[0].type = input[1].type = INPUT_KEYBOARD;
             input[0].ki.wVk = input[1].ki.wVk = key;
@@ -454,6 +465,7 @@ namespace cgui::ime
 
     int GetIndicatorWidth(const EditBox* edit)
     {
+        ZoneScoped;
         if (!g_enabled || !edit || !edit->HasFocus())
             return 0;
         UpdateFont(cgui::GetFontFace(), cgui::GetFontHeight(), cgui::GetFontWeight());
@@ -497,6 +509,7 @@ namespace cgui::ime
 
     void Focus(EditBox* edit)
     {
+        ZoneScoped;
         if (edit == g_edit)
         {
             Attach();
@@ -525,6 +538,7 @@ namespace cgui::ime
 
     void Shutdown()
     {
+        ZoneScoped;
         Detach();
         if (g_context)
             ImmDestroyContext(g_context);
@@ -538,6 +552,7 @@ namespace cgui::ime
 
     bool MsgProc(HWND window, UINT message, WPARAM wParam, LPARAM& lParam)
     {
+        ZoneScoped;
         SetWindow(window);
         RefreshFocus();
         if (message == WM_KILLFOCUS || (message == WM_ACTIVATEAPP && !wParam))
@@ -673,6 +688,7 @@ namespace cgui::ime
 
     void Render(IDirect3DDevice9* device, const char* face, int height, int weight)
     {
+        ZoneScoped;
         PROFILE_SCOPE(Ime);
         RefreshFocus();
         if (!device || !g_edit || !g_enabled || !g_attached || !g_edit->IsVisible() || !g_edit->IsEnabled() || (g_edit->GetDialog() && !g_edit->GetDialog()->IsVisible()))
