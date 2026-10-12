@@ -29,30 +29,38 @@ CPlayerPool::~CPlayerPool()
 void CPlayerPool::UpdateLargestId()
 {
     ZoneScoped;
-    int largest = 0;
-    for (int id = 0; id < MAX_PLAYERS; ++id)
+    for (int id = MAX_PLAYERS - 1; id >= 0; --id)
     {
         if (m_bNotEmpty[id])
-            largest = id;
+        {
+            m_nLargestId = id;
+            return;
+        }
     }
-    m_nLargestId = largest;
+    m_nLargestId = 0;
 }
 
 void CPlayerPool::Process()
 {
     ZoneScoped;
-    for (int id = 0; id <= m_nLargestId && id < MAX_PLAYERS; ++id)
     {
-        if (!m_bNotEmpty[id])
-            continue;
+        ZoneScopedN("Player pool: remote players");
+        for (int id = 0; id <= m_nLargestId && id < MAX_PLAYERS; ++id)
+        {
+            if (!m_bNotEmpty[id])
+                continue;
 
-        CPlayerInfo* info = m_pObject[id];
-        if (info && info->m_pPlayer)
-            info->m_pPlayer->Process();
+            CPlayerInfo* info = m_pObject[id];
+            if (info && info->m_pPlayer)
+                info->m_pPlayer->Process();
+        }
     }
 
     if (m_localInfo.m_pObject)
+    {
+        ZoneScopedN("Player pool: local player");
         m_localInfo.m_pObject->Process();
+    }
 }
 
 CPlayerPool::ID CPlayerPool::Find(const void* gamePed)
@@ -147,7 +155,8 @@ BOOL CPlayerPool::Delete(ID id, int reason)
     delete m_pObject[id];
     m_pObject[id] = nullptr;
 
-    UpdateLargestId();
+    if (id == m_nLargestId)
+        UpdateLargestId();
     return TRUE;
 }
 
@@ -172,7 +181,7 @@ BOOL CPlayerPool::Create(ID id, const char* name, BOOL isNPC)
     m_bNotEmpty[id] = TRUE;
     m_bPrevCollisionFlag[id] = FALSE;
 
-    UpdateLargestId();
+    m_nLargestId = std::max(m_nLargestId, static_cast<int>(id));
     return TRUE;
 }
 
@@ -306,7 +315,8 @@ void CPlayerPool::SetAt(ID id, CPlayerInfo* object)
     if (object && object->m_pPlayer)
         object->m_pPlayer->m_nId = id;
 
-    UpdateLargestId();
+    if (object)
+        m_nLargestId = std::max(m_nLargestId, static_cast<int>(id));
 }
 
 int CPlayerPool::GetScore(ID id)

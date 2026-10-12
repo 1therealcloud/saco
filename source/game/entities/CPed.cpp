@@ -951,11 +951,21 @@ void CPed::ProcessDrunk()
         return;
     const int level = GetDrunkLevel();
     const int effect = level > 2000 ? std::clamp(static_cast<int>(level * 0.02f), 0, 250) : 0;
-    scm::ProcessCommand(&SET_DRUNK_VISUALS, 0, effect < 5 ? 0 : effect);
+    // 052C writes CPlayerInfo's intensity/fade bytes. A zero effect already cleared by GTA needs no dispatch.
+    const auto* playerInfo = reinterpret_cast<const void*>(0xB7CD98);
+    if (effect != 0 || Read<std::uint8_t>(playerInfo, 0x44) != 0 || Read<std::uint8_t>(playerInfo, 0x45) != 0)
+        scm::ProcessCommand(&SET_DRUNK_VISUALS, 0, effect);
+
+    if (level <= 2000)
+    {
+        if (level > 0)
+            --m_stuff.m_nDrunkLevel;
+        return;
+    }
 
     auto* vehicle = GetVehicle();
     const auto now = GetTickCount();
-    if (level > 2000 && IsInVehicle() && !IsPassenger() && vehicle && (g_lastDrunkSteer == 0 || now - g_lastDrunkSteer > 200))
+    if (vehicle && InVehicle(m_pGamePed) && !IsPassenger() && (g_lastDrunkSteer == 0 || now - g_lastDrunkSteer > 200))
     {
         const int random = std::rand() % 40;
         float delta = 0.0f;
