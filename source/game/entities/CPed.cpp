@@ -504,6 +504,10 @@ bool CPed::StartPassengerDriveBy()
 {
     if (!HasCurrentNativePed() || !IsInVehicle() || GetVehicleSeatIndex() <= 0 || !GetVehicle())
         return false;
+    if (IsDoingPassengerDriveBy())
+        return true;
+    if (m_pendingAnimation.active || PerformingCustomAnimation())
+        return false;
     const auto weapon = GetCurrentWeapon();
     if (weapon == 46)
     {
@@ -536,7 +540,11 @@ void CPed::StopPassengerDriveBy()
         return;
     auto* intelligence = Read<void*>(m_pGamePed, 0x47C);
     auto* task = Read<void*>(intelligence, 0x10);
-    // R5 deletes only the gang drive-by task (0x3FE).
+    // Abort first to fade the drive-by association and restore the seated pose.
+    using AbortTask = bool(__thiscall*)(void*, void*, int, void*);
+    if (!reinterpret_cast<AbortTask>(0x62D290)(task, m_pGamePed, 2, nullptr))
+        return;
+    // Delete only the gang drive-by task (0x3FE).
     reinterpret_cast<void(__thiscall*)(void*, int)>(0x6275E0)(task, 1);
     Write<void*>(intelligence, 0x10, nullptr);
 }
@@ -952,6 +960,7 @@ void CPed::PerformAnimation(const char* name, const char* file, float frameDelta
 
     if (std::strlen(name) >= sizeof(m_pendingAnimation.name) || std::strlen(file) >= sizeof(m_pendingAnimation.library))
         return;
+    StopPassengerDriveBy();
 
     const bool samePending =
         m_pendingAnimation.active && m_pendingAnimation.ped == m_pGamePed && m_pendingAnimation.handle == m_handle && std::strcmp(m_pendingAnimation.library, file) == 0;
@@ -1685,6 +1694,16 @@ void CPed::SetArmedWeapon(int weapon)
 {
     if (!HasCurrentNativePed() || weapon < 0 || weapon > 46)
         return;
+    if (InVehicle(m_pGamePed))
+    {
+        // R5 uses the native setter in vehicles; SCM can leave the weapon model hidden.
+        auto& current = *reinterpret_cast<std::uint8_t*>(0xB7CD74);
+        const auto previous = current;
+        current = m_nPlayerNumber;
+        reinterpret_cast<void(__thiscall*)(void*, int)>(0x5E6280)(m_pGamePed, weapon);
+        current = previous;
+        return;
+    }
     constexpr scm::OpcodeInfo armed{0x01B9, "ii"};
     scm::ProcessCommand(&armed, m_handle, weapon);
 }

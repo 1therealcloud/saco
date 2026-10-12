@@ -97,12 +97,17 @@ using game::patch::hudscalefix::ScopedScaleFix;
 void __fastcall VehicleAudioHook(void* audio, void*)
 {
     using namespace game::patch::vehicle::detail;
+    // Audio must resolve the local listener, even inside remote vehicle control.
+    auto& current = *reinterpret_cast<std::uint8_t*>(0xB7CD74);
+    const auto savedCurrent = current;
+    current = 0;
     auto* vehicle = static_cast<std::uint8_t*>(audio) - 0x138;
     auto* driver = *reinterpret_cast<std::uint8_t**>(vehicle + 0x460);
     auto* localPed = *reinterpret_cast<void**>(0xB7CD98);
     if (!driver || driver == localPed || !FindSlot(driver))
     {
         originalVehicleAudio(audio);
+        current = savedCurrent;
         return;
     }
 
@@ -119,6 +124,7 @@ void __fastcall VehicleAudioHook(void* audio, void*)
     status = savedStatus;
     type = savedType;
     listener = savedListener;
+    current = savedCurrent;
 }
 
 void __cdecl ShutdownHook()

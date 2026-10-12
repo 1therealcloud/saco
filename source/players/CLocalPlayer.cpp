@@ -247,6 +247,7 @@ void CLocalPlayer::ResetData()
     m_vehicleEntryPending = false;
     m_vehicleExitPending = false;
     m_vehicleTransitionStarted = 0;
+    m_driveByKeyDown = false;
     m_bPassengerDriveBy = FALSE;
     m_bClearedToSpawn = FALSE;
     m_classSelection.m_nSelected = 0;
@@ -1728,6 +1729,9 @@ void CLocalPlayer::Process()
         std::memcpy(&snapshot, internalKeys, sizeof(snapshot));
         ProcessPassengerEntry(snapshot);
     }
+    const bool driveByKeyDown = snapshot.NewState.ShockButtonL != 0;
+    const bool driveByPressed = driveByKeyDown && !m_driveByKeyDown;
+    m_driveByKeyDown = driveByKeyDown;
 
     const TICK now = GetTickCount();
     if (!m_bIsActive && m_pPed->GetDrunkLevel() > 0)
@@ -1798,7 +1802,8 @@ void CLocalPlayer::Process()
     {
         if (m_pPed->IsPassenger())
         {
-            if (!m_bPassengerDriveBy && snapshot.NewState.ShockButtonL && !snapshot.DisablePlayerControls)
+            m_bPassengerDriveBy = m_pPed->IsDoingPassengerDriveBy();
+            if (!m_bPassengerDriveBy && driveByPressed && !snapshot.DisablePlayerControls && !entering && !exiting)
                 m_bPassengerDriveBy = m_pPed->StartPassengerDriveBy();
             if (m_bPassengerDriveBy && (!m_pPed->GetCurrentWeapon() || !m_pPed->HasAmmoForCurrentWeapon()))
             {
