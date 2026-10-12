@@ -14,8 +14,6 @@
 #include "sync/Synchronization.h"
 #include "utils/math/CVector.h"
 
-extern bool g_DLClient;
-
 struct Packet;
 class RakClientInterface;
 

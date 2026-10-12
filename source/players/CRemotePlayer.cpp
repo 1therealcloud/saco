@@ -18,10 +18,7 @@
 #include "utils/math/CQuaternion.h"
 #include "sync/AimStuff.h"
 
-#include <algorithm>
 #include <cmath>
-#include <cstring>
-#include <unordered_map>
 
 namespace
 {

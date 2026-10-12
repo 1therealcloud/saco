@@ -7,6 +7,7 @@
 
 #include "game/Cursor.h"
 #include "net/CNetGame.h"
+#include "net/authentication.h"
 #include "pools/CVehiclePool.h"
 #include "pools/CObjectPool.h"
 #include "players/CLocalPlayer.h"
@@ -358,14 +359,9 @@ namespace render
         g_chatBubble = std::make_unique<CChatBubble>();
         if (!g_settings.m_bDebugMode)
         {
-            if (g_DLClient)
-            {
-                g_chat->AddMessage(0xFFFFFFFFu, "{FFFFFF}SA-MP {B9C9BF}0.3.DL-R1 {FFFFFF}Started.");
-            }
-            else
-            {
-                g_chat->AddMessage(0xFFFFFFFFu, "{FFFFFF}SA-MP {B9C9BF}0.3.7-R5 {FFFFFF}Started.");
-            }
+            const auto version = authentication::client_version_string();
+            const std::string message = "{FFFFFF}SA-MP {B9C9BF}" + std::string(version) + " {FFFFFF}Started.";
+            g_chat->AddMessage(0xFFFFFFFFu, message.c_str());
         }
     }
 

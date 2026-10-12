@@ -8,7 +8,6 @@
 #include "render/CFonts.h"
 #include "render/CRender.h"
 
-#include <algorithm>
 #include <cmath>
 #include <memory>
 

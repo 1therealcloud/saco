@@ -8,11 +8,8 @@
 #include "game/render/textures.h"
 #include "game/RenderWare/RenderWare.h"
 
-#include <array>
 #include <cmath>
 #include <cstdio>
-#include <cstring>
-#include <utility>
 
 namespace
 {

@@ -34,8 +34,6 @@
 // RakNet namespace
 using namespace RakNet;
 
-bool g_DLClient = true;
-
 namespace
 {
     // client -> server

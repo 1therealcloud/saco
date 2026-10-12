@@ -24,6 +24,8 @@ extern saa::Archive g_archive;
 class CGame;
 extern std::unique_ptr<CGame> g_game;
 
+extern bool g_DLClient;
+
 class CNetGame;
 class CNetStats;
 class CSrvNetStats;

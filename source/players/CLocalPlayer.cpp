@@ -35,9 +35,7 @@
 #include <PacketEnumerations.h>
 #include <RakClient.h>
 
-#include <algorithm>
 #include <cmath>
-#include <cstring>
 #include <iterator>
 
 namespace

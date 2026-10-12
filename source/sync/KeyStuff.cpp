@@ -4,10 +4,6 @@
 
 #include "game/CPad.h"
 
-#include <array>
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
 
 namespace KeyStuff
 {

@@ -3,7 +3,7 @@
 #if defined(LEGACY_SPAWN_SCREEN)
 
 #   include "CSpawnScreen.h"
-#   include "main.h"
+#   include "net/authentication.h"
 #   include "CGui.h"
 
 #   include "render/CFonts.h"
@@ -16,7 +16,6 @@
 namespace
 {
     constexpr char kLogoPath[] = "logo.png";
-    constexpr char kVersionText[] = "SA-MP 0.3.7-R5";
 
     constexpr int kLeft = 20;
     constexpr int kBottomMargin = 30;
@@ -256,14 +255,15 @@ void CSpawnScreen::Draw()
         m_pStateBlockSaved->Apply();
     }
 
-    m_pFont->GetTextScreenSize(&size, kVersionText, 0);
+    const std::string versionText = "SA-MP " + std::string(authentication::client_version_string());
+    m_pFont->GetTextScreenSize(&size, versionText.c_str(), 0);
 
     rect.top = rect.bottom;
     rect.bottom = rect.top + size.cy;
     rect.left = static_cast<LONG>(viewport.X) + kLeft + (kLogoWidth - size.cx) / 2;
     rect.right = rect.left + size.cx;
 
-    m_pFont->DrawText(kVersionText, rect, kVersionColor, true);
+    m_pFont->DrawText(versionText.c_str(), rect, kVersionColor, true);
 }
 
 bool CSpawnScreen::LoadLogoTexture()

@@ -8,13 +8,9 @@
 #include "game/render/CLicensePlate.h"
 #include "main.h"
 
-#include <cstring>
 #include <new>
 #include <optional>
-#include <unordered_map>
 #include <cmath>
-#include <utility>
-#include <vector>
 
 namespace
 {

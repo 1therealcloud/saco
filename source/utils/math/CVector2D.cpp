@@ -7,7 +7,6 @@
 #include <stdafx.h>
 #include "CMatrix.h"
 #include <cmath>
-#include <algorithm>
 #include <numbers>
 #include "CVector2D.h"
 #include "CVector.h"

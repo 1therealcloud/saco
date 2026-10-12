@@ -8,7 +8,6 @@
 #include <stdafx.h>
 #include "CMatrix.h"
 #include <cmath>
-#include <algorithm>
 #include <numbers>
 
 #include "CQuaternion.h"

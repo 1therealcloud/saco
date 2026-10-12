@@ -2,8 +2,6 @@
 #   include <stdafx.h>
 #else // SACO_BUILD
 #   include "utils/log.inl"
-#   include <algorithm>
-#   include <cstring>
 #endif // SACO_BUILD
 
 #include "saa.h"

@@ -16,10 +16,7 @@
 
 #include <Psapi.h>
 
-#include <algorithm>
-#include <array>
 #include <cstdio>
-#include <cstring>
 
 #pragma comment(lib, "Psapi.lib")
 

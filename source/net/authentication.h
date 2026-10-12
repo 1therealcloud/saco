@@ -2,7 +2,11 @@
 
 #include <optional>
 
-#include "CNetGame.h"
+#include <cstdint>
+#include <string>
+#include <string_view>
+
+#include "main.h"
 
 namespace saa
 {

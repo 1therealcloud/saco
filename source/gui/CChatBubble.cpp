@@ -10,7 +10,6 @@
 #include "players/CRemotePlayer.h"
 #include "game/entities/CPed.h"
 
-#include <cstring>
 #include <cmath>
 
 namespace

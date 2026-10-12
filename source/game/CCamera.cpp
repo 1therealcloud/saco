@@ -8,7 +8,6 @@
 #include "utils/math/CMatrix.h"
 
 #include <cmath>
-#include <cstdint>
 
 namespace
 {

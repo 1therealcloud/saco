@@ -7,7 +7,6 @@
 #include "render/CFonts.h"
 
 #include <cstdio>
-#include <cstring>
 
 namespace
 {

@@ -1,6 +1,5 @@
 #include <stdafx.h>
 
-#include <mutex>
 #include <shlobj.h> // winapi
 
 #include "main.h"
@@ -39,7 +38,6 @@
 #include "render/render.h"
 
 #include <chrono>
-#include <string_view>
 
 // original samp keys container
 static const std::vector<saa::KeySet> keys = {saa::OfficialKeySet()};
@@ -50,6 +48,8 @@ saa::Archive g_archive;
 // config & settings
 CConfig g_config;
 CSettings g_settings;
+
+bool g_DLClient = true;
 
 std::unique_ptr<CNetGame> g_netGame;   // net game
 CAudioStream* g_audioStream = nullptr; // audiostream

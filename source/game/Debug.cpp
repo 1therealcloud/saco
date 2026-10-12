@@ -15,7 +15,6 @@
 #   include <cerrno>
 #   include <cmath>
 #   include <span>
-#   include <vector>
 #endif // _DEBUG
 
 namespace Debug

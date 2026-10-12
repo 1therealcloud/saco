@@ -5,10 +5,7 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <fstream>
-#include <limits>
-#include <string>
 
 namespace
 {

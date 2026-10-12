@@ -15,8 +15,6 @@
 
 #include <cstdlib>
 #include <cmath>
-#include <algorithm>
-#include <cstring>
 
 namespace
 {

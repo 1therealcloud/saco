@@ -2,13 +2,9 @@
 
 #include "CHttpClient.h"
 
-#include <algorithm>
-#include <array>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
-#include <limits>
 
 namespace
 {

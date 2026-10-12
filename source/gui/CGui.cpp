@@ -4,7 +4,6 @@
 #include "ime.h"
 
 #include <windowsx.h>
-#include <algorithm>
 #include <cmath>
 #include <cwchar>
 #include <cctype>

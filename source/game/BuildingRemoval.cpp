@@ -3,7 +3,6 @@
 #include "patch/hooks.h"
 #include "utils/math/CVector.h"
 #include <cmath>
-#include <vector>
 
 namespace BuildingRemoval
 {

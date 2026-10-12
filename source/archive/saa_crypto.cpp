@@ -2,7 +2,6 @@
 #   include <stdafx.h>
 #else // SACO_BUILD
 #   include "utils/log.inl"
-#   include <algorithm>
 #endif // SACO_BUILD
 
 #include "saa_crypto.h"

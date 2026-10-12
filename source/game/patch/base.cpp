@@ -5,7 +5,6 @@
 #include "hooks.h"
 
 #include <atomic>
-#include <limits>
 
 namespace
 {

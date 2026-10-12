@@ -14,7 +14,6 @@
 #include "sync/AimStuff.h"
 
 #include <new>
-#include <array>
 #include <cmath>
 #include <cstdlib>
 
