@@ -358,4 +358,16 @@ static CVector2D Normalized2D(CVector2D v)
     return v;
 }
 
-#include "CVector2D.inl"
+inline CVector2D CVector2D::RotatedBy(float rad) const
+{
+    const auto s = std::sin(rad), c = std::cos(rad);
+    return {
+        x * c - y * s,
+        x * s - y * c,
+    };
+}
+
+inline bool CVector2D::ApproxEqualTo(CVector2D o, float epsilon)
+{
+    return std::abs(x - o.x) <= epsilon && std::abs(y - o.y) <= epsilon;
+}

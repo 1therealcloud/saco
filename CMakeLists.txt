@@ -120,7 +120,6 @@ add_library(samp SHARED
     source/utils/math/CMatrix.cpp
     source/utils/math/CQuaternion.cpp
     source/utils/math/CRect.cpp
-    source/utils/math/CSimpleTransform.cpp
     source/utils/math/CVector.cpp
     source/utils/math/CVector2D.cpp
 )
