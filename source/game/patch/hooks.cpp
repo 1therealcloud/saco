@@ -289,6 +289,25 @@ namespace
                                                                   {0x872370, nullptr},
                                                                   {0x871C28, nullptr}}};
 
+    bool VehicleUsesNativeVerticalPhysics(const std::uint8_t* vehicle)
+    {
+        auto* matrix = *reinterpret_cast<const CMatrix* const*>(vehicle + 0x14);
+        auto* local = *reinterpret_cast<const std::uint8_t* const*>(0xB7CD98);
+        auto* localMatrix = local ? *reinterpret_cast<const CMatrix* const*>(local + 0x14) : nullptr;
+        if (!matrix || !localMatrix)
+            return false;
+        const auto& position = matrix->GetPosition();
+        const auto& localPosition = localMatrix->GetPosition();
+        const float x = position.x - localPosition.x;
+        const float y = position.y - localPosition.y;
+        if (x * x + y * y >= 40000.0f)
+        {
+            using HasCollisionLoaded = bool(__cdecl*)(const CVector*, int);
+            return reinterpret_cast<HasCollisionLoaded>(0x410CE0)(&position, 0);
+        }
+        return false;
+    }
+
     void __fastcall VehicleControlHook(void* native, void*)
     {
         const auto vtable = *static_cast<const std::uintptr_t*>(native);
@@ -321,7 +340,24 @@ namespace
         AimStuff::UpdateAim();
         AimStuff::ApplyAim(slot);
         current = static_cast<std::uint8_t>(slot);
+        auto* matrix = *reinterpret_cast<const CMatrix* const*>(vehicle + 0x14);
+        const float savedZ = matrix ? matrix->GetPosition().z : 0.0f;
+        const float savedSpeedZ = *reinterpret_cast<const float*>(vehicle + 0x4C);
+        const auto model = *reinterpret_cast<const std::uint16_t*>(vehicle + 0x22);
+        const bool train = model == 538 || model == 537 || model == 449 || model == 569 || model == 570;
+        const bool airOrWater = vtable == 0x8721A0 || vtable == 0x871948 || vtable == 0x871680;
+        const bool preserveZ = matrix && (airOrWater || (!train && !VehicleUsesNativeVerticalPhysics(vehicle)));
         method->original(native);
+        // R5 retains synchronized Z for nearby vehicles, boats and aircraft.
+        if (preserveZ)
+        {
+            auto* updatedMatrix = *reinterpret_cast<CMatrix**>(vehicle + 0x14);
+            if (updatedMatrix)
+            {
+                updatedMatrix->GetPosition().z = savedZ;
+                *reinterpret_cast<float*>(vehicle + 0x4C) = savedSpeedZ;
+            }
+        }
         current = 0;
         KeyStuff::ApplyKeys();
         *AimStuff::RefInternalCameraMode() = savedMode;
