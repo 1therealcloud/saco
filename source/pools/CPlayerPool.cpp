@@ -10,6 +10,8 @@
 
 #include "CPlayerPool.h"
 #include "players/CRemotePlayer.h"
+#include "gui/CChatBubble.h"
+#include "main.h"
 
 #include "game/entities/CObject.h"
 #include "game/entities/CPed.h"
@@ -148,7 +150,11 @@ BOOL CPlayerPool::Delete(ID id, int reason)
     ZoneScoped;
     (void)reason;
 
-    if (id >= MAX_PLAYERS || (!m_bNotEmpty[id] && !m_pObject[id]))
+    if (id >= MAX_PLAYERS)
+        return FALSE;
+    if (g_chatBubble)
+        g_chatBubble->Delete(id);
+    if (!m_bNotEmpty[id] && !m_pObject[id])
         return FALSE;
 
     if (m_localInfo.m_pObject && m_localInfo.m_pObject->m_bDoesSpectating && m_localInfo.m_pObject->m_spectating.m_nType == SPEC_TYPE_PLAYER &&

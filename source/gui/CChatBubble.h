@@ -49,6 +49,8 @@ public:
     CChatBubble& operator=(const CChatBubble&) = delete;
 
     void Add(ID player, const char* text, D3DCOLOR color, float drawDistance, int lifeSpan);
+    void Delete(ID player);
+    void Clear();
     void Draw();
 
 private:

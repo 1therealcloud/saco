@@ -21,6 +21,7 @@
 #include "game/BuildingRemoval.h"
 
 #include "gui/CChat.h"
+#include "gui/CChatBubble.h"
 #include "gui/CDialog.h"
 #include "gui/CObjectEdit.h"
 #include "gui/CObjectSelection.h"
@@ -901,6 +902,8 @@ void CNetGame::Connect()
 // disconnect
 void CNetGame::Disconnect()
 {
+    if (g_chatBubble)
+        g_chatBubble->Clear();
     BuildingRemoval::RestoreAll();
     ResetObjectPool();
     ResetActorPool();
@@ -954,6 +957,8 @@ void CNetGame::Packet_NoFreeIncomingConnections(Packet*)
 void CNetGame::Packet_DisconnectionNotification(Packet*)
 {
     ZoneScoped;
+    if (g_chatBubble)
+        g_chatBubble->Clear();
     BuildingRemoval::RestoreAll();
     g_chat->PrintDebug("Server closed the connection.");
     CSrvNetStats::Reset();
@@ -1006,6 +1011,8 @@ void CNetGame::DeleteMarker(std::uint8_t index)
 void CNetGame::ResetPlayerPool()
 {
     ZoneScoped;
+    if (g_chatBubble)
+        g_chatBubble->Clear();
     Log("[CNetGame::ResetPlayerPool]");
     if (!m_pPools)
         return;
@@ -1284,6 +1291,8 @@ void CNetGame::ResetPools()
 void CNetGame::ShutdownForRestart()
 {
     ZoneScoped;
+    if (g_chatBubble)
+        g_chatBubble->Clear();
     Log("[CNetGame::ShutdownForRestart] starting");
     if (!m_pSettings)
         return;
@@ -1371,6 +1380,8 @@ void CNetGame::Packet_VehicleSync(Packet* packet)
 void CNetGame::Packet_ConnectionLost(Packet*)
 {
     ZoneScoped;
+    if (g_chatBubble)
+        g_chatBubble->Clear();
     BuildingRemoval::RestoreAll();
     g_chat->PrintDebug("Connection to the server was lost. Reconnecting...");
     CSrvNetStats::Reset();

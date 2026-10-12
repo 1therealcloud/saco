@@ -123,6 +123,22 @@ void CChatBubble::Add(ID player, const char* text, D3DCOLOR color, float drawDis
     m_activeIds.insert(std::lower_bound(m_activeIds.begin(), m_activeIds.end(), player), player);
 }
 
+void CChatBubble::Delete(ID player)
+{
+    if (player >= MAX_PLAYERS)
+        return;
+    m_player[player] = {};
+    const auto active = std::lower_bound(m_activeIds.begin(), m_activeIds.end(), player);
+    if (active != m_activeIds.end() && *active == player)
+        m_activeIds.erase(active);
+}
+
+void CChatBubble::Clear()
+{
+    std::memset(m_player, 0, sizeof(m_player));
+    m_activeIds.clear();
+}
+
 void CChatBubble::Draw()
 {
     ZoneScoped;
