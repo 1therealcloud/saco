@@ -735,10 +735,27 @@ void RPCHandlers::ScmEvent(RPCParameters* pParams)
             else
                 pool->QueueColors(static_cast<CVehiclePool::ID>(vehicleId), static_cast<unsigned char>(param1), static_cast<unsigned char>(param2));
             break;
+        case 4: // modshop entry/exit for the local passenger
+        {
+            auto* players = g_netGame ? g_netGame->GetPlayerPool() : nullptr;
+            auto* remote = players ? players->GetPlayer(playerId) : nullptr;
+            auto* local = players ? players->GetLocalPlayer() : nullptr;
+            auto* driver = remote ? remote->m_pPed : nullptr;
+            auto* passenger = local ? local->m_pPed : nullptr;
+            if (!vehicle || !driver || !passenger || !driver->HasNativePed() || !passenger->HasNativePed() || !driver->IsInVehicle() || !passenger->IsInVehicle() ||
+                driver->IsPassenger() || !passenger->IsPassenger() || driver->GetVehicle() != passenger->GetVehicle())
+                break;
+
+            const int interior = param1 ? static_cast<unsigned char>(param2) : 0;
+            if (remote->m_pVehicle)
+                remote->m_pVehicle->ChangeInterior(interior);
+            passenger->LinkToInterior(static_cast<char>(interior), FALSE);
+            passenger->SetControllable(param1 ? FALSE : TRUE);
+            break;
+        }
         default:
             break;
     }
-    (void)playerId;
 }
 
 // -----------------------------------------------------------------------------
@@ -3808,8 +3825,6 @@ void RPCHandlers::SetCameraBehind(RPCParameters* pParams)
         return;
 
     camera->Restore();
-
-    // TODO: apply decoded RPC to the game state.
 }
 
 // -----------------------------------------------------------------------------
