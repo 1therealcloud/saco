@@ -147,6 +147,10 @@ public:
     void PutIntoVehicle(std::uint32_t vehicle, int seat);
     void EnterVehicle(std::uint32_t vehicle, BOOL asPassenger);
     void ExitVehicle();
+    bool StartPassengerDriveBy();
+    bool IsDoingPassengerDriveBy() const;
+    void StopPassengerDriveBy();
+    bool HasAmmoForCurrentWeapon() const;
     void WarpFromVehicle(CVector putAt);
 
     void SetSpawnInfo(const CVector* position, float rotation);

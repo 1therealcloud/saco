@@ -1153,6 +1153,11 @@ void CRemotePlayer::Process()
         }
         else if (m_nState == PLAYER_STATE_PASSENGER && actualSeat == m_nSeatId && actualSeat >= 1 && actualSeat <= 7)
         {
+            ApplyOnfootWeapon(m_pPed, m_passengerData.m_nCurrentWeapon & 0x3F);
+            if (m_bPassengerDriveBy && !m_pPed->IsDoingPassengerDriveBy())
+                m_pPed->StartPassengerDriveBy();
+            else if (!m_bPassengerDriveBy && m_pPed->IsDoingPassengerDriveBy())
+                m_pPed->StopPassengerDriveBy();
             m_pPed->SetKeys(m_passengerData.m_controllerState.m_value, 0, 0);
         }
     }

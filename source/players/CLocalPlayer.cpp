@@ -1790,6 +1790,13 @@ void CLocalPlayer::Process()
     {
         if (m_pPed->IsPassenger())
         {
+            if (!m_bPassengerDriveBy && snapshot.NewState.ShockButtonL && !snapshot.DisablePlayerControls)
+                m_bPassengerDriveBy = m_pPed->StartPassengerDriveBy();
+            if (m_bPassengerDriveBy && (!m_pPed->GetCurrentWeapon() || !m_pPed->HasAmmoForCurrentWeapon()))
+            {
+                m_pPed->StopPassengerDriveBy();
+                m_bPassengerDriveBy = FALSE;
+            }
             if (now - m_lastUpdate > static_cast<TICK>(GetIncarSendRate()))
             {
                 m_lastUpdate = now;
@@ -1798,6 +1805,7 @@ void CLocalPlayer::Process()
         }
         else
         {
+            m_bPassengerDriveBy = FALSE;
             ProcessIncarWorldBounds();
             if (g_netGame)
             {
@@ -1812,10 +1820,10 @@ void CLocalPlayer::Process()
                 SendIncarData();
             }
         }
-        m_bPassengerDriveBy = FALSE;
     }
     else
     {
+        m_bPassengerDriveBy = FALSE;
         ProcessOnfootWorldBounds();
         ProcessSurfing();
         ProcessHead();

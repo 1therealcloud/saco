@@ -35,6 +35,7 @@ namespace
     constexpr scm::OpcodeInfo WARP_ACTOR_INTO_CAR_AS_PASSENGER{0x0430, "iii"};
     constexpr scm::OpcodeInfo TASK_ENTER_CAR_AS_DRIVER{0x05CB, "iii"};
     constexpr scm::OpcodeInfo TASK_ENTER_CAR_AS_PASSENGER{0x05CA, "iiii"};
+    constexpr scm::OpcodeInfo PASSENGER_DRIVE_BY{0x0713, "iiiffffiii"};
     constexpr scm::OpcodeInfo TASK_LEAVE_CAR{0x05CD, "ii"};
     constexpr scm::OpcodeInfo WARP_ACTOR_FROM_CAR{0x0362, "ifff"};
     constexpr scm::OpcodeInfo TOGGLE_PLAYER_CONTROLLABLE{0x01B4, "ii"};
@@ -496,6 +497,59 @@ void CPed::ExitVehicle()
     const auto ref = VehicleHandleFromPointer(vehicle);
     if (ref)
         scm::ProcessCommand(&TASK_LEAVE_CAR, m_handle, ref);
+}
+
+bool CPed::StartPassengerDriveBy()
+{
+    if (!HasCurrentNativePed() || !IsInVehicle() || GetVehicleSeatIndex() <= 0 || !GetVehicle())
+        return false;
+    const auto weapon = GetCurrentWeapon();
+    if (weapon == 46)
+    {
+        SetArmedWeapon(0);
+        return false;
+    }
+    SetArmedWeapon(weapon);
+    scm::ProcessCommand(&PASSENGER_DRIVE_BY, m_handle, -1, -1, 0.0, 0.0, 0.0, 300.0, 8, 1, 20);
+    return true;
+}
+
+bool CPed::IsDoingPassengerDriveBy() const
+{
+    if (!HasCurrentNativePed())
+        return false;
+    auto* intelligence = Read<void*>(m_pGamePed, 0x47C);
+    auto* task = Read<void*>(intelligence, 0x10);
+    if (!task)
+        return false;
+    const auto vtable = Read<std::uintptr_t>(task, 0);
+    if (vtable < 0x800000 || vtable > 0x900000)
+        return false;
+    using TaskTypeFn = int(__thiscall*)(void*);
+    return reinterpret_cast<TaskTypeFn>(Read<std::uintptr_t>(reinterpret_cast<void*>(vtable), 0x10))(task) == 1022;
+}
+
+void CPed::StopPassengerDriveBy()
+{
+    if (!IsDoingPassengerDriveBy())
+        return;
+    auto* intelligence = Read<void*>(m_pGamePed, 0x47C);
+    auto* task = Read<void*>(intelligence, 0x10);
+    // R5 deletes only the gang drive-by task (0x3FE).
+    reinterpret_cast<void(__thiscall*)(void*, int)>(0x6275E0)(task, 1);
+    Write<void*>(intelligence, 0x10, nullptr);
+}
+
+bool CPed::HasAmmoForCurrentWeapon() const
+{
+    if (!HasCurrentNativePed())
+        return false;
+    const auto slot = Read<std::uint8_t>(m_pGamePed, 0x718);
+    if (slot >= 13)
+        return false;
+    const auto* weapon = static_cast<const std::uint8_t*>(m_pGamePed) + 0x5A0 + slot * 0x1C;
+    const int type = Read<int>(weapon, 0);
+    return type <= 15 || type == 46 || Read<std::uint32_t>(weapon, 0x0C) != 0;
 }
 
 void CPed::WarpFromVehicle(CVector putAt)
