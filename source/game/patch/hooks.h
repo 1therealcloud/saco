@@ -38,6 +38,7 @@ bool __cdecl CameraToIgnoreObjectHook(void* entity);
 namespace game::hooks
 {
     bool InstallRenderHooks();
+    extern void* crimeReportPed;
 
     using DrawFn = void(__cdecl*)();
     using LoadInstanceFn = void*(__cdecl*)(void*, const char*);
@@ -53,6 +54,8 @@ namespace game::hooks
     extern ObjectRenderFn g_originalRender;
     extern CameraIgnoreFn g_originalCameraIgnore;
 }
+
+void* __cdecl CrimeReportPedHook(int player);
 
 void EmptyVertexStreamAllocateHook();
 void EmptyVertexStreamLockHook();

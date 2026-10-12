@@ -28,6 +28,16 @@
 #include "players/CRemotePlayer.h"
 #include <intrin.h>
 
+namespace game::hooks
+{
+    void* crimeReportPed = nullptr;
+}
+
+void* __cdecl CrimeReportPedHook(int)
+{
+    return game::hooks::crimeReportPed;
+}
+
 using namespace game::patch::fps;
 using namespace game::players::detail;
 using namespace game::patch::hudscalefix::detail;

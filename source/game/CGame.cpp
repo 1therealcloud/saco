@@ -472,7 +472,7 @@ int CGame::GetPlayerMoney()
     return Mem<int>(0xB7CE50);
 }
 
-void CGame::PlayCrimeReport(int crime, const CVector* position, int, int, int)
+void CGame::PlayCrimeReport(int crime, const CVector* position, int inVehicle, int vehicleModel, int vehicleColor)
 {
     if (!position || crime < 2 || crime > 22)
         return;
@@ -489,16 +489,43 @@ void CGame::PlayCrimeReport(int crime, const CVector* position, int, int, int)
     if (!wanted)
         return;
 
-    constexpr std::uintptr_t scannerPatch = 0x4E7529;
-    constexpr std::size_t scannerPatchSize = 39;
-    std::array<std::uint8_t, scannerPatchSize> original{};
-    if (!patch::read(scannerPatch, original.data(), original.size()))
-        return;
-    if (!patch::nop(scannerPatch, scannerPatchSize))
-        return;
+    // R5 supplies a temporary ped so the scanner describes the RPC vehicle,
+    // independently of the vehicle currently occupied by the local player.
+    alignas(16) std::array<std::uint8_t, 0x7A0> reportPed{};
+    std::unique_ptr<CVehicle> vehicle;
+    if (inVehicle && vehicleModel >= 400 && vehicleModel < 612)
+    {
+        vehicle = std::make_unique<CVehicle>(vehicleModel, CVector{}, 0.0f, FALSE, FALSE);
+        if (vehicle->HasNativeVehicle())
+        {
+            vehicle->SetColor(static_cast<unsigned char>(vehicleColor), 255);
+            vehicle->Remove();
+            auto* nativeVehicle = vehicle->GetNativeVehicleHandle();
+            std::memcpy(reportPed.data() + 0x58C, &nativeVehicle, sizeof(nativeVehicle));
+            const std::uint32_t inVehicleFlag = 0x100;
+            std::memcpy(reportPed.data() + 0x46C, &inVehicleFlag, sizeof(inVehicleFlag));
+        }
+    }
 
+    constexpr std::uintptr_t scannerPatch = 0x4E7529;
+    constexpr std::uintptr_t pedCall = 0x4E7427;
+    std::array<std::uint8_t, 39> original{};
+    std::array<std::uint8_t, 5> originalCall{};
+    if (!patch::read(scannerPatch, original.data(), original.size()) || !patch::read(pedCall, originalCall.data(), originalCall.size()))
+        return;
+    if (!patch::nop(scannerPatch, original.size()))
+        return;
+    if (!patch::call(pedCall, reinterpret_cast<const void*>(&CrimeReportPedHook)))
+    {
+        patch::write(scannerPatch, original.data(), original.size());
+        return;
+    }
+
+    game::hooks::crimeReportPed = reportPed.data();
     auto* scanner = static_cast<std::uint8_t*>(wanted) + 0x21C;
     reinterpret_cast<void(__thiscall*)(void*, int, int, const CVector*)>(0x4E71E0)(scanner, 0xA4, crime, position);
+    patch::write(pedCall, originalCall.data(), originalCall.size());
+    game::hooks::crimeReportPed = nullptr;
     patch::write(scannerPatch, original.data(), original.size());
 }
 

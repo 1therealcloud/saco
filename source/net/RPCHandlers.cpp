@@ -3268,7 +3268,11 @@ void RPCHandlers::PlayCrimeReport(RPCParameters* pParams)
     if (!bs.Read(z))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (!g_game || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z))
+        return;
+
+    const CVector position{x, y, z};
+    g_game->PlayCrimeReport(static_cast<int>(crime), &position, static_cast<int>(inVehicle), static_cast<int>(vehicleModel), static_cast<int>(vehicleColor));
 }
 
 // -----------------------------------------------------------------------------
