@@ -33,13 +33,14 @@ public:
     class Batch
     {
     public:
-        explicit Batch(CFont* font);
+        explicit Batch(CFont* font, bool renderToTexture = false);
         ~Batch();
         Batch(const Batch&) = delete;
         Batch& operator=(const Batch&) = delete;
 
     private:
         CFont* m_font;
+        bool m_previousRenderToTexture = false;
     };
 
     bool IsValid() const;
@@ -126,6 +127,9 @@ private:
         DWORD srcBlend = 0;
         DWORD destBlend = 0;
         DWORD separateAlphaBlendEnable = 0;
+        DWORD srcBlendAlpha = 0;
+        DWORD destBlendAlpha = 0;
+        DWORD blendOpAlpha = 0;
         DWORD alphaTestEnable = 0;
         DWORD zEnable = 0;
         DWORD zWriteEnable = 0;
@@ -220,6 +224,7 @@ private:
     std::size_t m_vertexOffset = 0;
 
     unsigned int m_batchDepth = 0;
+    bool m_renderToTexture = false;
     D3DBLEND m_batchDestBlend = D3DBLEND_INVSRCALPHA;
     std::vector<Vertex> m_batchVertices;
     std::vector<Vertex> m_vertices;

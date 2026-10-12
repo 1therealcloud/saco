@@ -882,6 +882,12 @@ void CFont::SaveState(SavedState& state) const
     m_device->GetRenderState(D3DRS_SRCBLEND, &state.srcBlend);
     m_device->GetRenderState(D3DRS_DESTBLEND, &state.destBlend);
     m_device->GetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, &state.separateAlphaBlendEnable);
+    if (m_renderToTexture)
+    {
+        m_device->GetRenderState(D3DRS_SRCBLENDALPHA, &state.srcBlendAlpha);
+        m_device->GetRenderState(D3DRS_DESTBLENDALPHA, &state.destBlendAlpha);
+        m_device->GetRenderState(D3DRS_BLENDOPALPHA, &state.blendOpAlpha);
+    }
     m_device->GetRenderState(D3DRS_ALPHATESTENABLE, &state.alphaTestEnable);
     m_device->GetRenderState(D3DRS_ZENABLE, &state.zEnable);
     m_device->GetRenderState(D3DRS_ZWRITEENABLE, &state.zWriteEnable);
@@ -920,7 +926,13 @@ void CFont::ApplyFontState(const RECT* clipRect, bool clip, D3DBLEND destBlend) 
     m_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
     m_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
     m_device->SetRenderState(D3DRS_DESTBLEND, destBlend);
-    m_device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+    m_device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, m_renderToTexture ? TRUE : FALSE);
+    if (m_renderToTexture)
+    {
+        m_device->SetRenderState(D3DRS_SRCBLENDALPHA, D3DBLEND_ONE);
+        m_device->SetRenderState(D3DRS_DESTBLENDALPHA, D3DBLEND_INVSRCALPHA);
+        m_device->SetRenderState(D3DRS_BLENDOPALPHA, D3DBLENDOP_ADD);
+    }
     m_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
     m_device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
     m_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
@@ -976,6 +988,12 @@ void CFont::RestoreState(SavedState& state) const
     m_device->SetRenderState(D3DRS_SRCBLEND, state.srcBlend);
     m_device->SetRenderState(D3DRS_DESTBLEND, state.destBlend);
     m_device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, state.separateAlphaBlendEnable);
+    if (m_renderToTexture)
+    {
+        m_device->SetRenderState(D3DRS_SRCBLENDALPHA, state.srcBlendAlpha);
+        m_device->SetRenderState(D3DRS_DESTBLENDALPHA, state.destBlendAlpha);
+        m_device->SetRenderState(D3DRS_BLENDOPALPHA, state.blendOpAlpha);
+    }
     m_device->SetRenderState(D3DRS_ALPHATESTENABLE, state.alphaTestEnable);
     m_device->SetRenderState(D3DRS_ZENABLE, state.zEnable);
     m_device->SetRenderState(D3DRS_ZWRITEENABLE, state.zWriteEnable);
@@ -1007,16 +1025,26 @@ void CFont::RestoreState(SavedState& state) const
     SafeRelease(state.declaration);
 }
 
-CFont::Batch::Batch(CFont* font) : m_font(font)
+CFont::Batch::Batch(CFont* font, bool renderToTexture) : m_font(font)
 {
     if (m_font)
+    {
+        m_previousRenderToTexture = m_font->m_renderToTexture;
+        if (m_previousRenderToTexture != renderToTexture)
+            m_font->FlushBatch();
+        m_font->m_renderToTexture = renderToTexture;
         ++m_font->m_batchDepth;
+    }
 }
 
 CFont::Batch::~Batch()
 {
-    if (m_font && --m_font->m_batchDepth == 0)
-        m_font->FlushBatch();
+    if (m_font)
+    {
+        if (--m_font->m_batchDepth == 0 || m_previousRenderToTexture != m_font->m_renderToTexture)
+            m_font->FlushBatch();
+        m_font->m_renderToTexture = m_previousRenderToTexture;
+    }
 }
 
 void CFont::FlushBatch()

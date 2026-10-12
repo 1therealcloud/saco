@@ -9,6 +9,7 @@
 
 class CConfig;
 class CFonts;
+class CFont;
 namespace cgui
 {
     class Dialog;
@@ -140,6 +141,15 @@ public:
     std::size_t GetEntryCount() const;
 
 private:
+    IDirect3DStateBlock9* m_cacheState;
+    UINT m_cacheWidth, m_cacheHeight;
+    int m_cacheMode;
+    unsigned int m_cachePageSize;
+    bool m_cacheTimestamps;
+    bool m_cacheUnavailable;
+    CFont* m_cacheFont;
+    bool DrawCached();
+    void DrawMessages(bool renderToTexture);
     void Initialize(IDirect3DDevice9* device, CFonts* fontRenderer, const char* logPath, const CConfig* config);
     void ApplyConfig(const CConfig* config);
     void PrintV(int type, D3DCOLOR color, const char* format, va_list args);

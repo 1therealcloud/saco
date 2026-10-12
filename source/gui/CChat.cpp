@@ -131,6 +131,7 @@ void CChat::SwitchMode()
 void CChat::RecalcFontSize()
 {
     ZoneScoped;
+    m_bRedraw = TRUE;
     m_nCharHeight = 0;
     m_nTimestampWidth = 0;
 
@@ -149,8 +150,11 @@ void CChat::RecalcFontSize()
 void CChat::OnLostDevice()
 {
     ZoneScoped;
-    // Original R5 releases render-to-surface resources here. This build has no
-    // chat-owned D3DX resources, but keeps the same state transitions.
+    if (m_cacheState)
+    {
+        m_cacheState->Release();
+        m_cacheState = nullptr;
+    }
     if (m_pSurface)
     {
         m_pSurface->Release();
@@ -166,6 +170,8 @@ void CChat::OnLostDevice()
     m_pTextSprite = nullptr;
     m_pSprite = nullptr;
     m_bRenderToSurface = FALSE;
+    m_cacheWidth = m_cacheHeight = 0;
+    m_cacheFont = nullptr;
     m_bRedraw = TRUE;
 }
 
@@ -173,6 +179,7 @@ void CChat::OnResetDevice()
 {
     ZoneScoped;
     m_bRenderToSurface = FALSE;
+    m_cacheUnavailable = false;
 
     if (m_pDevice)
         m_pDevice->GetDisplayMode(0, &m_displayMode);
@@ -329,6 +336,7 @@ void CChat::PushBack()
     }
     layouts.back().dirty = true;
     std::memmove(&m_entry[0], &m_entry[1], sizeof(ChatEntry) * (MAX_MESSAGES - 1));
+    m_bRedraw = TRUE;
 }
 
 void CChat::RenderEntry(const char* text, RECT rect, D3DCOLOR color)
@@ -389,8 +397,6 @@ void CChat::Render()
     if (m_nMode == DISPLAY_MODE_OFF)
         return;
 
-    // In R5 Draw() chooses cached render-to-surface or direct mode. Our renderer
-    // is already direct, so Render() is the equivalent final path.
     Draw();
 }
 
@@ -566,7 +572,14 @@ void CChat::Draw()
     if (m_nMode == DISPLAY_MODE_OFF || !m_pFontRenderer || m_nPageSize == 0)
         return;
 
-    CFont::Batch batch(m_pFontRenderer->GetFont());
+    if (!DrawCached())
+        DrawMessages(false);
+}
+
+void CChat::DrawMessages(bool renderToTexture)
+{
+    ZoneScoped;
+    CFont::Batch batch(m_pFontRenderer->GetFont(), renderToTexture);
 
     long position = m_nScrollbarPos;
     if (position < 1)
@@ -592,18 +605,133 @@ void CChat::Draw()
     m_nWindowBottom = bottom;
 }
 
+bool CChat::DrawCached()
+{
+    ZoneScoped;
+    if (m_cacheUnavailable || !m_pDevice || !m_pFontRenderer->GetFont() || !m_pFontRenderer->GetFont()->IsValid())
+        return false;
+
+    D3DVIEWPORT9 viewport{};
+    if (FAILED(m_pDevice->GetViewport(&viewport)) || !viewport.Width || !viewport.Height || viewport.X || viewport.Y)
+        return false;
+    const UINT height = std::min<UINT>(viewport.Height, kChatTop + (m_nCharHeight + 1) * m_nPageSize + 4);
+    if (m_cacheWidth != viewport.Width || m_cacheHeight != height)
+    {
+        OnLostDevice();
+        D3DCAPS9 caps{};
+        if (FAILED(m_pDevice->GetDeviceCaps(&caps)) || !(caps.PrimitiveMiscCaps & D3DPMISCCAPS_SEPARATEALPHABLEND))
+        {
+            m_cacheUnavailable = true;
+            return false;
+        }
+        if (FAILED(m_pDevice->CreateTexture(viewport.Width, height, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_pTexture, nullptr)))
+        {
+            m_cacheUnavailable = true;
+            return false;
+        }
+        if (FAILED(m_pTexture->GetSurfaceLevel(0, &m_pSurface)))
+        {
+            OnLostDevice();
+            m_cacheUnavailable = true;
+            return false;
+        }
+        m_cacheWidth = viewport.Width;
+        m_cacheHeight = height;
+        m_bRenderToSurface = TRUE;
+    }
+    if (!m_cacheState && FAILED(m_pDevice->CreateStateBlock(D3DSBT_ALL, &m_cacheState)))
+        return false;
+    if (FAILED(m_cacheState->Capture()))
+        return false;
+
+    if (m_bRedraw || m_pad[1] != m_nScrollbarPos || m_cacheMode != m_nMode || m_cachePageSize != m_nPageSize || m_cacheTimestamps != m_bTimestamps ||
+        m_cacheFont != m_pFontRenderer->GetFont())
+    {
+        ZoneScopedN("Chat cache: redraw");
+        IDirect3DSurface9* target = nullptr;
+        IDirect3DSurface9* depth = nullptr;
+        if (FAILED(m_pDevice->GetRenderTarget(0, &target)))
+            return false;
+        const HRESULT depthResult = m_pDevice->GetDepthStencilSurface(&depth);
+        if (FAILED(depthResult) && depthResult != D3DERR_NOTFOUND)
+        {
+            target->Release();
+            return false;
+        }
+        // Text is cached at full opacity with premultiplied RGB and coverage alpha.
+        const float opacity = ui::opacity;
+        ui::opacity = 1.0f;
+        D3DVIEWPORT9 cacheViewport{0, 0, m_cacheWidth, m_cacheHeight, 0.0f, 1.0f};
+        bool rendered = SUCCEEDED(m_pDevice->SetDepthStencilSurface(nullptr)) && SUCCEEDED(m_pDevice->SetRenderTarget(0, m_pSurface)) &&
+                        SUCCEEDED(m_pDevice->SetViewport(&cacheViewport)) && SUCCEEDED(m_pDevice->Clear(0, nullptr, D3DCLEAR_TARGET, 0, 1.0f, 0));
+        if (rendered)
+            DrawMessages(true);
+        ui::opacity = opacity;
+        const HRESULT restoreTarget = m_pDevice->SetRenderTarget(0, target);
+        const HRESULT restoreDepth = m_pDevice->SetDepthStencilSurface(depth);
+        target->Release();
+        if (depth)
+            depth->Release();
+        const HRESULT restoreState = m_cacheState->Apply();
+        if (!rendered || FAILED(restoreTarget) || FAILED(restoreDepth) || FAILED(restoreState) || FAILED(m_pDevice->SetViewport(&viewport)))
+            return false;
+        m_bRedraw = FALSE;
+        m_pad[1] = m_nScrollbarPos;
+        m_cacheMode = m_nMode;
+        m_cachePageSize = m_nPageSize;
+        m_cacheTimestamps = m_bTimestamps;
+        m_cacheFont = m_pFontRenderer->GetFont();
+    }
+
+    struct Vertex
+    {
+        float x, y, z, rhw;
+        D3DCOLOR color;
+        float u, v;
+    };
+    const auto alpha = static_cast<unsigned int>(std::clamp(ui::opacity, 0.0f, 1.0f) * 255.0f + 0.5f);
+    const D3DCOLOR color = D3DCOLOR_ARGB(alpha, alpha, alpha, alpha);
+    const float right = static_cast<float>(m_cacheWidth) - 0.5f;
+    const float bottom = static_cast<float>(m_cacheHeight) - 0.5f;
+    const Vertex vertices[] = {{-0.5f, -0.5f, 0, 1, color, 0, 0}, {right, -0.5f, 0, 1, color, 1, 0}, {-0.5f, bottom, 0, 1, color, 0, 1}, {right, bottom, 0, 1, color, 1, 1}};
+    m_pDevice->SetVertexShader(nullptr);
+    m_pDevice->SetPixelShader(nullptr);
+    m_pDevice->SetFVF(D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_TEX1);
+    m_pDevice->SetTexture(0, m_pTexture);
+    m_pDevice->SetTexture(1, nullptr);
+    m_pDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+    m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+    m_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+    m_pDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+    m_pDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
+    m_pDevice->SetRenderState(D3DRS_FOGENABLE, FALSE);
+    m_pDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+    m_pDevice->SetRenderState(D3DRS_COLORWRITEENABLE, 0x0F);
+    m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+    m_pDevice->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+    m_pDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+    m_pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+    m_pDevice->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+    m_pDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+    m_pDevice->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+    m_pDevice->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+    m_pDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
+    m_pDevice->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+    m_pDevice->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
+    m_pDevice->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+    m_pDevice->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+    m_pDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+    m_pDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+    m_pDevice->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+    const HRESULT result = m_pDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, vertices, sizeof(Vertex));
+    m_cacheState->Apply();
+    return SUCCEEDED(result);
+}
+
 void CChat::RenderToSurface()
 {
     ZoneScoped;
-    // Behavioural replacement for the R5 cache: redraw only when dirty or when
-    // the logical scrollbar changed. Drawing itself stays on our direct font path.
-    if (m_nMode == DISPLAY_MODE_OFF)
-        return;
-
-    // No cached texture in our renderer: redraw on every frame.
     Draw();
-    m_bRedraw = FALSE;
-    m_pad[1] = m_nScrollbarPos;
 }
 
 void CChat::AddChatMessage(const char* prefix, D3DCOLOR prefixColor, char* text)
