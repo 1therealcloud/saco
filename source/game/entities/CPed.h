@@ -214,6 +214,7 @@ public:
     void StopUrinating();
     BOOL DoesUrinating() const;
 
+    void SetShopName(const char* name);
     const char* GetLoadedShoppingDataSubsection() const;
     void LoadShoppingDataSubsection(const char* name);
 

@@ -20,6 +20,8 @@
 
 namespace
 {
+    std::array<char, 32> g_shopName{};
+
     constexpr float RADIANS = 0.017453292f;
     constexpr float DEGREES = 57.295776f;
 
@@ -1127,6 +1129,25 @@ BOOL CPed::DoesUrinating() const
     return m_bDoesUrinating != FALSE;
 }
 
+void CPed::SetShopName(const char* name)
+{
+    if (!HasCurrentNativePed())
+        return;
+    if (!name || !*name)
+    {
+        Write<const char*>(m_pGamePed, 0x78C, nullptr);
+        return;
+    }
+    const auto length = std::strlen(name);
+    if (length >= g_shopName.size())
+        return;
+
+    // GTA retains this pointer; R5 uses a shared buffer with process lifetime.
+    g_shopName.fill(0);
+    std::memcpy(g_shopName.data(), name, length);
+    Write<const char*>(m_pGamePed, 0x78C, g_shopName.data());
+}
+
 const char* CPed::GetLoadedShoppingDataSubsection() const
 {
     return reinterpret_cast<const char*>(0xA9A7D8);
@@ -1134,7 +1155,7 @@ const char* CPed::GetLoadedShoppingDataSubsection() const
 
 void CPed::LoadShoppingDataSubsection(const char* name)
 {
-    if (!name || !*name)
+    if (!name || std::strlen(name) > 8)
         return;
     reinterpret_cast<void(__cdecl*)(const char*)>(0x49BBE0)(name);
 }

@@ -4140,25 +4140,23 @@ void RPCHandlers::SendDeathMessage(RPCParameters* pParams)
 
 // -----------------------------------------------------------------------------
 // RPC 33: SetShopName
-// Payload (wire order):
-//   char[32] name - Fixed 32-byte shop/interior name buffer.
-// Note: The DL DLL reads a fixed 32-byte string here; this is more precise than the wiki length/string presentation.
+// Payload: fixed 32-byte shop name buffer, as read by R5 and DL.
 void RPCHandlers::SetShopName(RPCParameters* pParams)
 {
-    if (!pParams || !pParams->input)
+    if (!pParams || !pParams->input || pParams->numberOfBitsOfData < 32u * 8u)
         return;
 
     BitStream bs(pParams->input, BITS_TO_BYTES(pParams->numberOfBitsOfData), false);
-
-    std::array<char, 32> name{};
-
-    std::uint32_t length{};
-    if (!bs.Read(length) || length >= name.size() || bs.GetNumberOfUnreadBits() < length * 8u)
-        return;
-    if (length && !bs.Read(name.data(), static_cast<int>(length)))
+    std::array<char, 33> name{};
+    if (!bs.Read(name.data(), 32))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    auto* ped = g_game ? g_game->GetPlayerPed() : nullptr;
+    if (!ped)
+        return;
+
+    ped->SetShopName(name[0] ? name.data() : nullptr);
+    ped->LoadShoppingDataSubsection(name.data());
 }
 
 // -----------------------------------------------------------------------------
