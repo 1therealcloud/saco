@@ -46,6 +46,7 @@ namespace
     constexpr scm::OpcodeInfo MODEL_AVAILABLE{0x0248, "i"};
     constexpr scm::OpcodeInfo RELEASE_MODEL{0x0249, "i"};
     constexpr scm::OpcodeInfo SET_TIME{0x00C0, "ii"};
+    constexpr scm::OpcodeInfo TOGGLE_WIDESCREEN{0x02A3, "i"};
     constexpr scm::OpcodeInfo CREATE_EXPLOSION{0x0948, "fffif"};
     constexpr scm::OpcodeInfo TRAIN_TRAFFIC{0x06D7, "i"};
     constexpr scm::OpcodeInfo REFRESH_RENDERER{0x04E4, "ff"};
@@ -1019,6 +1020,11 @@ void CGame::SetHeadMoves(BOOL enable)
         if (auto* ped = GetPlayerPed())
             ped->StopLooking();
     m_bHeadMove = enable ? TRUE : FALSE;
+}
+
+void CGame::ToggleWidescreen(bool enable)
+{
+    scm::ProcessCommand(&TOGGLE_WIDESCREEN, enable ? 1 : 0);
 }
 
 void CGame::EnableClock(bool enable)

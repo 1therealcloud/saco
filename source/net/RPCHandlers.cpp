@@ -3220,7 +3220,8 @@ void RPCHandlers::ToggleWidescreen(RPCParameters* pParams)
     if (!bs.Read(enabled))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (g_game)
+        g_game->ToggleWidescreen(enabled != 0);
 }
 
 // -----------------------------------------------------------------------------

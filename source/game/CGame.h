@@ -156,7 +156,8 @@ public:
     CCamera* GetCamera();                                                                            // 0x2D30
     BOOL DoesHeadMoves();                                                                            // 0x2D40
     void SetHeadMoves(BOOL enable);
-    void EnableClock(bool enable);                                                                                       // 0xA1460
+    void EnableClock(bool enable); // 0xA1460
+    void ToggleWidescreen(bool enable);
     void Sleep(int elapsed, int fpsLimit);                                                                               // 0xA0090
     CPed* CreatePed(int model, CVector position, float rotation, int a6, int a7);                                        // 0xA0110
     BOOL RemovePed(CPed* ped);                                                                                           // 0xA0210
