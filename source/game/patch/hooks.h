@@ -17,6 +17,7 @@ void __fastcall ProcessControlHook(void* ped, void*);
 std::uint32_t __fastcall WeaponSkillHook(void* ped, void*);
 void __cdecl DrawRadarHook();
 void __cdecl DrawCrossHairsHook();
+std::uint32_t __cdecl RadarTraceColorHook(std::uint32_t color, bool bright, bool friendly);
 
 void PickupCollectedHook();
 void NegativeModelGuardHook();
@@ -47,6 +48,8 @@ namespace game::hooks
     using MenuTextFn = const char*(__thiscall*)(void*, const char*);
     using ObjectRenderFn = void(__cdecl*)(void*);
     using CameraIgnoreFn = bool(__cdecl*)(void*);
+    using RadarColorFn = std::uint32_t(__cdecl*)(std::uint32_t, bool, bool);
+    extern RadarColorFn g_radarColor;
     extern DrawFn g_world, g_fading, g_text;
     extern LoadInstanceFn originalLoad;
     extern DestroyEntityFn originalDestroy;

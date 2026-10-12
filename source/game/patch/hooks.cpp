@@ -23,6 +23,7 @@
 #include "sync/AimStuff.h"
 #include "sync/KeyStuff.h"
 #include "players/CLocalPlayer.h"
+#include "players/PlayerColors.h"
 #include "game/entities/CPed.h"
 #include "pools/CActorPool.h"
 #include "pools/CVehiclePool.h"
@@ -252,10 +253,12 @@ void __cdecl DrawCrossHairsHook()
 
 namespace game::hooks
 {
+    RadarColorFn g_radarColor = nullptr;
+
     bool InstallRenderHooks()
     {
-        return hook::install(0x53E230, &NativeTextHook, &g_text) && hook::install(0x586650, &GangZoneRadarHook) && hook::install(0x553AA0, &WorldRenderHook, &g_world) &&
-               hook::install(0x5531E0, &FadingRenderHook, &g_fading);
+        return hook::install(0x584770, &RadarTraceColorHook, &g_radarColor) && hook::install(0x53E230, &NativeTextHook, &g_text) && hook::install(0x586650, &GangZoneRadarHook) &&
+               hook::install(0x553AA0, &WorldRenderHook, &g_world) && hook::install(0x5531E0, &FadingRenderHook, &g_fading);
     }
 
     DrawFn g_world = nullptr, g_fading = nullptr, g_text = nullptr;
@@ -333,6 +336,14 @@ void __cdecl NativeTextHook()
 void __cdecl GangZoneRadarHook(bool menu)
 {
     render::DrawGangZoneOverlay(menu);
+}
+
+std::uint32_t __cdecl RadarTraceColorHook(std::uint32_t color, bool bright, bool friendly)
+{
+    // R5's internal radar colours are codes, not packed RGBA values.
+    if (color >= 1004 && color <= 1006)
+        return PlayerColors::GetColor(color);
+    return game::hooks::g_radarColor(color, bright, friendly);
 }
 
 static void __cdecl UpdateAttachedCamera()
