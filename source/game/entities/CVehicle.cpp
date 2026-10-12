@@ -509,7 +509,12 @@ int CVehicle::GetSubtype()
 
 BOOL CVehicle::IsSunk()
 {
-    return HasNativeVehicle() ? scm::ProcessCommand(&IS_CAR_SUNK, m_handle) : FALSE;
+    if (!HasNativeVehicle())
+        return FALSE;
+    // GTA 02BF also checks Vortex's plane state; retain that special case.
+    if (Read<std::uint16_t>(m_pGameVehicle, 0x22) == 539)
+        return scm::ProcessCommand(&IS_CAR_SUNK, m_handle);
+    return (Read<std::uint32_t>(m_pGameVehicle, 0x40) & 0x100u) != 0;
 }
 
 BOOL CVehicle::IsWrecked()
