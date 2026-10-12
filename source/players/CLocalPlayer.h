@@ -221,7 +221,7 @@ public:
     void SendGiveDamage(int id, float damage, int type, int bodyPart);
 
     void ProcessSpectating();
-    bool ProcessUnoccupiedSync(ID vehicle, CVehicle* object); // 0x6E00
+    bool ProcessUnoccupiedSync(ID vehicle, CVehicle* object, float distance = -1.0f); // 0x6E00
     void EnterVehicleAsPassenger();
     void ProcessPassengerEntry(const CPad& keys);
     void SendIncarData();

@@ -1536,13 +1536,14 @@ void CLocalPlayer::SendGiveDamage(int id, float damage, int type, int bodyPart)
         g_netGame->GiveTakeDamage(false, static_cast<ID>(id), damage * 0.33f, static_cast<std::uint32_t>(type), static_cast<std::uint32_t>(bodyPart));
 }
 
-bool CLocalPlayer::ProcessUnoccupiedSync(ID vehicleId, CVehicle* vehicle)
+bool CLocalPlayer::ProcessUnoccupiedSync(ID vehicleId, CVehicle* vehicle, float distance)
 {
     if (!vehicle || vehicleId >= CVehiclePool::MAX_VEHICLES || !vehicle->HasNativeVehicle() || !m_pPed || !m_pPed->HasNativePed() || m_pPed->IsDead() || !m_bIsActive ||
         m_bDoesSpectating || !g_netGame || g_netGame->GetState() != CNetGame::GAME_MODE_CONNECTED || vehicle->HasPlayerDriver())
         return false;
 
-    const float distance = vehicle->GetDistanceToLocalPlayer();
+    if (distance < 0.0f)
+        distance = vehicle->GetDistanceToLocalPlayer();
     if (vehicle->IsTrainPart() || !std::isfinite(distance) || distance >= 90.0f || vehicle->IsStationary() || vehicle->GetTractor())
     {
         vehicle->m_bUnoccupiedSync = FALSE;
@@ -1569,6 +1570,9 @@ bool CLocalPlayer::ProcessUnoccupiedSync(ID vehicleId, CVehicle* vehicle)
     float nearestDistance = 100000.0f;
     ID nearestId = CPlayerPool::INVALID_ID;
 
+    CMatrix vehicleMatrix = CMatrix::Unity();
+    vehicle->GetMatrix(&vehicleMatrix);
+    const CVector vehiclePosition = vehicleMatrix.GetPosition();
     for (int id = 0; id <= lastId; ++id)
     {
         auto* remote = id == localId ? nullptr : playerPool->GetPlayer(static_cast<CPlayerPool::ID>(id));
@@ -1576,7 +1580,7 @@ bool CLocalPlayer::ProcessUnoccupiedSync(ID vehicleId, CVehicle* vehicle)
         if (!ped || !ped->HasNativePed() || !ped->IsValid())
             continue;
 
-        const float candidateDistance = ped->GetDistanceToEntity(vehicle);
+        const float candidateDistance = ped->GetDistanceToPoint(vehiclePosition);
         if (std::isfinite(candidateDistance) && candidateDistance < nearestDistance)
         {
             nearestDistance = candidateDistance;

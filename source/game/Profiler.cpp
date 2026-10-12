@@ -21,11 +21,40 @@ namespace profiler
         constexpr std::size_t kHistory = 120;
         constexpr std::size_t kSections = static_cast<std::size_t>(Section::Count);
         constexpr std::size_t kCounters = static_cast<std::size_t>(Counter::Count);
-        constexpr std::array<const char*, kSections> kNames{
-            "Main process", "Net + pools",      "Receive / RPC", "Local player",  "Remote players", "Object pool",     "Vehicle pool", "Pickup pool",
-            "Audio",        "Building removal", "UI total",      "Materials",     "Model previews", "Name tags",       "Chat bubbles", "3D labels",
-            "Chat",         "TAB update",       "GUI controls",  "Dialog text",   "Death window",   "Object editor",   "Menus",        "Native textdraws",
-            "IME",          "GTA ped controls", "World render",  "Fading render", "Present / wait", "Profiler overlay"};
+        constexpr std::array<const char*, kSections> kNames{"Main process",
+                                                            "Net + pools",
+                                                            "Receive / RPC",
+                                                            "Local player",
+                                                            "Remote players",
+                                                            "Object pool",
+                                                            "Vehicle pool",
+                                                            "Pickup pool",
+                                                            "Audio",
+                                                            "Building removal",
+                                                            "UI total",
+                                                            "Materials",
+                                                            "Model previews",
+                                                            "Name tags",
+                                                            "Chat bubbles",
+                                                            "3D labels",
+                                                            "Chat",
+                                                            "TAB update",
+                                                            "GUI controls",
+                                                            "Dialog text",
+                                                            "Death window",
+                                                            "Object editor",
+                                                            "Menus",
+                                                            "Native textdraws",
+                                                            "IME",
+                                                            "GTA ped controls",
+                                                            "World render",
+                                                            "Fading render",
+                                                            "Present / wait",
+                                                            "Profiler overlay",
+                                                            "Vehicle waiting",
+                                                            "Vehicle proofs",
+                                                            "Unoccupied checks",
+                                                            "Vehicle markers"};
         struct Sample
         {
             std::array<double, kSections> ms{};

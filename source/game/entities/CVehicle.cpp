@@ -1,6 +1,7 @@
 #include <stdafx.h>
 
 #include "CVehicle.h"
+#include "game/Profiler.h"
 #include "game/patch/patch.h"
 #include "game/patch/hooks.h"
 
@@ -450,9 +451,15 @@ void CVehicle::SetInvulnerable(BOOL invulnerable)
     if (!HasNativeVehicle() || Read<std::uintptr_t>(m_pGameVehicle, 0) == 0x863C40)
         return;
 
+    PROFILE_SCOPE(VehicleProofs);
+    constexpr std::uint32_t proofMask = (1u << 18) | (1u << 19) | (1u << 20) | (1u << 21) | (1u << 23);
     const int value = invulnerable ? 1 : 0;
-    scm::ProcessCommand(&SET_CAR_PROOFS, m_handle, value, value, value, value, value);
-    scm::ProcessCommand(&SET_CAR_DAMAGEABLE, m_handle, invulnerable ? 0 : 1);
+    const auto proofs = Read<std::uint32_t>(m_pGameVehicle, 0x40) & proofMask;
+    if (proofs != (invulnerable ? proofMask : 0u))
+        scm::ProcessCommand(&SET_CAR_PROOFS, m_handle, value, value, value, value, value);
+    const bool damageable = (Read<unsigned char>(m_pGameVehicle, 0x42A) & 0x20) != 0;
+    if (damageable == (invulnerable != FALSE))
+        scm::ProcessCommand(&SET_CAR_DAMAGEABLE, m_handle, invulnerable ? 0 : 1);
     m_bIsInvulnerable = invulnerable ? TRUE : FALSE;
 }
 
@@ -487,7 +494,7 @@ void CVehicle::SetColor(unsigned char primary, unsigned char secondary)
 
 void CVehicle::UpdateColor()
 {
-    if (!HasNativeVehicle() || !m_bNeedsToUpdateColor || pad_71)
+    if (!m_bNeedsToUpdateColor || pad_71 || !HasNativeVehicle())
         return;
     if (Read<unsigned char>(m_pGameVehicle, 0x434) == m_nPrimaryColor && Read<unsigned char>(m_pGameVehicle, 0x435) == m_nSecondaryColor)
         return;
@@ -624,6 +631,12 @@ int CVehicle::GetHydraThrusters()
 
 void CVehicle::ProcessMarkers()
 {
+    ProcessMarkers(GetDistanceToLocalPlayer());
+}
+
+void CVehicle::ProcessMarkers(float distance)
+{
+    PROFILE_SCOPE(VehicleMarkers);
     if (!HasNativeVehicle())
         return;
 
@@ -654,8 +667,8 @@ void CVehicle::ProcessMarkers()
         m_marker = 0;
     }
 
-    const float distance = GetDistanceToLocalPlayer();
-    if (distance < 200.0f && !IsOccupied())
+    const bool occupied = IsOccupied() != FALSE;
+    if (distance < 200.0f && !occupied)
     {
         if (!m_marker)
         {
@@ -665,7 +678,7 @@ void CVehicle::ProcessMarkers()
         return;
     }
 
-    if ((IsOccupied() || GetDistanceToLocalPlayer() >= 200.0f) && m_marker)
+    if ((occupied || distance >= 200.0f) && m_marker)
     {
         scm::ProcessCommand(&DISABLE_MARKER, m_marker);
         m_marker = 0;
@@ -915,8 +928,10 @@ void CVehicle::EnableLights(bool enable)
         flags4A8 |= 8;
         flags428 &= static_cast<unsigned char>(~0x40u);
     }
-    Write<unsigned char>(m_pGameVehicle, 0x4A8, flags4A8);
-    Write<unsigned char>(m_pGameVehicle, 0x428, flags428);
+    if (Read<unsigned char>(m_pGameVehicle, 0x4A8) != flags4A8)
+        Write<unsigned char>(m_pGameVehicle, 0x4A8, flags4A8);
+    if (Read<unsigned char>(m_pGameVehicle, 0x428) != flags428)
+        Write<unsigned char>(m_pGameVehicle, 0x428, flags428);
 }
 
 void CVehicle::RemovePassengers()
@@ -1121,7 +1136,8 @@ void CVehicle::EnableEngine(BOOL enable)
     auto flags = Read<unsigned char>(m_pGameVehicle, 0x428);
     if (!enable)
     {
-        Write<unsigned char>(m_pGameVehicle, 0x428, static_cast<unsigned char>(flags & ~0x10u));
+        if (flags & 0x10)
+            Write<unsigned char>(m_pGameVehicle, 0x428, static_cast<unsigned char>(flags & ~0x10u));
         if (GetSubtype() == 3 && m_bEngineState)
         {
             if (GetHealth() > 0.0f)
@@ -1135,7 +1151,8 @@ void CVehicle::EnableEngine(BOOL enable)
         return;
     }
 
-    Write<unsigned char>(m_pGameVehicle, 0x428, static_cast<unsigned char>(flags | 0x10));
+    if (!(flags & 0x10))
+        Write<unsigned char>(m_pGameVehicle, 0x428, static_cast<unsigned char>(flags | 0x10));
     if (GetSubtype() == 3 && HasDriver() && !DriverIsPlayerPed())
         m_bEngineState = TRUE;
 }

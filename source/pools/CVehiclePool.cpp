@@ -95,10 +95,13 @@ void CVehiclePool::UpdateCount()
 {
     // samp.dll + 0x1E9B0
     int last = 0;
-    for (int id = 0; id < MAX_VEHICLES; ++id)
+    for (int id = MAX_VEHICLES - 1; id > 0; --id)
     {
         if (m_bNotEmpty[id])
+        {
             last = id;
+            break;
+        }
     }
     m_nCount = last;
 }
@@ -109,6 +112,7 @@ BOOL CVehiclePool::Delete(ID id)
     if (id >= MAX_VEHICLES)
         return FALSE;
 
+    m_lastUnoccupiedCheck[id] = 0;
     std::array<ID, 3> trainWagons{INVALID_ID, INVALID_ID, INVALID_ID};
     bool hadConsist = false;
     if (auto trains = g_trainConsists.find(this); trains != g_trainConsists.end())
@@ -179,7 +183,7 @@ BOOL CVehiclePool::Delete(ID id)
 
     // detach before deleting the trailer so tractors cannot retain stale wrappers
     const bool vehicleExists = vehicle->DoesExist() != FALSE;
-    for (int otherId = 0; otherId < MAX_VEHICLES; ++otherId)
+    for (int otherId = 0; otherId <= m_nCount && otherId < MAX_VEHICLES; ++otherId)
     {
         CVehicle* tractor = m_pObject[otherId];
         if (tractor && tractor != vehicle && tractor->m_pTrailer == vehicle)
@@ -754,6 +758,7 @@ void CVehiclePool::SendDestroyNotification(ID id)
 
 void CVehiclePool::ProcessWaitingList()
 {
+    PROFILE_SCOPE(VehicleWaiting);
     // samp.dll + 0x1F300
     const DWORD now = ::GetTickCount();
     auto& attempts = g_failedSpawnAttempts[this];
@@ -867,10 +872,16 @@ void CVehiclePool::Process()
         }
 
         if (!vehicle->IsTrainPart() && (!vehicle->IsTrailer() || !vehicle->GetTractor()) && unoccupiedSyncsSent < MAX_UNOCCUPIED_SYNCS_PER_TICK &&
-            now - m_lastUndrivenProcessTick[id] > UNOCCUPIED_SYNC_INTERVAL && localPlayer && localPlayer->ProcessUnoccupiedSync(static_cast<ID>(id), vehicle))
+            now - m_lastUndrivenProcessTick[id] > UNOCCUPIED_SYNC_INTERVAL && now - m_lastUnoccupiedCheck[id] > UNOCCUPIED_SYNC_INTERVAL && localPlayer)
         {
-            m_lastUndrivenProcessTick[id] = ::GetTickCount();
-            ++unoccupiedSyncsSent;
+            // Throttle eligibility separately from sends: a rejection must not rescan all players every frame.
+            m_lastUnoccupiedCheck[id] = now;
+            PROFILE_SCOPE(VehicleUnoccupied);
+            if (localPlayer->ProcessUnoccupiedSync(static_cast<ID>(id), vehicle, distance))
+            {
+                m_lastUndrivenProcessTick[id] = now;
+                ++unoccupiedSyncsSent;
+            }
         }
 
         if (!netGame || !netGame->m_pSettings || !netGame->m_pSettings->m_bManualVehicleEngineAndLight)
@@ -893,11 +904,12 @@ void CVehiclePool::Process()
             vehicle->EnableLights(vehicle->m_bIsLightsOn > 0);
         }
 
-        if (vehicle->GetNativeVehicleHandle() != m_pGameObject[id])
-            m_pGameObject[id] = vehicle->GetNativeVehicleHandle();
+        const auto nativeVehicle = vehicle->GetNativeVehicleHandle();
+        if (nativeVehicle != m_pGameObject[id])
+            m_pGameObject[id] = nativeVehicle;
 
         vehicle->UpdateColor();
-        vehicle->ProcessMarkers();
+        vehicle->ProcessMarkers(distance);
     }
 }
 

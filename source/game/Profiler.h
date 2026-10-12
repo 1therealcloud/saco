@@ -37,6 +37,10 @@ namespace profiler
         Fading,
         Present,
         Overlay,
+        VehicleWaiting,
+        VehicleProofs,
+        VehicleUnoccupied,
+        VehicleMarkers,
         Count
     };
     enum class Counter

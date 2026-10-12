@@ -106,4 +106,7 @@ public:
     void Process();
     CVehicle* Get(ID id);
     BOOL DoesExist(ID id);
+
+private:
+    std::array<TICK, MAX_VEHICLES> m_lastUnoccupiedCheck{};
 };

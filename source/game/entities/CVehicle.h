@@ -90,11 +90,12 @@ public:
     void SetBonnetState(bool open);
     void SetBootState(bool open);
     void SetObjective(bool enable);
-    BOOL SirenEnabled();                                      // 0xB7560
-    void SetLandingGearState(BOOL hide);                      // 0xB75A0
-    BOOL GetLandingGearState();                               // 0xB7630
-    void SetHydraThrusters(int direction);                    // 0xB76A0
-    int GetHydraThrusters();                                  // 0xB76C0
+    BOOL SirenEnabled();                   // 0xB7560
+    void SetLandingGearState(BOOL hide);   // 0xB75A0
+    BOOL GetLandingGearState();            // 0xB7630
+    void SetHydraThrusters(int direction); // 0xB76A0
+    int GetHydraThrusters();               // 0xB76C0
+    void ProcessMarkers(float distance);
     void ProcessMarkers();                                    // 0xB76E0
     void Lock(BOOL lock);                                     // 0xB7840
     BOOL UpdateLastDrivenTime();                              // 0xB7870
