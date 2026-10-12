@@ -1799,7 +1799,7 @@ void RPCHandlers::CancelEdit(RPCParameters* pParams)
 //   bool enabled - Whether camera-target update notifications are enabled.
 void RPCHandlers::ToggleCameraTarget(RPCParameters* pParams)
 {
-    if (!pParams || !pParams->input)
+    if (!pParams || !pParams->input || pParams->numberOfBitsOfData < 1)
         return;
 
     BitStream bs(pParams->input, BITS_TO_BYTES(pParams->numberOfBitsOfData), false);
@@ -1809,7 +1809,8 @@ void RPCHandlers::ToggleCameraTarget(RPCParameters* pParams)
     if (!bs.Read(enabled))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (g_netGame)
+        g_netGame->m_bUpdateCameraTarget = enabled;
 }
 
 // -----------------------------------------------------------------------------
@@ -1941,10 +1942,10 @@ void RPCHandlers::HideActor(RPCParameters* pParams)
 // -----------------------------------------------------------------------------
 // RPC 167: DisableVehicleCollisions
 // Payload (wire order):
-//   bool disable - True disables local vehicle collisions with streamed vehicles.
+//   bool disable - True disables collisions between vehicles with drivers.
 void RPCHandlers::DisableVehicleCollisions(RPCParameters* pParams)
 {
-    if (!pParams || !pParams->input)
+    if (!pParams || !pParams->input || pParams->numberOfBitsOfData < 1)
         return;
 
     BitStream bs(pParams->input, BITS_TO_BYTES(pParams->numberOfBitsOfData), false);
@@ -1954,7 +1955,8 @@ void RPCHandlers::DisableVehicleCollisions(RPCParameters* pParams)
     if (!bs.Read(disable))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (g_netGame)
+        g_netGame->m_bDisableCollision = disable;
 }
 
 // -----------------------------------------------------------------------------

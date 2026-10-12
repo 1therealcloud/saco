@@ -668,3 +668,47 @@ void __fastcall ComputeDamageResponseHook(game::bullets::detail::DamageCalculato
     }
     game::bullets::detail::damage(calculator, victim, response, speak);
 }
+
+namespace
+{
+    bool SkipVehicleCollision(void* vehicle, void* other)
+    {
+        if (!g_netGame || !g_netGame->m_bDisableCollision || !vehicle || !other)
+            return false;
+        const auto* first = static_cast<const std::uint8_t*>(vehicle);
+        const auto* second = static_cast<const std::uint8_t*>(other);
+        const auto model = *reinterpret_cast<const std::uint16_t*>(second + 0x22);
+        return model >= 400 && model <= 611 && *reinterpret_cast<void* const*>(first + 0x460) && *reinterpret_cast<void* const*>(second + 0x460);
+    }
+}
+
+int __fastcall AutomobileCollisionHook(void* vehicle, void*, void* other, void* points)
+{
+    if (SkipVehicleCollision(vehicle, other))
+        return 0;
+    return reinterpret_cast<int(__thiscall*)(void*, void*, void*)>(0x6BDEA0)(vehicle, other, points);
+}
+
+int __fastcall BikeCollisionHook(void* vehicle, void*, void* other, void* points)
+{
+    if (SkipVehicleCollision(vehicle, other))
+        return 0;
+    return reinterpret_cast<int(__thiscall*)(void*, void*, void*)>(0x6C8AE0)(vehicle, other, points);
+}
+
+int __fastcall VehicleCollisionHook(void* vehicle, void*, void* other, void* points)
+{
+    if (SkipVehicleCollision(vehicle, other))
+        return 0;
+    return reinterpret_cast<int(__thiscall*)(void*, void*, void*)>(0x546D00)(vehicle, other, points);
+}
+
+bool game::hooks::InstallVehicleCollisionHooks()
+{
+    // R5 replaces the ProcessEntityCollision slots for automobiles, monster trucks,
+    // bikes and trailers, without disabling their collisions with the world.
+    return ::patch::write<std::uintptr_t>(0x8713B8, reinterpret_cast<std::uintptr_t>(&AutomobileCollisionHook)) &&
+           ::patch::write<std::uintptr_t>(0x871580, reinterpret_cast<std::uintptr_t>(&AutomobileCollisionHook)) &&
+           ::patch::write<std::uintptr_t>(0x871830, reinterpret_cast<std::uintptr_t>(&BikeCollisionHook)) &&
+           ::patch::write<std::uintptr_t>(0x8721F8, reinterpret_cast<std::uintptr_t>(&VehicleCollisionHook));
+}

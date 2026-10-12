@@ -1,6 +1,7 @@
 #include <stdafx.h>
 
 #include "patch.h"
+#include "hooks.h"
 #include "game/PlayerSlots.h"
 #include "game/BulletSync.h"
 
@@ -78,6 +79,9 @@ namespace game::patch
             Log("[game::patch] vehicle siren hook failed");
             return false;
         }
+
+        if (!game::hooks::InstallVehicleCollisionHooks())
+            return false;
 
         installed = true;
 
