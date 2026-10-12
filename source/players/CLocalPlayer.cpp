@@ -30,7 +30,7 @@
 #include "gui/CLabel.h"
 #include "pools/CVehiclePool.h"
 #include "pools/CMenuPool.h"
-#include "utils/math/CQuaternion.h"
+#include "sync/Math.inl"
 
 #include <BitStream.h>
 #include <PacketEnumerations.h>
@@ -117,13 +117,7 @@ namespace
 
     void SaveRotation(const CMatrix& matrix, float (&quaternion)[4])
     {
-        CQuaternion rotation;
-        rotation.Set(*reinterpret_cast<const RwMatrix*>(&matrix));
-        rotation.Normalise();
-        quaternion[0] = rotation.w;
-        quaternion[1] = rotation.x;
-        quaternion[2] = rotation.y;
-        quaternion[3] = rotation.z;
+        sync::math::QuaternionToWire(sync::math::QuaternionFromMatrix(matrix), quaternion);
     }
 
     bool FiniteRotation(const float (&quaternion)[4])

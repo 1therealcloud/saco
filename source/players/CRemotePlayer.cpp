@@ -16,7 +16,7 @@
 #include "gui/CChat.h"
 #include "pools/CObjectPool.h"
 #include "pools/CVehiclePool.h"
-#include "utils/math/CQuaternion.h"
+#include "sync/Math.inl"
 #include "sync/AimStuff.h"
 
 #include <cmath>
@@ -157,22 +157,17 @@ namespace
 
     bool NeedsOnfootSnap(const CVector& a, const CVector& b)
     {
-        return Offset(a.x, b.x) > ONFOOT_SNAP_XY || Offset(a.y, b.y) > ONFOOT_SNAP_XY || Offset(a.z, b.z) > ONFOOT_SNAP_Z;
+        return sync::math::ErrorExceeds(a, b, ONFOOT_SNAP_XY, ONFOOT_SNAP_Z);
     }
 
     bool PositionErrorExceeds(const CVector& target, const CVector& current, float xy, float z)
     {
-        return Offset(target.x, current.x) > xy || Offset(target.y, current.y) > xy || Offset(target.z, current.z) > z;
+        return sync::math::ErrorExceeds(target, current, xy, z);
     }
 
     void CorrectVelocity(CVector& speed, const CVector& target, const CVector& current, float deadZone, float factor)
     {
-        if (Offset(target.x, current.x) > deadZone)
-            speed.x += (target.x - current.x) * factor;
-        if (Offset(target.y, current.y) > deadZone)
-            speed.y += (target.y - current.y) * factor;
-        if (Offset(target.z, current.z) > deadZone)
-            speed.z += (target.z - current.z) * factor;
+        sync::math::CorrectVelocity(speed, target, current, deadZone, factor);
     }
 
     CVector PositionOf(const CEntity* entity)
@@ -215,25 +210,6 @@ namespace
         return localPlayer ? localPlayer->GetPed() : nullptr;
     }
 
-    CQuaternion SyncQuaternion(const float (&value)[4])
-    {
-        // r5 sync stores w,x,y,z; our math stores x,y,z,w
-        CQuaternion result{value[1], value[2], value[3], value[0]};
-        if (result.GetLengthSquared() > 0.000001f)
-            result.Normalise();
-        else
-            result = CQuaternion{0.0f, 0.0f, 0.0f, 1.0f};
-        return result;
-    }
-
-    CQuaternion MatrixQuaternion(const CMatrix& matrix)
-    {
-        CQuaternion result{};
-        result.Set(matrix.ToRwMatrix());
-        if (result.GetLengthSquared() > 0.000001f)
-            result.Normalise();
-        return result;
-    }
 
     void DestroyPed(CPed*& ped)
     {
@@ -548,9 +524,7 @@ void CRemotePlayer::UpdateOnfootSpeedAndPosition()
     m_pPed->GetMatrix(&matrix);
     const CVector current = matrix.GetPosition();
 
-    m_positionDifference.x = Offset(m_onfootTargetPosition.x, current.x);
-    m_positionDifference.y = Offset(m_onfootTargetPosition.y, current.y);
-    m_positionDifference.z = Offset(m_onfootTargetPosition.z, current.z);
+    m_positionDifference = sync::math::AbsoluteDifference(m_onfootTargetPosition, current);
 
     if (m_positionDifference.x <= ONFOOT_EPSILON && m_positionDifference.y <= ONFOOT_EPSILON && m_positionDifference.z <= ONFOOT_EPSILON)
         return;
@@ -565,12 +539,7 @@ void CRemotePlayer::UpdateOnfootSpeedAndPosition()
     CVector speed{};
     m_pPed->GetSpeed(&speed);
 
-    if (m_positionDifference.x > ONFOOT_EPSILON)
-        speed.x += (m_onfootTargetPosition.x - current.x) * ONFOOT_CORRECTION;
-    if (m_positionDifference.y > ONFOOT_EPSILON)
-        speed.y += (m_onfootTargetPosition.y - current.y) * ONFOOT_CORRECTION;
-    if (m_positionDifference.z > ONFOOT_EPSILON)
-        speed.z += (m_onfootTargetPosition.z - current.z) * ONFOOT_CORRECTION;
+    CorrectVelocity(speed, m_onfootTargetPosition, current, ONFOOT_EPSILON, ONFOOT_CORRECTION);
 
     if (FiniteVector(speed))
         m_pPed->SetSpeed(speed);
@@ -585,17 +554,12 @@ void CRemotePlayer::UpdateOnfootRotation()
     m_pPed->GetMatrix(&matrix);
     const CVector position = matrix.GetPosition();
 
-    const CQuaternion current = MatrixQuaternion(matrix);
-    const CQuaternion target = SyncQuaternion(m_onfootData.m_fQuaternion);
-    CQuaternion rotation{};
+    const auto current = sync::math::QuaternionFromMatrix(matrix);
+    const auto target = sync::math::QuaternionFromWire(m_onfootData.m_fQuaternion);
+    // r5 interpolates target -> current with t=0.75.
+    const auto rotation = sync::math::Slerp(target, current, ONFOOT_ROTATION_SLERP);
 
-    // SA-MP R5 passes the packet quaternion as D3DXQuaternionSlerp's first
-    // input and the current ped quaternion as the second one with t = 0.75.
-    // This is equivalent to moving from current toward target by 25% of the
-    // remaining angular distance each frame, not 75%.
-    rotation.Slerp(target, current, ONFOOT_ROTATION_SLERP);
-
-    matrix.SetRotate(rotation);
+    sync::math::SetRotation(matrix, rotation);
     matrix.GetPosition() = position;
     m_pPed->SetMatrix(matrix);
 
@@ -635,9 +599,7 @@ void CRemotePlayer::UpdateIncarSpeedAndPosition()
     }
 
     const CVector current = matrix.GetPosition();
-    m_positionDifference.x = Offset(m_incarTargetPosition.x, current.x);
-    m_positionDifference.y = Offset(m_incarTargetPosition.y, current.y);
-    m_positionDifference.z = Offset(m_incarTargetPosition.z, current.z);
+    m_positionDifference = sync::math::AbsoluteDifference(m_incarTargetPosition, current);
 
     if (m_positionDifference.x <= INCAR_EPSILON && m_positionDifference.y <= INCAR_EPSILON && m_positionDifference.z <= INCAR_EPSILON)
         return;
@@ -654,12 +616,7 @@ void CRemotePlayer::UpdateIncarSpeedAndPosition()
 
     CVector speed{};
     m_pVehicle->GetSpeed(&speed);
-    if (m_positionDifference.x > INCAR_EPSILON)
-        speed.x += (m_incarTargetPosition.x - current.x) * INCAR_CORRECTION;
-    if (m_positionDifference.y > INCAR_EPSILON)
-        speed.y += (m_incarTargetPosition.y - current.y) * INCAR_CORRECTION;
-    if (m_positionDifference.z > INCAR_EPSILON)
-        speed.z += (m_incarTargetPosition.z - current.z) * INCAR_CORRECTION;
+    CorrectVelocity(speed, m_incarTargetPosition, current, INCAR_EPSILON, INCAR_CORRECTION);
 
     if (FiniteVector(speed) && (Offset(speed.x, 0.0f) > INCAR_MIN_SPEED || Offset(speed.y, 0.0f) > INCAR_MIN_SPEED || Offset(speed.z, 0.0f) > INCAR_MIN_SPEED))
         m_pVehicle->SetSpeed(speed);
@@ -670,10 +627,13 @@ void CRemotePlayer::UpdateIncarRotation()
     if (!m_pVehicle || !m_pVehicle->DoesExist())
         return;
 
-    CQuaternion target{m_incarTargetRotation.imag.x, m_incarTargetRotation.imag.y, m_incarTargetRotation.imag.z, m_incarTargetRotation.real};
-    if (!Finite(target.x) || !Finite(target.y) || !Finite(target.z) || !Finite(target.w) || target.GetLengthSquared() <= 0.000001f)
+    const float rotationValues[4]{m_incarTargetRotation.real, m_incarTargetRotation.imag.x, m_incarTargetRotation.imag.y, m_incarTargetRotation.imag.z};
+    if (!FiniteQuaternion(rotationValues))
         return;
-    target.Normalise();
+    const auto rawTarget = DirectX::XMVectorSet(rotationValues[1], rotationValues[2], rotationValues[3], rotationValues[0]);
+    if (DirectX::XMVectorGetX(DirectX::XMVector4LengthSq(rawTarget)) <= 0.000001f)
+        return;
+    const auto target = sync::math::NormalizeQuaternion(rawTarget);
 
     // r5's default turn-speed clamp
     CVector turnSpeed{};
@@ -688,12 +648,11 @@ void CRemotePlayer::UpdateIncarRotation()
 
     CMatrix matrix = CMatrix::Unity();
     m_pVehicle->GetMatrix(&matrix);
-    const CQuaternion current = MatrixQuaternion(matrix);
-    CQuaternion result{};
-    result.Slerp(target, current, INCAR_ROTATION_SLERP);
+    const auto current = sync::math::QuaternionFromMatrix(matrix);
+    const auto result = sync::math::Slerp(target, current, INCAR_ROTATION_SLERP);
 
     const CVector position = matrix.GetPosition();
-    matrix.SetRotate(result);
+    sync::math::SetRotation(matrix, result);
     matrix.GetPosition() = position;
     m_pVehicle->SetMatrix(matrix);
 }
@@ -706,9 +665,10 @@ void CRemotePlayer::SetIncarTargetSpeedAndPosition(CMatrix* matrix, CVector* pos
     m_incarTargetPosition = *position;
     m_incarTargetSpeed = *speed;
 
-    const CQuaternion rotation = MatrixQuaternion(*matrix);
-    m_incarTargetRotation.real = rotation.real;
-    m_incarTargetRotation.imag = rotation.imag;
+    DirectX::XMFLOAT4 rotation{};
+    DirectX::XMStoreFloat4(&rotation, sync::math::QuaternionFromMatrix(*matrix));
+    m_incarTargetRotation.real = rotation.w;
+    m_incarTargetRotation.imag = CVector{rotation.x, rotation.y, rotation.z};
 
     if (m_pVehicle && m_pVehicle->DoesExist())
         m_pVehicle->SetSpeed(*speed);
@@ -774,22 +734,8 @@ void CRemotePlayer::Update(Synchronization::UnoccupiedData* data)
 
     if (PositionErrorExceeds(data->m_position, current, UNOCCUPIED_DEAD_ZONE, UNOCCUPIED_DEAD_ZONE))
     {
-        CVector right = data->m_roll;
-        CVector forward = data->m_direction;
-        if (right.SquaredMagnitude() < 0.000001f || forward.SquaredMagnitude() < 0.000001f)
+        if (!sync::math::SetUnoccupiedRotation(matrix, data->m_roll, data->m_direction))
             return;
-        right.Normalise();
-        forward.Normalise();
-        CVector up = right.Cross(forward);
-        if (up.SquaredMagnitude() < 0.000001f)
-            return;
-        up.Normalise();
-        forward = up.Cross(right);
-        forward.Normalise();
-
-        matrix.GetRight() = right;
-        matrix.GetForward() = forward;
-        matrix.GetUp() = up;
 
         const bool snap = PositionErrorExceeds(data->m_position, current, UNOCCUPIED_SNAP_XY, UNOCCUPIED_SNAP_Z);
         if (snap)
@@ -847,7 +793,7 @@ void CRemotePlayer::Update(Synchronization::TrailerData* data)
         return;
 
     const CVector position = matrix.GetPosition();
-    matrix.SetRotate(SyncQuaternion(data->m_fQuaternion));
+    sync::math::SetRotation(matrix, sync::math::QuaternionFromWire(data->m_fQuaternion));
     matrix.GetPosition() = position;
 
     const bool snap = PositionErrorExceeds(data->m_position, current, TRAILER_SNAP_XY, TRAILER_SNAP_Z);
@@ -912,8 +858,7 @@ float CRemotePlayer::GetDistanceToPlayer(CRemotePlayer* player)
     if (!m_pPed || !player || !player->m_pPed)
         return DISTANCE_INVALID;
 
-    const CVector difference = PositionOf(m_pPed) - PositionOf(player->m_pPed);
-    return difference.Magnitude();
+    return sync::math::Distance(PositionOf(m_pPed), PositionOf(player->m_pPed));
 }
 
 float CRemotePlayer::GetDistanceToLocalPlayer()
@@ -922,8 +867,7 @@ float CRemotePlayer::GetDistanceToLocalPlayer()
     if (!m_pPed || !local)
         return DISTANCE_INVALID;
 
-    const CVector difference = PositionOf(m_pPed) - PositionOf(local);
-    return difference.Magnitude();
+    return sync::math::Distance(PositionOf(m_pPed), PositionOf(local));
 }
 
 void CRemotePlayer::SetColor(D3DCOLOR color)
@@ -1100,7 +1044,7 @@ void CRemotePlayer::Process()
             if (FiniteQuaternion(m_incarData.m_fQuaternion))
             {
                 const CVector position = target.GetPosition();
-                target.SetRotate(SyncQuaternion(m_incarData.m_fQuaternion));
+                sync::math::SetRotation(target, sync::math::QuaternionFromWire(m_incarData.m_fQuaternion));
                 target.GetPosition() = position;
             }
 
