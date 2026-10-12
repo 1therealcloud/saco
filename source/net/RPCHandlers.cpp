@@ -2369,7 +2369,8 @@ void RPCHandlers::CreateExplosion(RPCParameters* pParams)
     if (!bs.Read(radius))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (g_game)
+        g_game->CreateExplosion(CVector{x, y, z}, static_cast<int>(type), radius);
 }
 
 // -----------------------------------------------------------------------------

@@ -46,6 +46,7 @@ namespace
     constexpr scm::OpcodeInfo MODEL_AVAILABLE{0x0248, "i"};
     constexpr scm::OpcodeInfo RELEASE_MODEL{0x0249, "i"};
     constexpr scm::OpcodeInfo SET_TIME{0x00C0, "ii"};
+    constexpr scm::OpcodeInfo CREATE_EXPLOSION{0x0948, "fffif"};
     constexpr scm::OpcodeInfo TRAIN_TRAFFIC{0x06D7, "i"};
     constexpr scm::OpcodeInfo REFRESH_RENDERER{0x04E4, "ff"};
     constexpr scm::OpcodeInfo REQUEST_ANIMATION{0x04ED, "s"};
@@ -292,6 +293,14 @@ void CGame::LetTimeGo(bool let)
     const std::uint8_t opcode = let ? 0x56 : 0xC3;
     patch::write(0x52CF10, opcode);
     m_bClockEnabled = let ? TRUE : FALSE;
+}
+
+void CGame::CreateExplosion(CVector position, int type, float radius)
+{
+    if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z) || !std::isfinite(radius))
+        return;
+
+    scm::ProcessCommand(&CREATE_EXPLOSION, position.x, position.y, position.z, type, radius);
 }
 
 void CGame::SetWorldWeather(char weather)

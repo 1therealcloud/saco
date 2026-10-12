@@ -85,16 +85,17 @@ public:
     bool InitGame();                                          // 0xA0890
     bool StartGame();                                         // 0xA08E0
     void OnGameplayReady();
-    BOOL IsMenuVisible();                                                 // 0xA0920
-    BOOL IsStarted();                                                     // 0xA0930
-    void RequestModel(int model, int loadingStream = 0);                  // 0xA0940
-    void LoadRequestedModels();                                           // 0xA0960
-    BOOL IsModelAvailable(int model);                                     // 0xA0970
-    void ReleaseModel(int model, bool gameFunc = true);                   // 0xA09A0
-    void SetWorldTime(char hour, char minute);                            // 0xA0AB0
-    void GetWorldTime(char* hour, char* minute);                          // 0xA0AE0
-    void LetTimeGo(bool let);                                             // 0xA0B00
-    void SetWorldWeather(char weather);                                   // 0xA0B40
+    BOOL IsMenuVisible();                                // 0xA0920
+    BOOL IsStarted();                                    // 0xA0930
+    void RequestModel(int model, int loadingStream = 0); // 0xA0940
+    void LoadRequestedModels();                          // 0xA0960
+    BOOL IsModelAvailable(int model);                    // 0xA0970
+    void ReleaseModel(int model, bool gameFunc = true);  // 0xA09A0
+    void SetWorldTime(char hour, char minute);           // 0xA0AB0
+    void GetWorldTime(char* hour, char* minute);         // 0xA0AE0
+    void LetTimeGo(bool let);                            // 0xA0B00
+    void SetWorldWeather(char weather);                  // 0xA0B40
+    void CreateExplosion(CVector position, int type, float radius);
     void SetFrameLimiter(int value);                                      // 0xA0BB0
     void SetMaxStats();                                                   // 0xA0BE0
     void DisableTrainTraffic();                                           // 0xA0C10
