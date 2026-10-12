@@ -2,7 +2,7 @@
 
 #include "patch.h"
 #include "hooks.h"
-#include "modelinfo_sites.h"
+#include "modelinfo_sites.inl"
 
 namespace game::patch::modelinfo
 {
