@@ -3942,7 +3942,14 @@ void RPCHandlers::SetWorldBounds(RPCParameters* pParams)
     if (!bs.Read(minY))
         return;
 
-    // TODO: apply decoded RPC to the game state.
+    if (!g_netGame || !g_netGame->m_pSettings || !std::isfinite(maxX) || !std::isfinite(minX) || !std::isfinite(maxY) || !std::isfinite(minY))
+        return;
+
+    auto& bounds = g_netGame->m_pSettings->m_fWorldBoundaries;
+    bounds[0] = maxX;
+    bounds[1] = minX;
+    bounds[2] = maxY;
+    bounds[3] = minY;
 }
 
 // -----------------------------------------------------------------------------
