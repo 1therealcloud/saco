@@ -299,6 +299,9 @@ DWORD WINAPI InitializeThread(LPVOID)
         return 1;
     }
 
+    // resolve the user directory before crash reporting and game initialization
+    g_sampUserDirectory = GetSampUserDirectory();
+
     // init exceptions
     exceptions::install();
 
@@ -383,9 +386,6 @@ DWORD WINAPI InitializeThread(LPVOID)
 
     // init settings & config
     // ------------------------------------------------------------
-
-    // get samp user directory
-    g_sampUserDirectory = GetSampUserDirectory();
 
     g_settings.Initialize();
 

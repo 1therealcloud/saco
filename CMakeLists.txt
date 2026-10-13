@@ -163,7 +163,7 @@ target_link_libraries(samp PRIVATE
     windowscodecs
     ole32
     shell32
-    $<$<CONFIG:Debug>:dbghelp>
+    dbghelp
 )
 
 add_subdirectory(tools)

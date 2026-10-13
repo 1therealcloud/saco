@@ -9,10 +9,10 @@
 #include <stdafx.h>
 
 #include "resource.h"
+#include "main.h"
 
-#if defined(_DEBUG)
-#   include <dbghelp.h>
-#endif
+#include <dbghelp.h>
+#include <filesystem>
 
 namespace exceptions
 {
@@ -22,7 +22,7 @@ namespace exceptions
         EXCEPTION_RECORD* g_exception = nullptr;
         volatile LONG g_handlingException = 0;
 
-#if defined(_DEBUG)
+        std::wstring g_dumpDirectory;
         HANDLE g_dumpRequested = nullptr;
         HANDLE g_dumpThread = nullptr;
         DWORD g_dumpThreadId = 0;
@@ -36,11 +36,15 @@ namespace exceptions
             SYSTEMTIME time{};
             GetLocalTime(&time);
 
-            char path[128]{};
-            std::snprintf(path, sizeof(path), "samp-crash-%04u%02u%02u-%02u%02u%02u-%03u-%lu.dmp", time.wYear, time.wMonth, time.wDay, time.wHour, time.wMinute, time.wSecond,
-                          time.wMilliseconds, GetCurrentProcessId());
+            wchar_t path[MAX_PATH]{};
+            if (_snwprintf_s(path, _countof(path), _TRUNCATE, L"%s\\%04u%02u%02u-%02u%02u%02u-%03u-%lu.dmp", g_dumpDirectory.c_str(), time.wYear, time.wMonth, time.wDay,
+                             time.wHour, time.wMinute, time.wSecond, time.wMilliseconds, GetCurrentProcessId()) < 0)
+            {
+                Log("[exceptions] minidump path is too long");
+                return;
+            }
 
-            const HANDLE file = CreateFileA(path, GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+            const HANDLE file = CreateFileW(path, GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
             if (file == INVALID_HANDLE_VALUE)
             {
                 Log("[exceptions] can't create minidump, error=%lu", GetLastError());
@@ -58,9 +62,12 @@ namespace exceptions
             CloseHandle(file);
 
             if (written)
-                Log("[exceptions] minidump saved: %s", path);
+                Log("[exceptions] minidump saved: %ls", path);
             else
+            {
+                DeleteFileW(path);
                 Log("[exceptions] can't write minidump, error=%lu", error);
+            }
         }
 
         DWORD WINAPI dump_thread(void*)
@@ -74,6 +81,21 @@ namespace exceptions
         {
             if (g_dumpThread)
                 return;
+
+            if (g_sampUserDirectory.empty())
+            {
+                Log("[exceptions] SAMP user directory is unavailable");
+                return;
+            }
+            const auto directory = std::filesystem::path(g_sampUserDirectory) / "crashreports";
+            std::error_code error;
+            std::filesystem::create_directories(directory, error);
+            if (error)
+            {
+                Log("[exceptions] can't create crashreports directory, error=%d", error.value());
+                return;
+            }
+            g_dumpDirectory = directory.wstring();
 
             g_dumpRequested = CreateEventW(nullptr, FALSE, FALSE, nullptr);
             if (!g_dumpRequested)
@@ -116,7 +138,6 @@ namespace exceptions
             else if (result == WAIT_FAILED)
                 Log("[exceptions] can't wait for minidump, error=%lu", GetLastError());
         }
-#endif
 
         const char* exception_name(DWORD code)
         {
@@ -427,9 +448,7 @@ namespace exceptions
             g_exception = info->ExceptionRecord;
             g_context = info->ContextRecord;
 
-#if defined(_DEBUG)
             request_minidump(info);
-#endif
 
             log_exception();
             release_cursor(true);
@@ -450,15 +469,13 @@ namespace exceptions
                 return EXCEPTION_CONTINUE_SEARCH;
             }
 
-            return EXCEPTION_EXECUTE_HANDLER;
+            ExitProcess(1);
         }
     }
 
     void install()
     {
-#if defined(_DEBUG)
         initialize_minidump();
-#endif
         SetUnhandledExceptionFilter(handler);
     }
 }
