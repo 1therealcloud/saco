@@ -1689,7 +1689,7 @@ void CNetGame::Packet_ConnectionSucceeded(Packet* packet)
         return;
 
     const std::string nick = GetPlayerPool()->GetLocalPlayerName();
-    const std::string userDirectory = GetSampUserDirectory();
+    const auto& userDirectory = g_sampUserDirectory;
     if (userDirectory.empty() || nick.empty() || nick.size() > 24)
     {
         Log("[net:join] invalid nickname or user directory");

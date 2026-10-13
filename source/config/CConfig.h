@@ -83,7 +83,7 @@ public:
 
     // R5 low-level config API.
     void FindFirstFree();
-    int GetIndex(const char* entry);
+    int GetIndex(const char* entry) const;
     bool DoesExist(const char* entry);
     int CreateEntry(const char* name);
     int GetIntValue(const char* entry);
@@ -97,7 +97,7 @@ public:
     BOOL WriteIntValue(const char* entry, int value, BOOL readOnly = FALSE);
     BOOL WriteStringValue(const char* entry, const char* value, BOOL readOnly = FALSE);
     BOOL WriteFloatValue(const char* entry, float value, BOOL readOnly = FALSE);
-    void Write(const char* entry, char* buffer);
+    std::string Write(const char* entry) const;
     BOOL Load();
 
     // Project adapter used by the rest of SACO.

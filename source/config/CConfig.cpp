@@ -161,7 +161,7 @@ void CConfig::FindFirstFree()
     }
 }
 
-int CConfig::GetIndex(const char* entry)
+int CConfig::GetIndex(const char* entry) const
 {
     ZoneScoped;
     if (!entry || !*entry)
@@ -333,29 +333,25 @@ BOOL CConfig::WriteFloatValue(const char* entry, float value, BOOL readOnly)
     return TRUE;
 }
 
-void CConfig::Write(const char* entry, char* buffer)
+std::string CConfig::Write(const char* entry) const
 {
     ZoneScoped;
-    if (!buffer)
-        return;
-    buffer[0] = '\0';
     const int index = GetIndex(entry);
     if (index < 0)
-        return;
+        return {};
     const ConfigEntry& configEntry = m_entry[index];
+    char buffer[64]{};
     switch (configEntry.m_nType)
     {
         case VALUE_TYPE_INT:
-            std::sprintf(buffer, "%d", configEntry.m_nValue);
-            break;
+            return std::to_string(configEntry.m_nValue);
         case VALUE_TYPE_FLOAT:
-            std::sprintf(buffer, "%g", configEntry.m_fValue);
-            break;
+            std::snprintf(buffer, sizeof(buffer), "%g", configEntry.m_fValue);
+            return buffer;
         case VALUE_TYPE_STRING:
-            std::sprintf(buffer, "\"%s\"", configEntry.m_szValue ? configEntry.m_szValue : "");
-            break;
+            return std::string("\"") + (configEntry.m_szValue ? configEntry.m_szValue : "") + '"';
         default:
-            break;
+            return {};
     }
 }
 
@@ -428,6 +424,7 @@ BOOL CConfig::Load()
     if (file.bad())
         return FALSE;
 
+    file.close();
     const bool changed = ApplyPersistedDefaults();
     return !changed || Save();
 }
@@ -472,14 +469,11 @@ bool CConfig::Save(const char* path) const
         return false;
     }
 
-    char value[1024]{};
     for (int i = 0; i < MAX_ENTRIES; ++i)
     {
         if (!m_bNotEmpty[i])
             continue;
-        value[0] = '\0';
-        const_cast<CConfig*>(this)->Write(m_entry[i].m_szName, value);
-        file << m_entry[i].m_szName << '=' << value << '\n';
+        file << m_entry[i].m_szName << '=' << Write(m_entry[i].m_szName) << '\n';
     }
 
     file.flush();

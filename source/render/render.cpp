@@ -84,7 +84,6 @@ namespace render
     void DrawPlayerTags();
     bool ResolvePlayerLabel(std::uint16_t id, CVector& position, float& localDistance, float& cameraDistance);
     void ApplyGuiFontConfig();
-    static std::string g_userDirectory;
     bool g_classSelectionVisible = false;
     bool g_vehicleDebugLabels = false;
     static bool g_shuttingDown = false;
@@ -322,13 +321,12 @@ namespace render
                         "SA:MP - GUI Error", MB_OK | MB_ICONERROR);
             ExitProcess(1);
         }
-        const std::string userDirectory = GetSampUserDirectory();
+        const auto& userDirectory = g_sampUserDirectory;
         if (userDirectory.empty())
         {
             Log("failed to resolve chat log directory!");
             ExitProcess(1);
         }
-        g_userDirectory = userDirectory;
         const std::string chatLogPath = userDirectory + "chatlog.txt";
         g_chat = std::make_unique<CChat>(device, g_fonts.get(), chatLogPath.c_str(), &g_config);
         g_input = std::make_unique<CInput>(device);
@@ -388,7 +386,7 @@ namespace render
     static void ProcessScreenshot(IDirect3DDevice9* device)
     {
         ZoneScoped;
-        const auto capture = screenshot::ProcessPendingCapture(device, g_userDirectory);
+        const auto capture = screenshot::ProcessPendingCapture(device, g_sampUserDirectory);
         if (capture.requested)
         {
             if (capture.saved)

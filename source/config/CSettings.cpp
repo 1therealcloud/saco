@@ -190,7 +190,7 @@ void CSettings::Initialize(const char* arguments)
     if (m_bDebugMode)
         return;
 
-    const auto userDirectory = GetSampUserDirectory();
+    const auto& userDirectory = g_sampUserDirectory;
     if (!userDirectory.empty())
     {
         const auto cache = (std::filesystem::path(userDirectory) / "cache").string();

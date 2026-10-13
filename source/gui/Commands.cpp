@@ -104,11 +104,6 @@ namespace Commands
             return value;
         }
 
-        std::string GetSampDirectory()
-        {
-            return GetSampUserDirectory();
-        }
-
         bool QueryPlayerSnapshot(PlayerSnapshot& snapshot)
         {
             ZoneScoped;
@@ -335,7 +330,7 @@ namespace Commands
         if (!QueryPlayerSnapshot(snapshot))
             return;
 
-        const std::string directory = GetSampDirectory();
+        const auto& directory = g_sampUserDirectory;
         if (directory.empty())
         {
             PrintDebug("I can't open the savepositions.txt file for append.");
@@ -395,7 +390,7 @@ namespace Commands
             return;
         }
 
-        const std::string directory = GetSampDirectory();
+        const auto& directory = g_sampUserDirectory;
         if (directory.empty())
         {
             // This text is also used on the on-foot failure path in R5.

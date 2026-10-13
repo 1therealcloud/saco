@@ -13,7 +13,7 @@
 
 struct IDirect3DDevice9;
 
-extern std::string GetSampUserDirectory();
+extern std::string g_sampUserDirectory;
 
 extern void Frame(IDirect3DDevice9* device); // used by d3d9hook.cpp
 extern void Process();

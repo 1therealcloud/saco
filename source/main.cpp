@@ -56,6 +56,7 @@ saa::Archive g_archive;
 // config & settings
 CConfig g_config;
 CSettings g_settings;
+std::string g_sampUserDirectory;
 
 bool g_DLClient = true;
 
@@ -102,7 +103,7 @@ inline constexpr int CalculateBuildNumber(std::string_view date = __DATE__)
 #endif
 
 // get samp directory
-std::string GetSampUserDirectory()
+static std::string GetSampUserDirectory()
 {
     char documents[MAX_PATH]{};
 
@@ -280,6 +281,8 @@ DWORD WINAPI InitializeThread(LPVOID)
         return 1;
     }
 
+    g_sampUserDirectory = GetSampUserDirectory();
+
     // alloc debug-only console
 #if defined(_DEBUG)
     AllocConsole();
@@ -384,7 +387,7 @@ DWORD WINAPI InitializeThread(LPVOID)
     // ------------------------------------------------------------
     g_settings.Initialize();
 
-    const std::string userDirectory = GetSampUserDirectory();
+    const auto& userDirectory = g_sampUserDirectory;
     if (userDirectory.empty() || !g_config.Load((userDirectory + "sa-mp.cfg").c_str()))
     {
         Log("failed to load sa-mp.cfg!");
