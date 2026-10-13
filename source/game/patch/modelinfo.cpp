@@ -503,9 +503,11 @@ namespace game::patch::modelinfo
 
     bool valid_id(std::int32_t modelId)
     {
+        if (g_signedInstalled)
+            return modelId >= kSignedMinId && modelId <= kSignedMaxId;
         if (modelId >= 0)
             return modelId < 20000;
-        return g_signedInstalled && modelId >= kSignedMinId;
+        return false;
     }
 
     void** active_table()

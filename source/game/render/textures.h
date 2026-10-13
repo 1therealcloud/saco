@@ -10,6 +10,7 @@
 
 #include <memory>
 
+struct RwStream;
 struct RwTexture;
 struct RwTexDictionary;
 
@@ -27,6 +28,7 @@ namespace game::render::textures
     int find_slot(const char* name);
     // creates a new slot; never replaces an existing dictionary with the same name
     int load_dictionary(const char* name, const char* path);
+    int load_dictionary(const char* name, RwStream* stream);
     // fails while the dictionary has external CTxdStore references
     bool remove_dictionary(int slot);
     void add_ref(int slot);

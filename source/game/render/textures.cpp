@@ -42,16 +42,20 @@ namespace game::render::textures
         RwStream* stream = RwStreamOpen(rwSTREAMFILENAME, rwSTREAMREAD, path);
         if (!stream)
             return -1;
+        const int slot = load_dictionary(name, stream);
+        RwStreamClose(stream, nullptr);
+        return slot;
+    }
+
+    int load_dictionary(const char* name, RwStream* stream)
+    {
+        if (!stream || !name || !*name || find_slot(name) >= 0)
+            return -1;
         const int slot = gta<int(__cdecl*)(const char*)>(0x731C80)(name);
         const bool loaded = slot >= 0 && gta<bool(__cdecl*)(int, RwStream*)>(0x731DD0)(slot, stream);
-        RwStreamClose(stream, nullptr);
-        if (!loaded)
-        {
-            if (slot >= 0)
-                remove_dictionary(slot);
-            return -1;
-        }
-        return slot;
+        if (!loaded && slot >= 0)
+            remove_dictionary(slot);
+        return loaded ? slot : -1;
     }
 
     bool remove_dictionary(int slot)

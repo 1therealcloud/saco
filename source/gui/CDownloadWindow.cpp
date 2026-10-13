@@ -132,6 +132,14 @@ int CDownloadWindow::DoesExist(int fileId) const
     return -1;
 }
 
+int CDownloadWindow::DoesExist(char fileType, int fileId) const
+{
+    for (int i = 0; i < GetFilesCount(); ++i)
+        if (auto* info = GetFileInfo(static_cast<unsigned int>(i)); info && info->m_nFileType == fileType && info->m_nFileId == fileId)
+            return i;
+    return -1;
+}
+
 void CDownloadWindow::Show(int filesSum)
 {
     ZoneScoped;
@@ -181,7 +189,7 @@ void CDownloadWindow::AddEntry(char fileType, int fileId, char fileState, int fi
 
     fileDownloaded = std::max(0, fileDownloaded);
     fileSize = std::max(0, fileSize);
-    int index = DoesExist(fileId);
+    int index = DoesExist(fileType, fileId);
     const auto* oldInfo = index < 0 ? nullptr : GetFileInfo(static_cast<unsigned>(index));
     const bool wasComplete = oldInfo && oldInfo->m_nFileState == 4;
     DownloadedFileInfo* info = nullptr;
@@ -462,7 +470,7 @@ int CDownloadWindow::GetFilesCount() const
     return m_nDownloadedFilesCount;
 }
 
-DownloadedFileInfo* CDownloadWindow::GetFileInfo(unsigned int id) const
+CDownloadWindow::DownloadedFileInfo* CDownloadWindow::GetFileInfo(unsigned int id) const
 {
     if (id >= static_cast<unsigned int>(m_nDownloadedFilesCount))
         return nullptr;

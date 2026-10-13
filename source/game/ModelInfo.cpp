@@ -42,6 +42,7 @@ namespace ModelInfo
             bool ped{};
             bool damageAtomic{};
             int baseModelId{};
+            bool basePinned{};
         };
 
         // entries live until explicitly discarded, not until static destruction
@@ -99,6 +100,8 @@ namespace ModelInfo
 
             // a clone borrows static model metadata, not live rw resources
             Write<std::uint16_t>(copy, kReferencesOffset, 0);
+            Write<std::uint8_t>(copy, 0x0D, 0);
+            Write<std::int16_t>(copy, 0x0E, -1);
             Write<std::uint32_t>(copy, kRwObjectOffset, 0);
             if (ped)
                 Write<std::uint32_t>(copy, kHitCollisionOffset, 0);
@@ -217,7 +220,7 @@ namespace ModelInfo
             return false;
 
         const auto it = g_ownedClones.find(modelId);
-        const auto& record = it->second;
+        const auto record = it->second;
         const auto* info = record.info;
         const auto flags = Read<std::uint8_t>(info, kFlagsOffset);
         const auto clumpFlags = Read<std::uint8_t>(info, kFlagsOffset + 1);
@@ -229,7 +232,102 @@ namespace ModelInfo
         auto** table = game::patch::modelinfo::active_table();
         table[modelId] = nullptr;
         g_ownedClones.erase(it);
+        if (record.basePinned)
+            if (auto* base = GetRelocated(record.baseModelId))
+                reinterpret_cast<void(__thiscall*)(void*)>(0x4C4BB0)(base);
         std::free(const_cast<void*>(info));
         return true;
     }
+    int GetBaseModel(int modelId)
+    {
+        const auto it = g_ownedClones.find(modelId);
+        return it != g_ownedClones.end() && IsOwnedClone(modelId) ? it->second.baseModelId : modelId;
+    }
+
+    int GetReferences(int modelId)
+    {
+        const auto* info = GetRelocated(modelId);
+        return info ? Read<std::uint16_t>(info, kReferencesOffset) : 0;
+    }
+    bool AddReference(int modelId)
+    {
+        if (!IsOwnedClone(modelId) || !IsReady(modelId) || GetReferences(modelId) == 65535)
+            return false;
+        reinterpret_cast<void(__thiscall*)(void*)>(0x4C4BA0)(GetRelocated(modelId));
+        return true;
+    }
+    void RemoveReference(int modelId)
+    {
+        if (IsOwnedClone(modelId) && GetReferences(modelId))
+            reinterpret_cast<void(__thiscall*)(void*)>(0x4C4BB0)(GetRelocated(modelId));
+    }
+
+    bool PinBaseModel(int modelId)
+    {
+        if (!IsOwnedClone(modelId))
+            return false;
+        auto& record = g_ownedClones.at(modelId);
+        if (!record.basePinned)
+        {
+            auto* base = GetRelocated(record.baseModelId);
+            if (!base || !IsReady(record.baseModelId))
+                return false;
+            reinterpret_cast<void(__thiscall*)(void*)>(0x4C4BA0)(base);
+            record.basePinned = true;
+        }
+        return true;
+    }
+    bool SetTextureSlot(int modelId, int slot)
+    {
+        if (!IsOwnedClone(modelId) || IsReady(modelId) || GetReferences(modelId) || slot < 0 || slot > 32767)
+            return false;
+        Write<std::int16_t>(GetRelocated(modelId), kTxdSlotOffset, static_cast<std::int16_t>(slot));
+        return true;
+    }
+    bool SetCollision(int modelId, void* collision)
+    {
+        if (!IsOwnedClone(modelId) || !collision || GetReferences(modelId))
+            return false;
+        auto& record = g_ownedClones.at(modelId);
+        auto* previous = Read<void*>(record.info, kCollisionOffset);
+        if (previous && reinterpret_cast<std::uintptr_t>(previous) != record.borrowedCollision)
+        {
+            reinterpret_cast<void(__thiscall*)(void*)>(0x40F9E0)(previous);
+            reinterpret_cast<void(__cdecl*)(void*)>(0x40FC40)(previous);
+        }
+        Write(record.info, kCollisionOffset, collision);
+        Write<std::uint8_t>(record.info, kFlagsOffset, (Read<std::uint8_t>(record.info, kFlagsOffset) & ~0x80u) | 0x20u);
+        return true;
+    }
+    bool AttachPedClump(int modelId, RpClump* clump)
+    {
+        if (!clump || !IsOwnedClone(modelId) || !g_ownedClones.at(modelId).ped || IsReady(modelId))
+            return false;
+        auto* info = GetRelocated(modelId);
+        const auto* vtable = Read<std::uintptr_t*>(info, 0);
+        reinterpret_cast<void(__thiscall*)(void*, RpClump*)>(vtable[16])(info, clump);
+        return IsReady(modelId);
+    }
+    bool DestroyClone(int modelId)
+    {
+        if (!IsOwnedClone(modelId) || GetReferences(modelId))
+            return false;
+        const auto record = g_ownedClones.at(modelId);
+        auto* collision = Read<void*>(record.info, kCollisionOffset);
+        if (IsReady(modelId) || (record.ped && Read<void*>(record.info, kHitCollisionOffset)))
+        {
+            const auto* vtable = Read<std::uintptr_t*>(record.info, 0);
+            reinterpret_cast<void(__thiscall*)(void*)>(vtable[8])(record.info);
+        }
+        if (collision && reinterpret_cast<std::uintptr_t>(collision) != record.borrowedCollision)
+        {
+            reinterpret_cast<void(__thiscall*)(void*)>(0x40F9E0)(collision);
+            reinterpret_cast<void(__cdecl*)(void*)>(0x40FC40)(collision);
+        }
+        Write(record.info, kCollisionOffset, record.borrowedCollision);
+        Write(record.info, kTxdSlotOffset, record.inheritedTxdSlot);
+        Write<std::uint8_t>(record.info, kFlagsOffset, Read<std::uint8_t>(record.info, kFlagsOffset) & ~0x20u);
+        return DiscardUnloadedClone(modelId);
+    }
+
 }

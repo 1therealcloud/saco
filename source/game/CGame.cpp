@@ -251,7 +251,8 @@ BOOL CGame::IsStarted()
 
 void CGame::RequestModel(int model, int)
 {
-    scm::ProcessCommand(&REQUEST_MODEL, model);
+    if (!ModelInfo::IsOwnedClone(model))
+        scm::ProcessCommand(&REQUEST_MODEL, model);
 }
 
 void CGame::LoadRequestedModels()
@@ -261,6 +262,8 @@ void CGame::LoadRequestedModels()
 
 BOOL CGame::IsModelAvailable(int model)
 {
+    if (ModelInfo::IsOwnedClone(model))
+        return ModelInfo::IsReady(model);
     if (model < 0 || model >= ModelInfo::MAX_MODELS)
         return FALSE;
     return scm::ProcessCommand(&MODEL_AVAILABLE, model) != 0;
@@ -269,9 +272,7 @@ BOOL CGame::IsModelAvailable(int model)
 void CGame::ReleaseModel(int model, bool gameFunc)
 {
     ZoneScoped;
-    // R5 sends negative IDs through its custom-model subsystem. That subsystem is not
-    // implemented in this tree yet, so keep those IDs untouched until CustomModels is wired.
-    if (model < 0)
+    if (model < 0 || ModelInfo::IsOwnedClone(model))
         return;
 
     if (model >= ModelInfo::MAX_MODELS || !IsModelAvailable(model))
@@ -1118,7 +1119,8 @@ void CGame::Sleep(int elapsed, int fpsLimit)
 CPed* CGame::CreatePed(int model, CVector position, float rotation, int, int)
 {
     ZoneScoped;
-    if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z) || !std::isfinite(rotation) || model < 0 || model >= ModelInfo::MAX_MODELS)
+    if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z) || !std::isfinite(rotation) || model < 0 ||
+        (model >= ModelInfo::MAX_MODELS && !ModelInfo::IsOwnedClone(model)))
         return nullptr;
     auto* info = ModelInfo::GetRelocated(model);
     if (!info || *static_cast<std::uintptr_t*>(info) != 0x85BDC0)
@@ -1174,8 +1176,9 @@ CVehicle* CGame::CreateVehicle(int model, CVector position, float rotation, BOOL
 CObject* CGame::CreateObject(int model, CVector position, CVector rotation, float drawDistance, char hourOn, char hourOff)
 {
     ZoneScoped;
-    if (model < 0 || model >= ModelInfo::MAX_MODELS || !std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z) || !std::isfinite(rotation.x) ||
-        !std::isfinite(rotation.y) || !std::isfinite(rotation.z) || !std::isfinite(drawDistance))
+    if (!ModelInfo::Valid(model) || ((model < 0 || model >= ModelInfo::MAX_MODELS) && !ModelInfo::IsOwnedClone(model)) || !std::isfinite(position.x) ||
+        !std::isfinite(position.y) || !std::isfinite(position.z) || !std::isfinite(rotation.x) || !std::isfinite(rotation.y) || !std::isfinite(rotation.z) ||
+        !std::isfinite(drawDistance))
         return nullptr;
 
     auto* object = new (std::nothrow) CObject(model, position, rotation, drawDistance, 0, hourOn, hourOff);

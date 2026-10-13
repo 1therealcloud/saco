@@ -20,19 +20,19 @@ namespace cgui
     class ListBox;
 }
 
-struct DownloadedFileInfo
-{
-    int m_nFileNumber;
-    char m_nFileType;
-    int m_nFileId;
-    char m_nFileState;
-    int m_nFileDownloaded;
-    int m_nFileSize;
-};
-
 class CDownloadWindow
 {
 public:
+    struct DownloadedFileInfo
+    {
+        int m_nFileNumber;
+        char m_nFileType;
+        int m_nFileId;
+        char m_nFileState;
+        int m_nFileDownloaded;
+        int m_nFileSize;
+    };
+
     enum
     {
         LISTBOX_ID = 25,
@@ -78,6 +78,7 @@ public:
 
     void GetScreenRect(RECT* rect) const;
     int DoesExist(int fileId) const;
+    int DoesExist(char fileType, int fileId) const;
 
     // GUI and progress updates run on the game thread
     void Show(int filesSum);

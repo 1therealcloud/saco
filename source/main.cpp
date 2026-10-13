@@ -27,6 +27,7 @@
 #include "game/CAudio.h"
 #include "game/CCamera.h"
 #include "game/CGame.h"
+#include "game/render/models.h"
 #include "game/CPad.h"
 #include "game/entities/CPed.h"
 #include "game/d3d9hook.h"
@@ -204,6 +205,7 @@ void Process()
     if (g_netGame)
         g_netGame->Process();
 
+    game::render::models::collect_custom_models();
     BuildingRemoval::Process();
 
     if (g_game && !g_settings.m_bDebugMode)

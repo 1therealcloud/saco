@@ -111,6 +111,19 @@ public:
         return m_errorText.c_str();
     }
 
+    // Configure before starting a transfer; the cancellation flag must outlive it.
+    void SetCancellationFlag(const std::atomic<bool>* flag)
+    {
+        m_externalCancellation = flag;
+    }
+    void SetUserAgent(std::string agent)
+    {
+        m_userAgent = std::move(agent);
+    }
+    void SetProxy(std::string proxy)
+    {
+        m_proxy = std::move(proxy);
+    }
     // These are safe to access while another thread performs the transfer.
     void Cancel()
     {
@@ -132,6 +145,9 @@ private:
     HTTP_RESPONSE m_Response;
     ErrorCode m_error = ERROR_OK;
     std::string m_errorText;
+    std::string m_proxy;
+    std::string m_userAgent{"SAMP/0.2.0"};
+    const std::atomic<bool>* m_externalCancellation{};
     bool m_initialized = false;
     bool m_hasResponse = false;
     std::atomic<bool> m_cancelled{false};

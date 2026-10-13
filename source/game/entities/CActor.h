@@ -55,4 +55,6 @@ public:
     void SetState(char value);         // 0x9C6C0
     BOOL IsOnGround() const;           // 0x9C6E0
     void SetInvulnerable(bool enable); // 0x9C700
+private:
+    int m_pinnedCustomModel{};
 };

@@ -13,6 +13,7 @@
 
 #include "game/Scripting.h"
 #include "game/ModelInfo.h"
+#include "game/render/models.h"
 
 namespace
 {
@@ -61,6 +62,8 @@ namespace
 
     bool IsModelAvailable(int model)
     {
+        if (ModelInfo::IsOwnedClone(model))
+            return ModelInfo::IsReady(model);
         if (model < 0 || model >= ModelInfo::MAX_MODELS)
             return false;
 
@@ -113,7 +116,7 @@ CActor::CActor(int model, CVector position, float rotation)
     m_handle = 0;
     m_bInvulnerable = false;
 
-    if (model < 0 || model >= ModelInfo::MAX_MODELS)
+    if (model < 0 || (model >= ModelInfo::MAX_MODELS && !ModelInfo::IsOwnedClone(model)))
         return;
 
     if (!IsModelAvailable(model))
@@ -132,7 +135,8 @@ CActor::CActor(int model, CVector position, float rotation)
     }
 
     std::uint32_t handle = 0;
-    scm::ProcessCommand(&CREATE_ACTOR, 5, model, static_cast<double>(position.x), static_cast<double>(position.y), static_cast<double>(position.z - 1.0f), &handle);
+    scm::ProcessCommand(&CREATE_ACTOR, 5, ModelInfo::GetBaseModel(model), static_cast<double>(position.x), static_cast<double>(position.y), static_cast<double>(position.z - 1.0f),
+                        &handle);
     m_handle = handle;
     m_pGamePed = PedFromHandle(handle);
     m_pGameEntity = m_pGamePed;
@@ -143,6 +147,18 @@ CActor::CActor(int model, CVector position, float rotation)
         m_pGamePed = nullptr;
         m_pGameEntity = nullptr;
         return;
+    }
+
+    if (ModelInfo::IsOwnedClone(model))
+    {
+        CEntity::SetModelIndex(model);
+        if (GetModelIndex() != model)
+        {
+            Destroy();
+            return;
+        }
+        if (ModelInfo::AddReference(model))
+            m_pinnedCustomModel = model;
     }
 
     scm::ProcessCommand(&SET_ACTOR_ROTATION, handle, static_cast<double>(rotation));
@@ -167,6 +183,12 @@ void CActor::Destroy()
             destructor(m_pGamePed, 1);
     }
 
+    if (m_pinnedCustomModel)
+    {
+        ModelInfo::RemoveReference(m_pinnedCustomModel);
+        game::render::models::unload_custom(m_pinnedCustomModel);
+        m_pinnedCustomModel = 0;
+    }
     m_handle = 0;
     m_pGamePed = nullptr;
     m_pGameEntity = nullptr;

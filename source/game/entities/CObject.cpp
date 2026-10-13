@@ -18,6 +18,7 @@
 #include "game/render/CObjectMaterialText.h"
 
 #include "game/ModelInfo.h"
+#include "game/render/models.h"
 #include "game/CGame.h"
 #include "game/Scripting.h"
 #include "game/entities/CPed.h"
@@ -34,7 +35,6 @@ namespace
     constexpr scm::OpcodeInfo ATTACH_PLAYER{0x069B, "iiffffff"};
     constexpr scm::OpcodeInfo IS_ATTACHED{0x0685, "i"};
     constexpr scm::OpcodeInfo DETACH_OBJECT{0x0682, "ifff"};
-    constexpr scm::OpcodeInfo RELEASE_MODEL{0x0249, "i"};
     constexpr float RADIANS = 0.017453292f;
 
     enum class AttachmentKind : std::uint8_t
@@ -129,6 +129,7 @@ namespace
         bool rotate = false;
         bool customLighting = false;
         bool poolManaged = false;
+        int pinnedModel = 0;
         unsigned char hourOn = 0, hourOff = 0;
         unsigned int outsideFrames = 0;
         AttachmentKind attachment = AttachmentKind::None;
@@ -256,6 +257,8 @@ namespace
             return false;
         if (Read<void*>(info, 0x1C))
             return true;
+        if (ModelInfo::IsOwnedClone(model))
+            return false;
         reinterpret_cast<void(__cdecl*)(int, int)>(0x4087E0)(model, 2);
         for (int i = 0; i < attempts; ++i)
         {
@@ -483,16 +486,33 @@ CObject::CObject(int model, CVector position, CVector rotation, float drawDistan
         Write(info, 0x18, drawDistance);
     m_fDrawDistance = m_bUsesModelDrawDistance ? Read<float>(info, 0x18) : drawDistance;
     m_bDrawLast = (Read<std::uint8_t>(info, 0x12) & 2) != 0;
-    scm::ProcessCommand(&CREATE_OBJECT, model, static_cast<double>(position.x), static_cast<double>(position.y), static_cast<double>(position.z), &m_handle);
+    scm::ProcessCommand(&CREATE_OBJECT, ModelInfo::GetBaseModel(model), static_cast<double>(position.x), static_cast<double>(position.y), static_cast<double>(position.z),
+                        &m_handle);
     m_pGameEntity = ObjectFromHandle(m_handle);
     if (!IsValid())
         return;
+    if (ModelInfo::IsOwnedClone(model))
+    {
+        Remove();
+        CEntity::SetModelIndex(model);
+        if (GetModelIndex() != model)
+        {
+            scm::ProcessCommand(&DELETE_OBJECT, m_handle);
+            m_handle = 0;
+            m_pGameEntity = nullptr;
+            return;
+        }
+    }
+    if (ModelInfo::AddReference(model))
+        runtime.pinnedModel = model;
     g_nativeObjects.emplace(m_pGameEntity, this);
     CMatrix matrix = CMatrix::Unity();
     GetMatrix(&matrix);
     matrix.GetPosition() = position;
     SetMatrix(matrix);
     SetRotation(&rotation);
+    if (ModelInfo::IsOwnedClone(model))
+        Add();
     Write(m_pGameEntity, 0x1C, Read<std::uint32_t>(m_pGameEntity, 0x1C) | 0x80000000u);
     if (auto* collision = Read<void*>(info, 0x14))
         m_fBoundingRadius = Read<float>(collision, 0x24);
@@ -514,7 +534,13 @@ CObject::~CObject()
         DeleteRwObject();
         scm::ProcessCommand(&DELETE_OBJECT, m_handle);
         if (auto* info = ModelInfo::GetRelocated(m_nModel); info && !Read<std::uint16_t>(info, 8))
-            scm::ProcessCommand(&RELEASE_MODEL, m_nModel);
+            if (g_game)
+                g_game->ReleaseModel(m_nModel, false);
+    }
+    if (const auto it = g_objects.find(this); it != g_objects.end() && it->second.pinnedModel)
+    {
+        ModelInfo::RemoveReference(it->second.pinnedModel);
+        game::render::models::unload_custom(it->second.pinnedModel);
     }
     m_pGameEntity = nullptr;
     m_handle = 0;
@@ -996,7 +1022,8 @@ void CObject::SetMaterial(int model, int index, const char* txd, const char* tex
             // R5 releases an unreferenced source model even if it was loaded
             // before SetMaterial(). Use the current reference count.
             if (!Read<std::uint16_t>(info, 8) && Read<void*>(info, 0x1C))
-                scm::ProcessCommand(&RELEASE_MODEL, model);
+                if (g_game)
+                    g_game->ReleaseModel(model, false);
         }
     }
     else if (model == 0)

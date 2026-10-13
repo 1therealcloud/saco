@@ -287,6 +287,8 @@ public:
     void GetBonePosition(unsigned int boneId, CVector* outPosition) const;
 
 private:
+    int m_pinnedCustomModel{};
+    void ReleaseCustomModel();
     std::uint16_t m_lastScriptAnimationId{};
     struct PendingAnimation
     {

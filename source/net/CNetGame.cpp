@@ -16,11 +16,15 @@
 #include "CSrvNetStats.h"
 
 #include "main.h"
+#include "config/CSettings.h"
 
 #include "game/CGame.h"
+#include "game/ModelInfo.h"
+#include "game/entities/CPed.h"
 #include "game/BuildingRemoval.h"
 
 #include "gui/CChat.h"
+#include "gui/CDownloadWindow.h"
 #include "gui/CChatBubble.h"
 #include "gui/CDialog.h"
 #include "gui/CObjectEdit.h"
@@ -759,6 +763,12 @@ CNetGame::CNetGame(const char* hostAddress, int port, const char* nick, const ch
     // set server password
     m_pRakClient->SetPassword(password ? password : "");
 
+    if (g_DLClient && (m_nPort < 1 || m_nPort > 65535 || !m_customModels.InitDirectory(g_settings.m_szModelCache, m_szHostAddress, static_cast<std::uint16_t>(m_nPort))))
+    {
+#if defined(_DEBUG)
+        Log("[dl:cache] failed to initialize cache directory");
+#endif // _DEBUG
+    }
     // register rpc
     RegisterRPC();
 }
@@ -786,6 +796,10 @@ CNetGame::~CNetGame()
 
     // destroy pools
     DestroyPools(m_pPools);
+    if (g_game)
+        if (auto* ped = g_game->GetPlayerPed(); ped && ModelInfo::IsOwnedClone(ped->GetModelIndex()))
+            ped->SetModelIndex(0);
+    m_customModels.Reset();
 
     // destroy settings (ip, port, etc.)
     delete m_pSettings;
@@ -813,10 +827,15 @@ void CNetGame::SetState(int value)
     m_nGameState = value;
     if (resetSession)
     {
+        if (g_downloadWindow)
+            g_downloadWindow->Hide();
         BuildingRemoval::RestoreAll();
         CSrvNetStats::Reset();
-        m_customModels.Clear();
         ResetPools();
+        if (g_game)
+            if (auto* ped = g_game->GetPlayerPed(); ped && ModelInfo::IsOwnedClone(ped->GetModelIndex()))
+                ped->SetModelIndex(0);
+        m_customModels.Reset();
         PlayerColors::Initialize();
     }
 }
@@ -1534,6 +1553,52 @@ void CNetGame::Process()
     ZoneScoped;
 
     UpdateNetwork();
+    if (g_DLClient)
+    {
+        m_customModels.Process();
+        if (g_downloadWindow)
+        {
+            const auto& files = m_customModels.GetDownloadedFilesPool();
+            if (!m_customModels.IsCacheReady() || m_customModels.AreDownloadsConfirmed())
+            {
+                if (g_downloadWindow->m_bIsWindowActive)
+                    g_downloadWindow->Hide();
+            }
+            else if (files.GetCount())
+            {
+                const auto now = GetTickCount();
+                const bool opening = !g_downloadWindow->m_bIsWindowActive;
+                if (opening)
+                    g_downloadWindow->Show(static_cast<int>(files.GetCount()));
+                if (opening || now - m_lastDownloadUpdate >= 250)
+                {
+                    m_lastDownloadUpdate = now;
+                    for (std::uint32_t i = 0; i < files.GetCount(); ++i)
+                    {
+                        auto* file = files.Get(i);
+                        if (!file->m_bProgressDirty)
+                            continue;
+                        file->m_bProgressDirty = false;
+                        const char state = file->m_state == DownloadState::Complete ? 4 : file->m_state == DownloadState::Failed ? 3 : 1;
+                        g_downloadWindow->AddEntry(static_cast<char>(file->m_nType), static_cast<int>(file->m_nExpectedCrc), state, static_cast<int>(file->m_nDownloadedSize),
+                                                   static_cast<int>(file->m_nFileSize));
+                    }
+                }
+            }
+        }
+        if (m_nGameState == GAME_MODE_CONNECTED)
+        {
+            if (auto* file = m_customModels.GetNextDownload())
+            {
+                const auto type = file->m_nType;
+                const auto crc = file->m_nExpectedCrc;
+                if (m_customModels.BeginRequest(type, crc) && !(type == DownloadedFileType::Dff ? RequestDffFile(crc) : RequestTxdFile(crc)))
+                    m_customModels.FinishCurrentDownload(false);
+            }
+            if (m_customModels.ShouldAcknowledgeDownloads() && FinishedDownloading())
+                m_customModels.AcknowledgeDownloads();
+        }
+    }
 
     const std::uint32_t now = GetTimeNow();
     if (m_nGameState == GAME_MODE_WAITCONNECT && now - m_lastConnectAttempt > 3000)
@@ -1950,7 +2015,7 @@ bool CNetGame::GiveActorDamage(bool unused, std::uint16_t actorId, float damage,
     if (!m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
     BitStream bs;
-    bs.Write(unused);
+    bs.Write(true);
     bs.Write(actorId);
     bs.Write(damage);
     bs.Write(weaponId);
@@ -2200,11 +2265,11 @@ bool CNetGame::RequestTxdFile(std::uint32_t crc)
 }
 
 // 0.3.DL RPC 184: acknowledge finished downloading.
-bool CNetGame::FinishedDownloading(std::uint8_t unused)
+bool CNetGame::FinishedDownloading()
 {
     if (!g_DLClient || !m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
     BitStream bs;
-    bs.Write(unused);
+    bs.Write(true);
     return m_pRakClient->RPC(&g_FinishedDownloading, &bs, HIGH_PRIORITY, RELIABLE, 0, false);
 }

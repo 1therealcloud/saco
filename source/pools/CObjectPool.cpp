@@ -14,6 +14,7 @@
 
 #include "game/CCamera.h"
 #include "game/CGame.h"
+#include "net/CNetGame.h"
 
 #include <cmath>
 
@@ -108,11 +109,15 @@ BOOL CObjectPool::Create(ID id, int model, CVector position, CVector rotation, f
     if (!game)
         return FALSE;
 
-    // In R5, negative model ids are resolved through ModelCache first; that
-    // subsystem is still a stub in this tree. CObject already applies R5's
-    // 18631 fallback when a model id cannot be resolved, so hourOn/hourOff stay
-    // zero until CustomModels/ModelCache is implemented.
-    CObject* object = game->CreateObject(model, position, rotation, drawDistance, 0, 0);
+    char hourOn = 0, hourOff = 0;
+    if (g_DLClient && g_netGame && model < 0)
+    {
+        auto& models = g_netGame->GetCustomModels();
+        hourOn = static_cast<char>(models.GetObjectTimeOn(model));
+        hourOff = static_cast<char>(models.GetObjectTimeOff(model));
+        model = models.ResolveObject(model);
+    }
+    CObject* object = game->CreateObject(model, position, rotation, drawDistance, hourOn, hourOff);
     if (!object || !object->IsValid())
     {
         delete object;

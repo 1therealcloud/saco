@@ -76,7 +76,8 @@ public:
         char field_5;                     // 0x05
         CVector m_position;               // 0x06
         float m_fRotation;                // 0x12
-        std::uint8_t m_opaqueLoadout[24]; // 0x16, kept opaque in this port
+        std::uint32_t m_nCustomSkin{};    // 0x16, DL runtime data
+        std::uint8_t m_opaqueLoadout[24]; // 0x1A, kept opaque in this port
     };
 
     struct OpaqueCombatState

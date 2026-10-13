@@ -116,7 +116,7 @@ struct CHttpClient::Transfer
             client.m_error = ERROR_TOO_BIG_CONTENT;
             return 1;
         }
-        if (client.m_cancelled.load(std::memory_order_relaxed))
+        if (client.m_cancelled.load(std::memory_order_relaxed) || (client.m_externalCancellation && client.m_externalCancellation->load(std::memory_order_relaxed)))
         {
             client.m_error = ERROR_REQUEST_CANCELLED;
             return 1;
@@ -231,6 +231,8 @@ CHttpClient::ErrorCode CHttpClient::Perform(int type, const char* url, const cha
             result = curl_easy_setopt(easy.get(), option, value);
     };
     set(CURLOPT_CURLU, parsed.get());
+    if (!m_proxy.empty())
+        set(CURLOPT_PROXY, m_proxy.c_str());
     set(CURLOPT_PROTOCOLS_STR, "http,https");
     set(CURLOPT_REDIR_PROTOCOLS_STR, https ? "https" : "http,https");
     set(CURLOPT_SSL_VERIFYPEER, 1L);
@@ -242,7 +244,7 @@ CHttpClient::ErrorCode CHttpClient::Perform(int type, const char* url, const cha
     set(CURLOPT_LOW_SPEED_LIMIT, 1L);
     set(CURLOPT_LOW_SPEED_TIME, 30L);
     set(CURLOPT_NOSIGNAL, 1L);
-    set(CURLOPT_USERAGENT, "SAMP/0.2.0");
+    set(CURLOPT_USERAGENT, m_userAgent.c_str());
     set(CURLOPT_ERRORBUFFER, errors);
     set(CURLOPT_WRITEFUNCTION, &Transfer::Write);
     set(CURLOPT_WRITEDATA, &transfer);

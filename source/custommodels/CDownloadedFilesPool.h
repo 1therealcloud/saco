@@ -13,7 +13,9 @@
 #include <cstdio>
 #include <memory>
 #include <string>
+#include <filesystem>
 #include <vector>
+#include <unordered_map>
 
 enum class DownloadedFileType : std::uint8_t
 {
@@ -30,6 +32,16 @@ struct DownloadedFileCloser
     }
 };
 
+enum class DownloadState
+{
+    Queued,
+    Requested,
+    Binary,
+    Http,
+    Complete,
+    Failed
+};
+
 struct DownloadedFileInfo
 {
     std::unique_ptr<std::FILE, DownloadedFileCloser> m_pFile{};
@@ -39,7 +51,9 @@ struct DownloadedFileInfo
     std::uint32_t m_nRunningCrc{};
     std::uint32_t m_nExpectedCrc{};
     std::uint32_t m_nModelIndex{};
-    std::string m_tempPath{};
+    std::filesystem::path m_tempPath{};
+    DownloadState m_state{DownloadState::Queued};
+    bool m_bProgressDirty{};
 };
 
 struct DownloadSlot
@@ -53,5 +67,13 @@ struct DownloadSlot
 
 struct CDownloadedFilesPool
 {
+    DownloadedFileInfo* Find(DownloadedFileType type, std::uint32_t crc) const;
+    bool Queue(DownloadedFileType type, std::uint32_t crc, std::uint32_t size, std::uint32_t modelIndex);
+    std::uint32_t GetCount() const;
+    void Clear();
+    DownloadedFileInfo* Get(std::uint32_t index) const;
+
+private:
     std::vector<std::unique_ptr<DownloadedFileInfo>> m_files{};
+    std::unordered_map<std::uint64_t, DownloadedFileInfo*> m_byCrc;
 };

@@ -9,6 +9,7 @@
 #include <stdafx.h>
 
 #include "main.h"
+#include "config/CSettings.h"
 
 #include "RPCHandlers.h"
 #include "CNetGame.h"
@@ -970,16 +971,14 @@ void RPCHandlers::WorldPlayerAdd(RPCParameters* pParams)
         return;
 
     CVector position{x, y, z};
-    if (!player->Spawn(0, static_cast<int>(baseSkinId), 0, &position, facingAngle, color, static_cast<char>(fightingStyle)))
+    const int skin = g_DLClient ? g_netGame->GetCustomModels().ResolveSkin(static_cast<int>(baseSkinId), customSkinId) : static_cast<int>(baseSkinId);
+    if (!player->Spawn(0, skin, 0, &position, facingAngle, color, static_cast<char>(fightingStyle)))
         return;
 
     playerPool->SetTeam(playerId, team);
 
     for (std::size_t skill = 0; skill < skillLevels.size(); ++skill)
         player->m_pPed->SetPlayerStat(static_cast<int>(skill), skillLevels[skill]);
-
-    // custom skins need their game-side implementation
-    (void)customSkinId;
 }
 
 // -----------------------------------------------------------------------------
@@ -1723,6 +1722,7 @@ void RPCHandlers::RequestClass(RPCParameters* pParams)
     CLocalPlayer::SpawnInfo spawnInfo{};
     spawnInfo.m_nTeam = team;
     spawnInfo.m_nSkin = static_cast<int>(baseSkinId);
+    spawnInfo.m_nCustomSkin = customSkinId;
     spawnInfo.field_5 = static_cast<char>(unused);
     spawnInfo.m_position = position;
     spawnInfo.m_fRotation = rotation;
@@ -1975,15 +1975,12 @@ void RPCHandlers::ShowActor(RPCParameters* pParams)
 
     ActorInfo info{};
     info.m_nId = actorId;
-    info.m_nModel = static_cast<int>(baseSkinId);
+    info.m_nModel = g_DLClient ? g_netGame->GetCustomModels().ResolveSkin(static_cast<int>(baseSkinId), customSkinId) : static_cast<int>(baseSkinId);
     info.m_position = CVector{x, y, z};
     info.m_fRotation = angle;
     info.m_fHealth = health;
     info.m_bInvulnerable = invulnerable != 0;
     pool->Create(&info);
-
-    // custom skins need the dl model loader
-    (void)customSkinId;
 }
 
 // -----------------------------------------------------------------------------
@@ -3446,6 +3443,7 @@ void RPCHandlers::SetSpawnInfo(RPCParameters* pParams)
     CLocalPlayer::SpawnInfo spawnInfo{};
     spawnInfo.m_nTeam = team;
     spawnInfo.m_nSkin = static_cast<int>(baseSkinId);
+    spawnInfo.m_nCustomSkin = customSkinId;
     spawnInfo.field_5 = static_cast<char>(unused);
     spawnInfo.m_position = CVector{x, y, z};
     spawnInfo.m_fRotation = rotation;
@@ -3538,10 +3536,7 @@ void RPCHandlers::SetPlayerSkin(RPCParameters* pParams)
     if (!ped || !ped->IsValid())
         return;
 
-    ped->SetModelIndex(static_cast<int>(baseSkinId));
-
-    // TODO
-    (void)customSkinId;
+    ped->SetModelIndex(g_DLClient ? g_netGame->GetCustomModels().ResolveSkin(static_cast<int>(baseSkinId), customSkinId) : static_cast<int>(baseSkinId));
 }
 
 // -----------------------------------------------------------------------------
@@ -4409,6 +4404,8 @@ void RPCHandlers::SetPlayerAttachedObject(RPCParameters* pParams)
         !bs.Read(info.m_firstMaterialColor) || !bs.Read(info.m_secondMaterialColor))
         return;
 
+    if (g_DLClient && info.m_nModel < 0)
+        info.m_nModel = g_netGame->GetCustomModels().ResolveObject(info.m_nModel);
     ped->AddAccessory(static_cast<int>(index), &info);
 }
 
@@ -4933,7 +4930,8 @@ void RPCHandlers::SetPlayerVirtualWorld(RPCParameters* pParams)
     std::int32_t virtualWorld{};
     if (!bs.Read(virtualWorld))
         return;
-    // TODO: update DL downloads for this virtual world.
+    if (g_netGame)
+        g_netGame->GetCustomModels().SetVirtualWorld(virtualWorld);
 }
 
 // 0.3.DL-only RPC 179: model metadata, in wire order.
@@ -4975,43 +4973,51 @@ void RPCHandlers::ModelInfo(RPCParameters* pParams)
 void RPCHandlers::ModelFile(RPCParameters* pParams)
 {
     ZoneScoped;
-    if (!g_DLClient || !pParams || !pParams->input)
+    if (!g_DLClient || !g_netGame || !pParams || !pParams->input || pParams->numberOfBitsOfData < 8)
         return;
     BitStream bs(pParams->input, BITS_TO_BYTES(pParams->numberOfBitsOfData), false);
-    std::uint8_t arg{}, fileType{};
+    auto& models = g_netGame->GetCustomModels();
+    std::uint8_t arg{}, type{};
     std::uint32_t crc{};
     if (!bs.Read(arg))
         return;
-    if (arg == 1)
+    if (arg == 0 || arg == 2)
+        models.FinishCurrentDownload(arg == 2);
+    else if (arg == 1)
     {
-        std::uint32_t length{};
-        if (!bs.Read(fileType) || !bs.Read(crc) || !bs.Read(length) || length > 64u * 1024u * 1024u || bs.GetNumberOfUnreadBits() < static_cast<std::uint64_t>(length) * 8u)
+        std::uint8_t state{};
+        std::uint32_t outputSize{};
+        std::int32_t length{};
+        std::array<std::uint8_t, 4096> data{};
+        if (!bs.Read(state) || !bs.Read(outputSize) || !bs.Read(length) || length < 0 || length > 4096 ||
+            pParams->numberOfBitsOfData < 80u + static_cast<std::uint32_t>(length) * 8u || (length && !bs.Read(reinterpret_cast<char*>(data.data()), length)))
+        {
+            models.FinishCurrentDownload(false);
             return;
-        std::vector<std::uint8_t> data(length);
-        if (length && !bs.Read(reinterpret_cast<char*>(data.data()), static_cast<int>(length)))
-            return;
-        // TODO: validate CRC and submit file to the download pool.
+        }
+        models.ProcessDownloadChunk(state, outputSize, data.data(), static_cast<std::uint32_t>(length));
     }
-    else if (arg == 6)
+    else if (arg == 5 || arg == 6)
     {
-        ZoneScoped;
-        std::uint8_t length{};
-        if (!bs.Read(fileType) || !bs.Read(crc) || !bs.Read(length) || bs.GetNumberOfUnreadBits() < length * 8u)
+        if (pParams->numberOfBitsOfData < 48 || !bs.Read(type) || !bs.Read(crc))
             return;
-        std::string url(length, '\0');
-        if (length && !bs.Read(url.data(), length))
-            return;
-        // TODO: submit URL to CHttpClient after URL validation.
+        if (arg == 5)
+            models.StartDownload(static_cast<DownloadedFileType>(type), crc);
+        else
+        {
+            std::uint8_t length{};
+            if (!bs.Read(length) || pParams->numberOfBitsOfData < 56u + length * 8u)
+                return;
+            std::string url(length, '\0');
+            if (length && !bs.Read(url.data(), length))
+                return;
+            models.StartHttpDownload(static_cast<DownloadedFileType>(type), crc, std::move(url), g_settings.m_szArtworkProxy);
+        }
     }
-    // TODO: other undocumented ModelFile variants.
 }
 
-// 0.3.DL-only RPC 185: no payload, download state ended.
 void RPCHandlers::SrcFinishedDownloading(RPCParameters* pParams)
 {
-    if (!g_DLClient || !pParams)
-        return;
-    BitStream bs;
-    (void)bs;
-    // TODO: leave the DL downloading state.
+    if (g_DLClient && g_netGame && pParams)
+        g_netGame->GetCustomModels().ConfirmDownloads();
 }

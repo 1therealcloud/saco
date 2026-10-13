@@ -231,7 +231,7 @@ void CEntity::GetBoundCentre(CVector* centre) const
 void CEntity::SetModelIndex(int model)
 {
     ZoneScoped;
-    if (!IsValid() || !g_game || model < 0 || model >= ModelInfo::MAX_MODELS)
+    if (!IsValid() || !g_game || !ModelInfo::Valid(model) || ((model < 0 || model >= ModelInfo::MAX_MODELS) && !ModelInfo::IsOwnedClone(model)))
         return;
 
     if (!g_game->IsModelAvailable(model))
@@ -271,7 +271,7 @@ void CEntity::SetModelIndex(int model)
 
 int CEntity::GetModelIndex() const
 {
-    return IsValid() ? Read<std::uint16_t>(m_pGameEntity, 0x22) : 0;
+    return IsValid() ? Read<std::int16_t>(m_pGameEntity, 0x22) : 0;
 }
 void CEntity::Teleport(CVector position)
 {

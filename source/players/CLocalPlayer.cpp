@@ -627,7 +627,7 @@ BOOL CLocalPlayer::Spawn()
 
     g_game->RefreshRenderer(position.x, position.y);
     ped->SetSpawnInfo(&position, rotation);
-    ped->SetModelIndex(m_spawnInfo.m_nSkin);
+    ped->SetModelIndex(g_DLClient && g_netGame ? g_netGame->GetCustomModels().ResolveSkin(m_spawnInfo.m_nSkin, m_spawnInfo.m_nCustomSkin) : m_spawnInfo.m_nSkin);
     ped->ResetDamageEntity();
     SetSpecialAction(SPECIAL_ACTION_NONE);
 
@@ -759,7 +759,7 @@ void CLocalPlayer::PrepareForClassSelection_Outcome(BOOL outcome)
     m_nTeam = m_spawnInfo.m_nTeam;
     m_pPed->SetControllable(FALSE);
     m_pPed->SetSpawnInfo(&m_spawnInfo.m_position, m_spawnInfo.m_fRotation);
-    m_pPed->SetModelIndex(m_spawnInfo.m_nSkin);
+    m_pPed->SetModelIndex(g_DLClient && g_netGame ? g_netGame->GetCustomModels().ResolveSkin(m_spawnInfo.m_nSkin, m_spawnInfo.m_nCustomSkin) : m_spawnInfo.m_nSkin);
     m_pPed->ForceRotation(m_spawnInfo.m_fRotation);
     m_pPed->SetHealth(100.0f);
     m_pPed->SetArmour(0.0f);
@@ -1366,6 +1366,14 @@ void CLocalPlayer::PrevClass()
 void CLocalPlayer::ProcessClassSelection()
 {
     ZoneScoped;
+    if (g_DLClient && g_netGame && m_classSelection.m_bIsActive && m_bHasSpawnInfo && m_spawnInfo.m_nCustomSkin && m_pPed && m_pPed->GetModelIndex() == m_spawnInfo.m_nSkin &&
+        g_netGame->GetCustomModels().IsCacheReady())
+    {
+        const int model = g_netGame->GetCustomModels().ResolveSkin(m_spawnInfo.m_nSkin, m_spawnInfo.m_nCustomSkin);
+        if (model != m_spawnInfo.m_nSkin)
+            m_pPed->SetModelIndex(model);
+    }
+
     const bool active = m_classSelection.m_bIsActive != FALSE;
     if (g_selectionKeys.player != this || g_selectionKeys.active != active)
     {

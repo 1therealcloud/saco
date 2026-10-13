@@ -9,8 +9,10 @@
 #pragma once
 
 #include <memory>
+#include <filesystem>
 
-#include "game/RenderWare/rw/rpworld.h"
+struct RpClump;
+struct RwStream;
 
 namespace game::render::models
 {
@@ -24,4 +26,9 @@ namespace game::render::models
     // reads a standalone dff; this does not register a GTA model id or request streaming
     Model load(const char* path, int textureSlot);
     Model clone(RpClump* model);
+    bool load_custom(int baseModel, int model, const std::filesystem::path& dff, const std::filesystem::path& txd, bool skin);
+    bool unload_custom(int model);
+    void collect_custom_models();
+    bool loading_custom_model();
+    RwStream* read_custom_collision(RwStream* stream, int length);
 }

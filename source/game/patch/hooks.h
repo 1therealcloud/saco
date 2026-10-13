@@ -55,6 +55,7 @@ namespace game::hooks
     bool InstallBulletHooks();
     bool InstallBuildingRemovalHooks();
     bool InstallRenderWareHooks();
+    bool RegisterCustomModelPlugins();
     bool InstallVehicleHooks();
     bool InstallKeyboardHook();
     void RemoveKeyboardHook();

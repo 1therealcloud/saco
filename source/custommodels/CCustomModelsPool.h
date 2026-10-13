@@ -54,10 +54,12 @@ struct CCustomModelsPool
     std::uint32_t GetCount() const;
     std::uint32_t GetReceivedCount() const;
     bool IsReady() const;
+    std::uint64_t GetRevision() const;
     void Clear();
 
 private:
     // Empty slots preserve server indices while metadata arrives out of order.
     std::vector<std::unique_ptr<CCustomModelInfo>> m_models{};
     std::uint32_t m_receivedCount{};
+    std::uint64_t m_revision{};
 };

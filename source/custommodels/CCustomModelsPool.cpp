@@ -40,7 +40,11 @@ bool CCustomModelsPool::Set(std::uint32_t index, std::uint32_t count, const CCus
     auto* previous = Get(index);
     if (previous && SameMetadata(*previous, info))
     {
-        m_models.resize(count);
+        if (count != m_models.size())
+        {
+            m_models.resize(count);
+            ++m_revision;
+        }
         return true;
     }
     if (previous && (previous->m_bLoaded || previous->m_bDffRequestPending || previous->m_bTxdRequestPending || previous->m_bDffQueued || previous->m_bTxdQueued))
@@ -60,6 +64,7 @@ bool CCustomModelsPool::Set(std::uint32_t index, std::uint32_t count, const CCus
     if (!previous)
         ++m_receivedCount;
     m_models[index] = std::move(model);
+    ++m_revision;
     return true;
 }
 CCustomModelInfo* CCustomModelsPool::Get(std::uint32_t index) const
@@ -82,4 +87,10 @@ void CCustomModelsPool::Clear()
 {
     m_models.clear();
     m_receivedCount = 0;
+    ++m_revision;
+}
+
+std::uint64_t CCustomModelsPool::GetRevision() const
+{
+    return m_revision;
 }

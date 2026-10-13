@@ -9,6 +9,8 @@
 #include <stdafx.h>
 
 #include "game/CGame.h"
+#include "main.h"
+#include "net/CNetGame.h"
 
 #include "CTextDraw.h"
 #include "game/render/model_preview.h"
@@ -588,8 +590,15 @@ void CTextDraw::LoadPreview()
     if (m_data.m_nStyle != 5 || m_data.m_nIndex != INVALID_RESOURCE)
         return;
 
+    int model = static_cast<std::int16_t>(m_data.m_nModel);
+    if (g_DLClient && g_netGame && (model < 0 || model >= 20001))
+    {
+        auto& models = g_netGame->GetCustomModels();
+        if (!models.IsCacheReady() || !(model < 0 ? models.LoadObject(model) : models.LoadSkin(model)))
+            return;
+    }
     auto textureResource =
-        game::render::model_preview::create(m_data.m_nModel, CVector{m_data.m_rotation.x, m_data.m_rotation.y, m_data.m_rotation.z}, m_data.m_fZoom, m_data.m_backgroundColor,
+        game::render::model_preview::create(model, CVector{m_data.m_rotation.x, m_data.m_rotation.y, m_data.m_rotation.z}, m_data.m_fZoom, m_data.m_backgroundColor,
                                             m_data.m_aColor[0] == 0xFFFF ? -1 : m_data.m_aColor[0], m_data.m_aColor[1] == 0xFFFF ? -1 : m_data.m_aColor[1]);
     void* texture = textureResource.release();
     if (!texture)

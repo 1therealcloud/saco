@@ -7,6 +7,7 @@
  */
 
 #include <stdafx.h>
+#include "main.h"
 
 extern DWORD WINAPI InitializeThread(LPVOID);
 
@@ -38,6 +39,11 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
         case DLL_PROCESS_DETACH:
             if (lpvReserved != nullptr)
             {
+                // ExitProcess stops worker threads before CRT global destructors.
+                // The OS reclaims resources; native cleanup here can touch destroyed
+                // model registries or wait for download workers that cannot run.
+                g_netGame.release();
+                g_game.release();
                 break;
             }
 

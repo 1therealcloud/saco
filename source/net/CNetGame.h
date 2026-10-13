@@ -19,7 +19,7 @@
 #include "pools/CPlayerPool.h"
 #include "pools/CTextDrawPool.h"
 #include "pools/CVehiclePool.h"
-#include "custommodels/CCustomModelsPool.h"
+#include "custommodels/CCustomModels.h"
 #include "sync/Synchronization.h"
 #include "utils/math/CVector.h"
 
@@ -107,17 +107,18 @@ public:
         bool m_bLtdChatRadius;               // 0x39
     };
 
-    RakClientInterface* m_pRakClient;   // 0x000
-    char pad_0[44];                     // 0x004
-    char m_szHostAddress[257];          // 0x030
-    char m_szHostname[257];             // 0x131
-    bool m_bDisableCollision;           // 0x232
-    bool m_bUpdateCameraTarget;         // 0x233
-    bool m_bNametagStatus;              // 0x234
-    int m_nPort;                        // 0x235
-    BOOL m_bLanMode;                    // 0x239
-    std::uint32_t m_aMapIcons[100];     // 0x23D
-    int m_nGameState;                   // 0x3CD
+    RakClientInterface* m_pRakClient; // 0x000
+    char pad_0[44];                   // 0x004
+    char m_szHostAddress[257];        // 0x030
+    char m_szHostname[257];           // 0x131
+    bool m_bDisableCollision;         // 0x232
+    bool m_bUpdateCameraTarget;       // 0x233
+    bool m_bNametagStatus;            // 0x234
+    int m_nPort;                      // 0x235
+    BOOL m_bLanMode;                  // 0x239
+    std::uint32_t m_aMapIcons[100];   // 0x23D
+    int m_nGameState;                 // 0x3CD
+    std::uint32_t m_lastDownloadUpdate{};
     std::uint32_t m_lastConnectAttempt; // 0x3D1
     Settings* m_pSettings;              // 0x3D5
     char pad_2[5];                      // 0x3D9
@@ -220,9 +221,9 @@ public:
     bool NPCJoin(std::uint32_t version, std::uint8_t mod, const char* nickname, std::uint32_t challengeResponse);
     bool CameraTarget(std::uint16_t objectTarget, std::uint16_t vehicleTarget, std::uint16_t playerTarget, std::uint16_t actorTarget);
 
-    bool FinishedDownloading(std::uint8_t unused = 128); // 0.3.DL, RPC 184
-    bool RequestDffFile(std::uint32_t crc);              // 0.3.DL, RPC 181
-    bool RequestTxdFile(std::uint32_t crc);              // 0.3.DL, RPC 182
+    bool FinishedDownloading();             // 0.3.DL, RPC 184
+    bool RequestDffFile(std::uint32_t crc); // 0.3.DL, RPC 181
+    bool RequestTxdFile(std::uint32_t crc); // 0.3.DL, RPC 182
 
     bool SrvNetStats();                              // legacy
     bool DestroyWeaponPickup(std::uint16_t exOwner); // legacy
@@ -237,9 +238,14 @@ public:
     __int64 GetCounter();
     CCustomModelsPool& GetCustomModelsPool()
     {
+        return m_customModels.GetModelsPool();
+    }
+
+    CCustomModels& GetCustomModels()
+    {
         return m_customModels;
     }
 
 private:
-    CCustomModelsPool m_customModels;
+    CCustomModels m_customModels;
 };

@@ -8,6 +8,8 @@
 
 #pragma once
 
+struct RpClump;
+
 namespace ModelInfo
 {
     constexpr int MAX_MODELS = 20000;
@@ -17,6 +19,15 @@ namespace ModelInfo
     void* GetRelocated(int modelId);
     bool IsReady(int modelId);
     bool IsOwnedClone(int modelId);
+    int GetReferences(int modelId);
+    int GetBaseModel(int modelId);
+    bool AddReference(int modelId);
+    void RemoveReference(int modelId);
+    bool PinBaseModel(int modelId);
+    bool SetTextureSlot(int modelId, int slot);
+    bool SetCollision(int modelId, void* collision);
+    bool AttachPedClump(int modelId, RpClump* clump);
+    bool DestroyClone(int modelId);
     int GetPedStat(int modelId);
 
     // clones start without rw objects, references or owned collision data

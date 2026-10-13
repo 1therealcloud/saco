@@ -15,6 +15,8 @@
 #include "audio/CAudioStream.h"
 #include "config/CSettings.h"
 #include "game/CGame.h"
+#include "game/render/models.h"
+#include "game/RenderWare/RenderWare.h"
 #include "game/CCamera.h"
 #include "game/BuildingRemoval.h"
 #include "game/Scripting.h"
@@ -1451,4 +1453,38 @@ namespace game::bullets::detail
     InstantFn instant = nullptr;
     SniperFn sniper = nullptr;
     TraceFn trace = nullptr;
+}
+
+namespace
+{
+    RwStream* __cdecl CustomCollisionStreamRead(RwStream* stream, int length, void*, int, int)
+    {
+        if (game::render::models::loading_custom_model())
+            return game::render::models::read_custom_collision(stream, length);
+        return stream && length >= 0 ? RwStreamSkip(stream, static_cast<RwUInt32>(length)) : nullptr;
+    }
+}
+bool game::hooks::RegisterCustomModelPlugins()
+{
+    constexpr RwUInt32 customCollisionPlugin = 0x253F2FF;
+    // DL registers this zero-sized plugin after RenderWare has opened.
+    auto& instances = *reinterpret_cast<RwUInt32*>(0xC97B20);
+    const auto savedInstances = instances;
+    instances = 0;
+    int offset = RpClumpGetPluginOffset(customCollisionPlugin);
+    if (offset < 0)
+        offset = RpClumpRegisterPlugin(0, customCollisionPlugin, reinterpret_cast<RwPluginObjectConstructor>(0x41B1A0), reinterpret_cast<RwPluginObjectDestructor>(0x41B1C0),
+                                       reinterpret_cast<RwPluginObjectCopy>(0x41B1B0));
+    const int streamOffset = offset >= 0
+                                 ? RpClumpRegisterPluginStream(customCollisionPlugin, &CustomCollisionStreamRead, reinterpret_cast<RwPluginDataChunkWriteCallBack>(0x41B2F0),
+                                                               reinterpret_cast<RwPluginDataChunkGetSizeCallBack>(0x41B300))
+                                 : -1;
+    instances = savedInstances;
+#if defined(_DEBUG)
+    static bool reported{};
+    if (!reported || offset < 0 || streamOffset < 0)
+        Log("[dl:native] collision plugin: offset=%d stream=%d", offset, streamOffset);
+    reported = true;
+#endif // _DEBUG
+    return offset >= 0 && streamOffset >= 0;
 }

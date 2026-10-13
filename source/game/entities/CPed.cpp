@@ -20,6 +20,7 @@
 
 #include "CObject.h"
 #include "game/ModelInfo.h"
+#include "game/render/models.h"
 #include "game/Scripting.h"
 #include "sync/AimStuff.h"
 
@@ -240,6 +241,7 @@ CPed::~CPed()
     DeleteAllAccessories();
     DeleteArrow();
     StopUrinating();
+    ReleaseCustomModel();
 }
 
 bool CPed::HasCurrentNativePed() const
@@ -259,6 +261,7 @@ void CPed::ResetPointers()
             if (m_pGameEntity)
                 DeleteAllAccessories();
             m_pGameEntity = nullptr;
+            ReleaseCustomModel();
             return;
         }
         m_pGameEntity = m_pGamePed;
@@ -267,10 +270,15 @@ void CPed::ResetPointers()
 
     void* native = LocalPed();
     if (native != m_pGamePed)
+    {
         DeleteAllAccessories();
+        ReleaseCustomModel();
+    }
     m_pGamePed = native;
     m_handle = PedHandleFromPointer(native);
     m_pGameEntity = native;
+    if (!m_pinnedCustomModel && HasCurrentNativePed() && ModelInfo::AddReference(GetModelIndex()))
+        m_pinnedCustomModel = GetModelIndex();
 }
 
 void CPed::SetInitialState()
@@ -1514,7 +1522,15 @@ void CPed::SetModelIndex(int model)
     DestroyCommandTask();
     CEntity::SetModelIndex(model);
     if (HasCurrentNativePed() && GetModelIndex() == model)
+    {
         reinterpret_cast<void(__thiscall*)(void*, void*)>(0x4E68D0)(static_cast<std::uint8_t*>(m_pGamePed) + 0x294, m_pGamePed);
+        if (m_pinnedCustomModel != model)
+        {
+            ReleaseCustomModel();
+            if (ModelInfo::AddReference(model))
+                m_pinnedCustomModel = model;
+        }
+    }
 }
 
 BOOL CPed::CopyAppearanceFrom(const CPed& source)
@@ -1538,7 +1554,10 @@ void CPed::Destroy()
     ZoneScoped;
     m_pendingAnimation.active = false;
     if (!m_handle && !m_pGamePed)
+    {
+        ReleaseCustomModel();
         return;
+    }
 
     const auto* nativeBeforeDestroy = m_pGamePed;
 
@@ -1568,6 +1587,7 @@ void CPed::Destroy()
     m_handle = 0;
     if (m_nPlayerNumber)
         game::players::ReleaseSlotIfPed(m_nPlayerNumber, nativeBeforeDestroy);
+    ReleaseCustomModel();
 }
 
 void CPed::SetCameraMode(char mode)
@@ -1864,4 +1884,14 @@ std::uint8_t CPed::GetDeathReason(void*& source) const
         return 0xFF;
     source = Read<void*>(m_pGamePed, 0x764);
     return Read<std::uint8_t>(m_pGamePed, 0x760);
+}
+
+void CPed::ReleaseCustomModel()
+{
+    if (!m_pinnedCustomModel)
+        return;
+    const int model = m_pinnedCustomModel;
+    m_pinnedCustomModel = 0;
+    ModelInfo::RemoveReference(model);
+    game::render::models::unload_custom(model);
 }
