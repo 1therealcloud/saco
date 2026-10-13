@@ -791,13 +791,10 @@ CNetGame::~CNetGame()
 void CNetGame::SetState(int value)
 {
     ZoneScoped;
-    if (value == GAME_MODE_WAITCONNECT && m_nGameState == GAME_MODE_CONNECTED)
-    {
-        ResetObjectPool();
-        ResetActorPool();
-    }
+    const bool resetSession = value == GAME_MODE_WAITCONNECT &&
+                              (m_nGameState == GAME_MODE_CONNECTED || m_nGameState == GAME_MODE_WAITJOIN || m_nGameState == GAME_MODE_RESTARTING);
 
-    if (m_nGameState == GAME_MODE_CONNECTED && value != GAME_MODE_CONNECTED)
+    if (resetSession || (m_nGameState == GAME_MODE_CONNECTED && value != GAME_MODE_CONNECTED))
     {
         if (g_dialog)
             g_dialog->Hide();
@@ -811,6 +808,13 @@ void CNetGame::SetState(int value)
             menu->Hide(menu->m_nCurrent);
     }
     m_nGameState = value;
+    if (resetSession)
+    {
+        BuildingRemoval::RestoreAll();
+        CSrvNetStats::Reset();
+        ResetPools();
+        PlayerColors::Initialize();
+    }
 }
 
 // init pools
@@ -902,11 +906,7 @@ void CNetGame::Connect()
 // disconnect
 void CNetGame::Disconnect()
 {
-    if (g_chatBubble)
-        g_chatBubble->Clear();
-    BuildingRemoval::RestoreAll();
-    ResetObjectPool();
-    ResetActorPool();
+    SetState(GAME_MODE_WAITCONNECT);
     if (m_pRakClient && m_pRakClient->IsConnected())
         m_pRakClient->Disconnect(500);
 }
@@ -957,11 +957,7 @@ void CNetGame::Packet_NoFreeIncomingConnections(Packet*)
 void CNetGame::Packet_DisconnectionNotification(Packet*)
 {
     ZoneScoped;
-    if (g_chatBubble)
-        g_chatBubble->Clear();
-    BuildingRemoval::RestoreAll();
     g_chat->PrintDebug("Server closed the connection.");
-    CSrvNetStats::Reset();
     SetState(GAME_MODE_WAITCONNECT);
 }
 
@@ -1276,7 +1272,6 @@ void CNetGame::ResetPools()
     Log("[CNetGame::ResetPools]");
 
     ResetPlayerPool();
-    ResetVehiclePool();
     ResetTextDrawPool();
     ResetObjectPool();
     ResetGangZonePool();
@@ -1284,6 +1279,7 @@ void CNetGame::ResetPools()
     ResetMenuPool();
     ResetLabelPool();
     ResetActorPool();
+    ResetVehiclePool();
     ResetMarkers();
 }
 
@@ -1380,11 +1376,7 @@ void CNetGame::Packet_VehicleSync(Packet* packet)
 void CNetGame::Packet_ConnectionLost(Packet*)
 {
     ZoneScoped;
-    if (g_chatBubble)
-        g_chatBubble->Clear();
-    BuildingRemoval::RestoreAll();
     g_chat->PrintDebug("Connection to the server was lost. Reconnecting...");
-    CSrvNetStats::Reset();
     SetState(GAME_MODE_WAITCONNECT);
 }
 

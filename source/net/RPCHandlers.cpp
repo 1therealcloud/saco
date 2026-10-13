@@ -3621,12 +3621,14 @@ void RPCHandlers::SetPlayerHealth(RPCParameters* pParams)
 {
     ZoneScoped;
     Log("SetPlayerHealth");
+    if (!pParams || !pParams->input)
+        return;
 
     float health{};
 
     BitStream bs(pParams->input, BITS_TO_BYTES(pParams->numberOfBitsOfData), false);
 
-    if (!bs.Read(health))
+    if (!bs.Read(health) || !std::isfinite(health))
         return;
 
     if (!g_netGame)
