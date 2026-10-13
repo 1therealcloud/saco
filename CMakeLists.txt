@@ -160,6 +160,7 @@ target_link_libraries(samp PRIVATE
     ole32
     shell32
     dbghelp
+    dwmapi
 )
 
 add_subdirectory(tools)

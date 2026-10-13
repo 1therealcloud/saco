@@ -12,6 +12,7 @@
 #include "main.h"
 
 #include <dbghelp.h>
+#include <dwmapi.h>
 #include <filesystem>
 
 namespace exceptions
@@ -309,7 +310,12 @@ namespace exceptions
                 GetWindowThreadProcessId(foreground, &processId);
 
                 if (processId == GetCurrentProcessId())
-                    return foreground;
+                {
+                    char className[64]{};
+                    GetClassNameA(foreground, className, static_cast<int>(sizeof(className)));
+                    if (lstrcmpiA(className, "ConsoleWindowClass") != 0 && lstrcmpiA(className, "#32770") != 0)
+                        return foreground;
+                }
             }
 
             struct Search
@@ -395,7 +401,7 @@ namespace exceptions
             {
                 case WM_INITDIALOG:
                 {
-                    release_cursor();
+                    release_cursor(true);
 
                     char report[4096]{};
                     build_report(report, sizeof(report));
@@ -413,14 +419,14 @@ namespace exceptions
                     break;
 
                 case WM_SETCURSOR:
-                    SetCursor(LoadCursorA(nullptr, IDC_ARROW));
+                    release_cursor();
                     return TRUE;
 
                 case WM_COMMAND:
                     switch (LOWORD(wParam))
                     {
                         case IDC_BUTTON1:
-                            EndDialog(dialog, TRUE);
+                            TerminateProcess(GetCurrentProcess(), 1);
                             return TRUE;
 
                         case IDC_BUTTON2:
@@ -430,7 +436,7 @@ namespace exceptions
                     break;
 
                 case WM_CLOSE:
-                    EndDialog(dialog, TRUE);
+                    TerminateProcess(GetCurrentProcess(), 1);
                     return TRUE;
             }
 
@@ -451,18 +457,23 @@ namespace exceptions
             g_exception = info->ExceptionRecord;
             g_context = info->ContextRecord;
 
-            request_minidump(info);
-
             release_cursor(true);
 
             const HWND gameWindow = get_game_window();
 
             if (gameWindow)
-                ShowWindow(gameWindow, SW_MINIMIZE);
+            {
+                const BOOL cloak = TRUE;
+                DwmSetWindowAttribute(gameWindow, DWMWA_CLOAK, &cloak, sizeof(cloak));
+                ShowWindowAsync(gameWindow, SW_HIDE);
+            }
+
+            request_minidump(info);
 
             if (const HMODULE module = get_module())
             {
-                DialogBoxParamA(module, MAKEINTRESOURCEA(IDD_DIALOG1), gameWindow, dialog_proc, 0);
+                // Keep the crash dialog independent of the hidden game's input queue.
+                DialogBoxParamA(module, MAKEINTRESOURCEA(IDD_DIALOG1), nullptr, dialog_proc, 0);
             }
 
             if (IsDebuggerPresent())
