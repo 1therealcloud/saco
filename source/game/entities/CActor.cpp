@@ -72,6 +72,16 @@ namespace
         return file && scm::ProcessCommand(&IS_ANIMATION_LOADED, file) != 0;
     }
 
+    struct PendingAnimation
+    {
+        std::string name, library;
+        void* ped;
+        std::uint32_t handle, requested;
+        float delta;
+        int loop, lockX, lockY, freeze, time;
+    };
+    std::unordered_map<CActor*, PendingAnimation> g_pendingAnimations;
+
     float HeadingToRadians(float angle)
     {
         ZoneScoped;
@@ -148,6 +158,7 @@ CActor::~CActor()
 void CActor::Destroy()
 {
     ZoneScoped;
+    g_pendingAnimations.erase(this);
     if (IsCurrentPed(this))
     {
         using DeletingDestructor = void(__thiscall*)(void*, unsigned int);
@@ -164,27 +175,52 @@ void CActor::Destroy()
 void CActor::PerformAnimation(const char* animation, const char* file, float frameDelta, int lockA, int lockX, int lockY, int lockF, int time)
 {
     ZoneScoped;
-    if (!IsCurrentPed(this) || !animation || !file || _stricmp(file, "SEX") == 0)
+    if (!IsCurrentPed(this) || !animation || !*animation || !file || !*file || !std::isfinite(frameDelta) || std::strlen(animation) >= 64 || std::strlen(file) >= 64 ||
+        _stricmp(file, "SEX") == 0)
         return;
-
-    if (!IsAnimationLoaded(file))
+    if (IsAnimationLoaded(file))
     {
-        scm::ProcessCommand(&REQUEST_ANIMATION, file);
-
-        unsigned checks = 0;
-        while (!IsAnimationLoaded(file) && checks++ < 15)
-            Sleep(1);
-
-        if (!IsAnimationLoaded(file))
-            return;
+        g_pendingAnimations.erase(this);
+        scm::ProcessCommand(&PERFORM_ANIMATION, m_handle, animation, file, static_cast<double>(frameDelta), lockA, lockX, lockY, lockF, time);
+        return;
     }
+    const auto previous = g_pendingAnimations.find(this);
+    const bool sameLibrary = previous != g_pendingAnimations.end() && previous->second.library == file;
+    const auto requested = sameLibrary ? previous->second.requested : GetTickCount();
+    g_pendingAnimations.insert_or_assign(this, PendingAnimation{animation, file, m_pGamePed, m_handle, requested, frameDelta, lockA, lockX, lockY, lockF, time});
+    if (!sameLibrary)
+        scm::ProcessCommand(&REQUEST_ANIMATION, file);
+}
 
-    scm::ProcessCommand(&PERFORM_ANIMATION, m_handle, animation, file, static_cast<double>(frameDelta), lockA, lockX, lockY, lockF, time);
+void CActor::ProcessAnimations()
+{
+    ZoneScoped;
+    const auto now = GetTickCount();
+    for (auto it = g_pendingAnimations.begin(); it != g_pendingAnimations.end();)
+    {
+        auto* actor = it->first;
+        const auto& animation = it->second;
+        if (!IsCurrentPed(actor) || actor->m_pGamePed != animation.ped || actor->m_handle != animation.handle || now - animation.requested >= 5000 || actor->GetState() == 54 ||
+            actor->GetState() == 55)
+        {
+            it = g_pendingAnimations.erase(it);
+            continue;
+        }
+        if (!IsAnimationLoaded(animation.library.c_str()))
+        {
+            ++it;
+            continue;
+        }
+        scm::ProcessCommand(&PERFORM_ANIMATION, actor->m_handle, animation.name.c_str(), animation.library.c_str(), static_cast<double>(animation.delta), animation.loop,
+                            animation.lockX, animation.lockY, animation.freeze, animation.time);
+        it = g_pendingAnimations.erase(it);
+    }
 }
 
 void CActor::ClearAnimations()
 {
     ZoneScoped;
+    g_pendingAnimations.erase(this);
     if (!IsCurrentPed(this))
         return;
 

@@ -257,6 +257,7 @@ void Process()
     if (CGame::IsPaused())
         return;
 
+    CActor::ProcessAnimations();
     CObject::ProcessAll(CGame::FrameSeconds());
 }
 

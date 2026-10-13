@@ -40,8 +40,9 @@ public:
 
     void Destroy();                                                                                                                         // 0x9C400
     void PerformAnimation(const char* animation, const char* file, float frameDelta, int lockA, int lockX, int lockY, int lockF, int time); // 0x9C460
-    void ClearAnimations();                                                                                                                 // 0x9C550
-    void SetRotation(float angle);                                                                                                          // 0x9C570
+    static void ProcessAnimations();
+    void ClearAnimations();        // 0x9C550
+    void SetRotation(float angle); // 0x9C570
 
     float GetHealth() const;           // 0x9C5B0
     void SetHealth(float value);       // 0x9C5D0
