@@ -97,7 +97,7 @@ namespace
         char* end = nullptr;
         errno = 0;
         const float parsed = std::strtof(text.c_str(), &end);
-        if (errno == ERANGE || end == text.c_str() || *end != '\0')
+        if (errno == ERANGE || end == text.c_str() || *end != '\0' || !std::isfinite(parsed))
             return false;
         value = parsed;
         return true;
@@ -205,7 +205,7 @@ int CConfig::GetIntValue(const char* entry)
     if (index < 0)
         return 0;
     if (m_entry[index].m_nType == VALUE_TYPE_FLOAT)
-        return static_cast<int>(m_entry[index].m_fValue);
+        return m_entry[index].m_nValue;
     return m_entry[index].m_nValue;
 }
 
@@ -317,6 +317,8 @@ BOOL CConfig::WriteStringValue(const char* entry, const char* value, BOOL readOn
 BOOL CConfig::WriteFloatValue(const char* entry, float value, BOOL readOnly)
 {
     ZoneScoped;
+    if (!std::isfinite(value) || static_cast<double>(value) < std::numeric_limits<int>::min() || static_cast<double>(value) > std::numeric_limits<int>::max())
+        return FALSE;
     int index = GetIndex(entry);
     if (index >= 0 && m_entry[index].m_bReadOnly)
         return FALSE;

@@ -388,6 +388,7 @@ namespace game::inputhandler
         ZoneScoped;
         if (message == WM_KILLFOCUS || (message == WM_ACTIVATEAPP && wParam == FALSE))
         {
+            cgui::MsgProcAll(window, WM_KILLFOCUS, wParam, lParam);
             g_consumedKeys.fill(false);
             g_pendingGameKeys.fill(true);
             g_inputOutsideClick = false;

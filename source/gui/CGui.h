@@ -519,11 +519,8 @@ namespace cgui
             return m_height;
         }
         RECT GetRect() const;
-        void SetVisible(bool visible)
-        {
-            m_appearance.SetVisible(visible);
-            m_visible = visible;
-        }
+        void SetVisible(bool visible);
+        void CancelMouseInput();
         float GetOpacity() const
         {
             m_appearance.SetVisible(m_visible);

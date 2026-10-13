@@ -225,6 +225,9 @@ void CCamera::Restore()
 
 void CCamera::Set(CVector position, CVector rotation)
 {
+    if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z) || !std::isfinite(rotation.x) || !std::isfinite(rotation.y) ||
+        !std::isfinite(rotation.z))
+        return;
     scm::ProcessCommand(&CMD_RESTORE_USER_DEFINED);
 
     m_pAttachedTo = nullptr;
@@ -234,6 +237,8 @@ void CCamera::Set(CVector position, CVector rotation)
 
 void CCamera::PointAt(CVector point, int nSwitchStyle)
 {
+    if (!std::isfinite(point.x) || !std::isfinite(point.y) || !std::isfinite(point.z))
+        return;
     scm::ProcessCommand(&CMD_RESTORE_USER_DEFINED);
 
     m_pAttachedTo = nullptr;

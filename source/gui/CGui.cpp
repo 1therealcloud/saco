@@ -650,7 +650,6 @@ namespace cgui
                     }
                 }
                 g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, static_cast<UINT>(size / 3), g_pendingVertices.data() + first, sizeof(Vertex));
-
             }
             if (g_pendingClipped)
                 g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
@@ -1563,6 +1562,12 @@ namespace cgui
     bool Slider::MsgProc(UINT message, WPARAM, LPARAM lParam)
     {
         ZoneScoped;
+        if (message == WM_CAPTURECHANGED || message == WM_KILLFOCUS)
+        {
+            m_dragging = false;
+            m_pressed = false;
+            return false;
+        }
         if (!m_visible || !m_enabled)
             return false;
         const int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
@@ -2270,6 +2275,12 @@ namespace cgui
     bool ListBox::MsgProc(UINT message, WPARAM wParam, LPARAM lParam)
     {
         ZoneScoped;
+        if (message == WM_CAPTURECHANGED || message == WM_KILLFOCUS)
+        {
+            m_scrollBar.MsgProc(message, wParam, lParam);
+            m_pressed = false;
+            return false;
+        }
         if (!m_visible || !m_enabled)
             return false;
         UpdateScrollBar();
@@ -2596,6 +2607,27 @@ namespace cgui
                 return control.get();
         return nullptr;
     }
+    void Dialog::CancelMouseInput()
+    {
+        const bool captured = m_pressed != nullptr;
+        m_pressed = nullptr;
+        m_mouseOver = nullptr;
+        for (const auto& control : m_controls)
+        {
+            control->MsgProc(WM_CAPTURECHANGED, 0, 0);
+            control->m_pressed = false;
+            control->m_mouseOver = false;
+        }
+        if (captured && GetCapture() == g_window)
+            ReleaseCapture();
+    }
+    void Dialog::SetVisible(bool visible)
+    {
+        if (!visible)
+            CancelMouseInput();
+        m_appearance.SetVisible(visible);
+        m_visible = visible;
+    }
     void Dialog::RemoveControl(int id)
     {
         ZoneScoped;
@@ -2604,13 +2636,14 @@ namespace cgui
         if (m_mouseOver && m_mouseOver->GetId() == id)
             m_mouseOver = nullptr;
         if (m_pressed && m_pressed->GetId() == id)
-            m_pressed = nullptr;
+            CancelMouseInput();
         std::erase_if(m_controls, [id](const auto& control) {
             return control->GetId() == id;
         });
     }
     void Dialog::RemoveAllControls()
     {
+        CancelMouseInput();
         RequestFocus(nullptr);
         m_controls.clear();
         m_focus = m_mouseOver = m_pressed = nullptr;
@@ -2642,6 +2675,12 @@ namespace cgui
     bool Dialog::MsgProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
     {
         ZoneScoped;
+        if (message == WM_CAPTURECHANGED || message == WM_KILLFOCUS)
+        {
+            if (m_pressed || message == WM_KILLFOCUS)
+                CancelMouseInput();
+            return false;
+        }
         if (!m_visible)
             return false;
 
@@ -2662,13 +2701,6 @@ namespace cgui
 
         const int mouseX = GET_X_LPARAM(routedLParam);
         const int mouseY = GET_Y_LPARAM(routedLParam);
-
-        if (message == WM_CAPTURECHANGED && m_pressed)
-        {
-            m_pressed->MsgProc(message, wParam, lParam);
-            m_pressed->m_pressed = false;
-            m_pressed = nullptr;
-        }
 
         if (message == WM_MOUSEMOVE)
         {
@@ -2892,6 +2924,12 @@ namespace cgui
     bool MsgProcAll(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
     {
         ZoneScoped;
+        if (message == WM_KILLFOCUS || message == WM_CAPTURECHANGED)
+        {
+            for (Dialog& dialog : g_dialogs)
+                dialog.MsgProc(window, message, wParam, lParam);
+            return false;
+        }
         if (message == WM_SIZE)
             g_clientDirty = true;
         // Reverse render order so top-most dialogs get the message first.

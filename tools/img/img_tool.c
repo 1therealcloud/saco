@@ -14,6 +14,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <limits.h>
+#include <errno.h>
 
 #define BLOCK_SIZE 2048
 #define IO_BUFFER_SIZE (64 * 1024)
@@ -30,6 +31,8 @@
     #endif
 #else
     #include <dirent.h>
+    #define _fseeki64 fseeko
+    #define _ftelli64 ftello
     #include <strings.h>
     #include <unistd.h>
     #define MKDIR(path) mkdir(path, 0777)
@@ -67,8 +70,8 @@ static const char* VALID_EXTENSIONS[] = {
 };
 static const size_t VALID_EXT_COUNT = sizeof(VALID_EXTENSIONS) / sizeof(VALID_EXTENSIONS[0]);
 
-void ensure_dir_exists(const char* dir) {
-    MKDIR(dir);
+int ensure_dir_exists(const char* dir) {
+    return MKDIR(dir) == 0 || errno == EEXIST;
 }
 
 int is_directory(const char* path) {
@@ -133,7 +136,8 @@ int compare_entries_by_offset(const void* a, const void* b) {
 void get_filename_no_ext(const char* filepath, char* out_name, size_t max_len) {
     const char* slash1 = strrchr(filepath, '\\');
     const char* slash2 = strrchr(filepath, '/');
-    const char* slash = (slash1 > slash2) ? slash1 : slash2;
+    const char* slash = slash1;
+    if (slash2 && (!slash || slash2 > slash)) slash = slash2;
     
     const char* base = (slash) ? slash + 1 : filepath;
     snprintf(out_name, max_len, "%s", base);
@@ -142,78 +146,95 @@ void get_filename_no_ext(const char* filepath, char* out_name, size_t max_len) {
     if (dot) *dot = '\0';
 }
 
-void extract_single_img(const char* img_path, const char* out_dir, int verbose) {
+int valid_entry_name(const char* name) {
+    if (!*name || strcmp(name, ".") == 0 || strcmp(name, "..") == 0) return 0;
+    for (const unsigned char* p = (const unsigned char*)name; *p; ++p)
+        if (*p < 32 || strchr("/\\:<>\"|?*", *p)) return 0;
+    size_t length = strlen(name);
+    return name[length - 1] != '.' && name[length - 1] != ' ';
+}
+
+int extract_single_img(const char* img_path, const char* out_dir, int verbose) {
     FILE* f = fopen(img_path, "rb");
-    if (!f) { printf("[ERROR] Failed to open: %s\n", img_path); return; }
+    if (!f) { printf("[ERROR] Failed to open: %s\n", img_path); return 1; }
 
     char sig[4];
     if (fread(sig, 1, 4, f) != 4 || strncmp(sig, "VER2", 4) != 0) {
         printf("[SKIP] Not an IMG v2: %s\n", img_path);
-        fclose(f); return;
+        fclose(f); return 1;
     }
 
     uint32_t entry_count = 0;
     if (fread(&entry_count, 4, 1, f) != 1) {
-        fclose(f); return;
+        fclose(f); return 1;
     }
     printf("--> Extracting %s (%u files) -> %s\n", img_path, entry_count, out_dir);
 
+    if (entry_count > (SIZE_MAX / sizeof(IMGEntry)) || (uint64_t)entry_count * sizeof(IMGEntry) > UINT32_MAX - 8u) { fclose(f); return 1; }
     IMGEntry* entries = (IMGEntry*)malloc(entry_count * sizeof(IMGEntry));
-    if (!entries) { fclose(f); return; }
+    if (!entries) { fclose(f); return 1; }
     if (fread(entries, sizeof(IMGEntry), entry_count, f) != entry_count) {
         free(entries);
         fclose(f);
-        return;
+        return 1;
     }
 
-    ensure_dir_exists(out_dir);
+    if (!ensure_dir_exists(out_dir)) { free(entries); fclose(f); return 1; }
+    int result = 0;
 
     uint8_t* buffer = (uint8_t*)malloc(IO_BUFFER_SIZE);
     if (!buffer) {
         free(entries);
         fclose(f);
-        return;
+        return 1;
     }
 
     for (uint32_t i = 0; i < entry_count; i++) {
         char file_name[25] = {0};
         memcpy(file_name, entries[i].name, 24);
 
+        if (!valid_entry_name(file_name)) {
+            printf("[ERROR] Unsafe IMG entry name: %s\n", file_name); result = 1; continue;
+        }
         char out_path[PATH_MAX];
-        snprintf(out_path, sizeof(out_path), "%s" PATH_SEP_STR "%s", out_dir, file_name);
+        if (snprintf(out_path, sizeof(out_path), "%s" PATH_SEP_STR "%s", out_dir, file_name) >= sizeof(out_path)) { result = 1; continue; }
 
         FILE* out = fopen(out_path, "wb");
         if (out) {
-            fseek(f, (long)entries[i].offset * BLOCK_SIZE, SEEK_SET);
+            if (_fseeki64(f, (int64_t)entries[i].offset * BLOCK_SIZE, SEEK_SET) != 0) { fclose(out); result = 1; continue; }
             uint32_t bytes_left = (uint32_t)entries[i].streamingSize * BLOCK_SIZE;
             while (bytes_left > 0) {
                 uint32_t chunk = (bytes_left > IO_BUFFER_SIZE) ? IO_BUFFER_SIZE : bytes_left;
                 size_t read_bytes = fread(buffer, 1, chunk, f);
-                if (read_bytes == 0) break;
-                fwrite(buffer, 1, read_bytes, out);
+                if (read_bytes == 0) { result = 1; break; }
+                if (fwrite(buffer, 1, read_bytes, out) != read_bytes) { result = 1; break; }
                 bytes_left -= (uint32_t)read_bytes;
             }
-            fclose(out);
+            if (fclose(out) != 0) result = 1;
             if (verbose) {
                 printf("  [EXTRACTED] %s (%u sectors)\n", file_name, entries[i].streamingSize);
             }
-        }
+        } else { result = 1; }
     }
     free(buffer);
     free(entries);
     fclose(f);
+
+    return result;
 }
 
-void add_file_to_pack_list(const char* in_dir, const char* filename, uint32_t file_size, FileInfo** files, uint32_t* file_count, uint32_t* capacity, uint32_t* ignored_count, int allow_all, int verbose) {
+int add_file_to_pack_list(const char* in_dir, const char* filename, uint32_t file_size, FileInfo** files, uint32_t* file_count, uint32_t* capacity, uint32_t* ignored_count, int allow_all, int verbose) {
     char ext[16];
     get_extension(filename, ext, sizeof(ext));
 
     if (allow_all || is_valid_game_extension(ext)) {
         if (*file_count >= *capacity) {
-            *capacity = (*capacity == 0) ? 1024 : (*capacity * 2);
-            FileInfo* new_files = (FileInfo*)realloc(*files, *capacity * sizeof(FileInfo));
-            if (!new_files) return;
+            if (*capacity > SIZE_MAX / sizeof(FileInfo) / 2) return 1;
+            uint32_t new_capacity = (*capacity == 0) ? 1024 : (*capacity * 2);
+            FileInfo* new_files = (FileInfo*)realloc(*files, new_capacity * sizeof(FileInfo));
+            if (!new_files) return 1;
             *files = new_files;
+            *capacity = new_capacity;
         }
         snprintf((*files)[*file_count].name, PATH_MAX, "%s", filename);
         snprintf((*files)[*file_count].full_path, PATH_MAX, "%s" PATH_SEP_STR "%s", in_dir, filename);
@@ -226,17 +247,20 @@ void add_file_to_pack_list(const char* in_dir, const char* filename, uint32_t fi
             printf("  [IGNORED] Skipped non-game file: %s\n", filename);
         }
     }
+
+    return 0;
 }
 
 
-void pack_single_folder(const char* in_dir, const char* out_img, int allow_all, int verbose) {
+int pack_single_folder(const char* in_dir, const char* out_img, int allow_all, int verbose) {
+    int result = 0;
     uint32_t capacity = 1024;
     uint32_t file_count = 0;
     uint32_t ignored_count = 0;
     FileInfo* files = (FileInfo*)malloc(capacity * sizeof(FileInfo));
     if (!files) {
         printf("[ERROR] Memory allocation failed for files list!\n");
-        return;
+        return 1;
     }
 
 #if defined(_WIN32)
@@ -248,12 +272,12 @@ void pack_single_folder(const char* in_dir, const char* out_img, int allow_all, 
     if (hFind != INVALID_HANDLE_VALUE) {
         do {
             if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-                add_file_to_pack_list(in_dir, fd.cFileName, fd.nFileSizeLow, &files, &file_count, &capacity, &ignored_count, allow_all, verbose);
+                result |= add_file_to_pack_list(in_dir, fd.cFileName, fd.nFileSizeLow, &files, &file_count, &capacity, &ignored_count, allow_all, verbose);
             }
         } while (FindNextFileA(hFind, &fd));
         FindClose(hFind);
     } else {
-        printf("[ERROR] Failed to read directory: %s\n", in_dir); free(files); return;
+        printf("[ERROR] Failed to read directory: %s\n", in_dir); free(files); return 1;
     }
 #else
     DIR* dir = opendir(in_dir);
@@ -267,12 +291,12 @@ void pack_single_folder(const char* in_dir, const char* out_img, int allow_all, 
             
             struct stat statbuf;
             if (stat(full_path, &statbuf) == 0 && !S_ISDIR(statbuf.st_mode)) {
-                add_file_to_pack_list(in_dir, ent->d_name, (uint32_t)statbuf.st_size, &files, &file_count, &capacity, &ignored_count, allow_all, verbose);
+                result |= add_file_to_pack_list(in_dir, ent->d_name, (uint32_t)statbuf.st_size, &files, &file_count, &capacity, &ignored_count, allow_all, verbose);
             }
         }
         closedir(dir);
     } else {
-        printf("[ERROR] Failed to read directory: %s\n", in_dir); free(files); return;
+        printf("[ERROR] Failed to read directory: %s\n", in_dir); free(files); return 1;
     }
 #endif
 
@@ -280,16 +304,17 @@ void pack_single_folder(const char* in_dir, const char* out_img, int allow_all, 
         printf("  (Skipped %u unsupported files. Add -v for details or -a to pack them all)\n", ignored_count);
     }
 
+    if (result) { free(files); return 1; }
     if (file_count == 0) { 
         printf("[SKIP] Directory %s is empty or contains no game files!\n", in_dir); 
-        free(files); return; 
+        free(files); return 1;
     }
 
     if (verbose) printf("  [SORT] Sorting %u files by extension...\n", file_count);
     qsort(files, file_count, sizeof(FileInfo), compare_by_extension);
 
     FILE* out = fopen(out_img, "wb");
-    if (!out) { printf("[ERROR] Creating %s\n", out_img); free(files); return; }
+    if (!out) { printf("[ERROR] Creating %s\n", out_img); free(files); return 1; }
 
     printf("--> Packing %s (%u files) -> %s\n", in_dir, file_count, out_img);
 
@@ -297,11 +322,12 @@ void pack_single_folder(const char* in_dir, const char* out_img, int allow_all, 
     uint32_t header_blocks = (header_bytes + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
     IMGEntry* entries = (IMGEntry*)calloc(file_count, sizeof(IMGEntry));
-    if (!entries) { fclose(out); free(files); return; }
+    if (!entries) { fclose(out); free(files); return 1; }
 
     uint32_t current_block_offset = header_blocks;
 
     for (uint32_t i = 0; i < file_count; i++) {
+        if (files[i].file_size > (uint32_t)UINT16_MAX * BLOCK_SIZE) { free(entries); free(files); fclose(out); remove(out_img); return 1; }
         uint32_t size_in_blocks = (files[i].file_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
         entries[i].offset = current_block_offset;
         entries[i].streamingSize = size_in_blocks;
@@ -311,17 +337,17 @@ void pack_single_folder(const char* in_dir, const char* out_img, int allow_all, 
         current_block_offset += size_in_blocks;
     }
 
-    fwrite("VER2", 1, 4, out);
-    fwrite(&file_count, 4, 1, out);
-    fwrite(entries, sizeof(IMGEntry), file_count, out);
+    if (fwrite("VER2", 1, 4, out) != (size_t)(4)) result = 1;
+    if (fwrite(&file_count, 4, 1, out) != (size_t)(1)) result = 1;
+    if (fwrite(entries, sizeof(IMGEntry), file_count, out) != (size_t)(file_count)) result = 1;
 
     uint32_t header_padding = (header_blocks * BLOCK_SIZE) - header_bytes;
     if (header_padding > 0) {
         uint8_t* pad = (uint8_t*)calloc(1, header_padding);
         if (pad) {
-            fwrite(pad, 1, header_padding, out);
+            if (fwrite(pad, 1, header_padding, out) != (size_t)(header_padding)) result = 1;
             free(pad);
-        }
+        } else { result = 1; }
     }
 
     uint8_t zero_pad[BLOCK_SIZE] = {0};
@@ -330,24 +356,25 @@ void pack_single_folder(const char* in_dir, const char* out_img, int allow_all, 
         free(entries);
         free(files);
         fclose(out);
-        return;
+        return 1;
     }
 
     for (uint32_t i = 0; i < file_count; i++) {
         FILE* in = fopen(files[i].full_path, "rb");
-        if (!in) continue;
+        if (!in) { result = 1; break; }
 
         size_t bytesRead;
         while ((bytesRead = fread(buffer, 1, IO_BUFFER_SIZE, in)) > 0) {
-            fwrite(buffer, 1, bytesRead, out);
+            if (fwrite(buffer, 1, bytesRead, out) != (size_t)(bytesRead)) result = 1;
         }
+        if (ferror(in)) result = 1;
         fclose(in);
 
         uint32_t remainder = files[i].file_size % BLOCK_SIZE;
         uint32_t pad_size = 0;
         if (remainder != 0) {
             pad_size = BLOCK_SIZE - remainder;
-            fwrite(zero_pad, 1, pad_size, out);
+            if (fwrite(zero_pad, 1, pad_size, out) != (size_t)(pad_size)) result = 1;
         }
 
         if (verbose) {
@@ -359,34 +386,39 @@ void pack_single_folder(const char* in_dir, const char* out_img, int allow_all, 
     free(buffer);
     free(entries);
     free(files);
-    fclose(out);
+    if (fclose(out) != 0) result = 1;
+    if (result) remove(out_img);
+    return result;
 }
 
-void rebuild_single_img_safe(const char* in_img, int keep_bak, int verbose) {
+int rebuild_single_img_safe(const char* in_img, int keep_bak, int verbose) {
+    int result = 0;
     FILE* f_in = fopen(in_img, "rb");
-    if (!f_in) { printf("[ERROR] Failed to open: %s\n", in_img); return; }
+    if (!f_in) { printf("[ERROR] Failed to open: %s\n", in_img); return 1; }
 
     char sig[4];
     if (fread(sig, 1, 4, f_in) != 4 || strncmp(sig, "VER2", 4) != 0) {
         printf("[SKIP] Not an IMG v2: %s\n", in_img);
-        fclose(f_in); return;
+        fclose(f_in); return 1;
     }
 
     uint32_t entry_count = 0;
     if (fread(&entry_count, 4, 1, f_in) != 1) {
-        fclose(f_in); return;
+        fclose(f_in); return 1;
     }
 
+    if (entry_count > (SIZE_MAX / sizeof(IMGEntry)) || (uint64_t)entry_count * sizeof(IMGEntry) > UINT32_MAX - 8u) { fclose(f_in); return 1; }
     IMGEntry* old_entries = (IMGEntry*)malloc(entry_count * sizeof(IMGEntry));
-    if (!old_entries) { fclose(f_in); return; }
+    if (!old_entries) { fclose(f_in); return 1; }
     if (fread(old_entries, sizeof(IMGEntry), entry_count, f_in) != entry_count) {
         free(old_entries);
         fclose(f_in);
-        return;
+        return 1;
     }
 
+    if (entry_count > SIZE_MAX / sizeof(RebuildEntry)) { free(old_entries); fclose(f_in); return 1; }
     RebuildEntry* rebuild_entries = (RebuildEntry*)malloc(entry_count * sizeof(RebuildEntry));
-    if (!rebuild_entries) { free(old_entries); fclose(f_in); return; }
+    if (!rebuild_entries) { free(old_entries); fclose(f_in); return 1; }
 
     for (uint32_t i = 0; i < entry_count; i++) {
         rebuild_entries[i].entry = old_entries[i];
@@ -401,7 +433,7 @@ void rebuild_single_img_safe(const char* in_img, int keep_bak, int verbose) {
     uint32_t current_block_offset = header_blocks;
 
     IMGEntry* sorted_entries = (IMGEntry*)malloc(entry_count * sizeof(IMGEntry));
-    if (!sorted_entries) { free(old_entries); free(rebuild_entries); fclose(f_in); return; }
+    if (!sorted_entries) { free(old_entries); free(rebuild_entries); fclose(f_in); return 1; }
 
     for (uint32_t i = 0; i < entry_count; i++) {
         rebuild_entries[i].entry.offset = current_block_offset;
@@ -415,27 +447,27 @@ void rebuild_single_img_safe(const char* in_img, int keep_bak, int verbose) {
     FILE* f_out = fopen(tmp_img, "wb");
     if (!f_out) {
         printf("[ERROR] Failed to create rebuild file: %s\n", tmp_img);
-        free(old_entries); free(rebuild_entries); free(sorted_entries); fclose(f_in); return;
+        free(old_entries); free(rebuild_entries); free(sorted_entries); fclose(f_in); return 1;
     }
 
     printf("--> Rebuilding archive %s (%u files)\n", in_img, entry_count);
 
-    fwrite("VER2", 1, 4, f_out);
-    fwrite(&entry_count, 4, 1, f_out);
-    fwrite(sorted_entries, sizeof(IMGEntry), entry_count, f_out);
+    if (fwrite("VER2", 1, 4, f_out) != (size_t)(4)) result = 1;
+    if (fwrite(&entry_count, 4, 1, f_out) != (size_t)(1)) result = 1;
+    if (fwrite(sorted_entries, sizeof(IMGEntry), entry_count, f_out) != (size_t)(entry_count)) result = 1;
 
     uint32_t header_padding = (header_blocks * BLOCK_SIZE) - header_bytes;
     if (header_padding > 0) {
         uint8_t* pad = (uint8_t*)calloc(1, header_padding);
         if (pad) {
-            fwrite(pad, 1, header_padding, f_out);
+            if (fwrite(pad, 1, header_padding, f_out) != (size_t)(header_padding)) result = 1;
             free(pad);
-        }
+        } else { result = 1; }
     }
 
     uint8_t* buffer = (uint8_t*)malloc(IO_BUFFER_SIZE);
     if (!buffer) {
-        free(old_entries); free(rebuild_entries); free(sorted_entries); fclose(f_in); fclose(f_out); return;
+        free(old_entries); free(rebuild_entries); free(sorted_entries); fclose(f_in); fclose(f_out); return 1;
     }
 
     for (uint32_t i = 0; i < entry_count; i++) {
@@ -443,13 +475,13 @@ void rebuild_single_img_safe(const char* in_img, int keep_bak, int verbose) {
         uint32_t old_offset = old_entries[orig_idx].offset;
         uint16_t old_streaming_size = old_entries[orig_idx].streamingSize;
 
-        fseek(f_in, (long)old_offset * BLOCK_SIZE, SEEK_SET);
+        if (_fseeki64(f_in, (int64_t)old_offset * BLOCK_SIZE, SEEK_SET) != 0) { result = 1; break; }
         uint32_t bytes_left = (uint32_t)old_streaming_size * BLOCK_SIZE;
         while (bytes_left > 0) {
             uint32_t chunk = (bytes_left > IO_BUFFER_SIZE) ? IO_BUFFER_SIZE : bytes_left;
             size_t read_bytes = fread(buffer, 1, chunk, f_in);
-            if (read_bytes == 0) break;
-            fwrite(buffer, 1, read_bytes, f_out);
+            if (read_bytes == 0) { result = 1; break; }
+            if (fwrite(buffer, 1, read_bytes, f_out) != (size_t)(read_bytes)) result = 1;
             bytes_left -= (uint32_t)read_bytes;
         }
 
@@ -465,48 +497,54 @@ void rebuild_single_img_safe(const char* in_img, int keep_bak, int verbose) {
     free(rebuild_entries);
     free(sorted_entries);
     fclose(f_in);
-    fclose(f_out);
+    if (fclose(f_out) != 0) result = 1;
+    if (result) { remove(tmp_img); return 1; }
 
     if (keep_bak) {
         char bak_img[PATH_MAX];
         snprintf(bak_img, sizeof(bak_img), "%s.bak", in_img);
         remove(bak_img);
-        rename(in_img, bak_img);
-    } else {
-        remove(in_img);
+        if (rename(in_img, bak_img) != 0) { remove(tmp_img); return 1; }
     }
-    rename(tmp_img, in_img);
+#if defined(_WIN32)
+    if (!MoveFileExA(tmp_img, in_img, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) return 1;
+#else
+    if (rename(tmp_img, in_img) != 0) return 1;
+#endif
+
+    return 0;
 }
 
-void verify_single_img(const char* img_path, int verbose) {
+int verify_single_img(const char* img_path, int verbose) {
     FILE* f = fopen(img_path, "rb");
-    if (!f) { printf("[ERROR] Failed to open: %s\n", img_path); return; }
+    if (!f) { printf("[ERROR] Failed to open: %s\n", img_path); return 1; }
 
     char sig[4];
     if (fread(sig, 1, 4, f) != 4 || strncmp(sig, "VER2", 4) != 0) {
         if (verbose) printf("[SKIP] Not an IMG v2: %s\n", img_path);
-        fclose(f); return;
+        fclose(f); return 1;
     }
 
     uint32_t entry_count = 0;
     if (fread(&entry_count, 4, 1, f) != 1) {
-        fclose(f); return;
+        fclose(f); return 1;
     }
     
+    if (entry_count > (SIZE_MAX / sizeof(IMGEntry)) || (uint64_t)entry_count * sizeof(IMGEntry) > UINT32_MAX - 8u) { fclose(f); return 1; }
     IMGEntry* entries = (IMGEntry*)malloc(entry_count * sizeof(IMGEntry));
-    if (!entries) { fclose(f); return; }
+    if (!entries) { fclose(f); return 1; }
     if (fread(entries, sizeof(IMGEntry), entry_count, f) != entry_count) {
         free(entries);
         fclose(f);
-        return;
+        return 1;
     }
 
-    fseek(f, 0, SEEK_END);
-    long file_size = ftell(f);
+    if (_fseeki64(f, 0, SEEK_END) != 0) { free(entries); fclose(f); return 1; }
+    int64_t file_size = _ftelli64(f);
     fclose(f);
 
     IMGEntry* sorted_entries = (IMGEntry*)malloc(entry_count * sizeof(IMGEntry));
-    if (!sorted_entries) { free(entries); return; }
+    if (!sorted_entries) { free(entries); return 1; }
     memcpy(sorted_entries, entries, entry_count * sizeof(IMGEntry));
     qsort(sorted_entries, entry_count, sizeof(IMGEntry), compare_entries_by_offset);
 
@@ -518,14 +556,14 @@ void verify_single_img(const char* img_path, int verbose) {
         char file_name[25] = {0};
         memcpy(file_name, sorted_entries[i].name, 24);
 
-        long end_pos = (long)(sorted_entries[i].offset + sorted_entries[i].streamingSize) * BLOCK_SIZE;
+        int64_t end_pos = ((int64_t)sorted_entries[i].offset + sorted_entries[i].streamingSize) * BLOCK_SIZE;
         if (end_pos > file_size) {
             out_of_bounds++;
             if (verbose) printf("  [ERROR] File %s exceeds physical archive bounds!\n", file_name);
         }
 
         if (i < entry_count - 1) {
-            uint32_t current_end = sorted_entries[i].offset + sorted_entries[i].streamingSize;
+            uint64_t current_end = (uint64_t)sorted_entries[i].offset + sorted_entries[i].streamingSize;
             uint32_t next_start = sorted_entries[i+1].offset;
 
             if (current_end > next_start) {
@@ -533,7 +571,7 @@ void verify_single_img(const char* img_path, int verbose) {
                 if (verbose) printf("  [OVERLAP] Conflict between %s and next entry\n", file_name);
             } else if (current_end < next_start) {
                 holes++;
-                if (verbose) printf("  [HOLE] Empty space after %s (%u sectors)\n", file_name, next_start - current_end);
+                if (verbose) printf("  [HOLE] Empty space after %s (%u sectors)\n", file_name, (unsigned int)(next_start - current_end));
             }
         }
     }
@@ -550,9 +588,12 @@ void verify_single_img(const char* img_path, int verbose) {
 
     free(entries);
     free(sorted_entries);
+
+    return overlaps > 0 || out_of_bounds > 0;
 }
 
-void process_extract(const char* img_param, const char* folder_param, int verbose) {
+int process_extract(const char* img_param, const char* folder_param, int verbose) {
+    int result = 0;
     if (is_directory(img_param)) {
         printf("[BATCH] Searching for .img in directory: %s\n", img_param);
         ensure_dir_exists(folder_param);
@@ -575,12 +616,12 @@ void process_extract(const char* img_param, const char* folder_param, int verbos
                     char subfolder_out[PATH_MAX * 2];
                     snprintf(subfolder_out, sizeof(subfolder_out), "%s" PATH_SEP_STR "%s", folder_param, name_no_ext);
 
-                    extract_single_img(full_img_path, subfolder_out, verbose);
+                    result |= extract_single_img(full_img_path, subfolder_out, verbose);
                 }
             } while (FindNextFileA(hFind, &fd));
             FindClose(hFind);
         } else {
-            printf("No .img files found in %s\n", img_param);
+            result = 1; printf("No .img files found in %s\n", img_param);
         }
 #else
         DIR* dir = opendir(img_param);
@@ -601,22 +642,25 @@ void process_extract(const char* img_param, const char* folder_param, int verbos
                     char subfolder_out[PATH_MAX * 2];
                     snprintf(subfolder_out, sizeof(subfolder_out), "%s" PATH_SEP_STR "%s", folder_param, name_no_ext);
 
-                    extract_single_img(full_img_path, subfolder_out, verbose);
+                    result |= extract_single_img(full_img_path, subfolder_out, verbose);
                 }
             }
             closedir(dir);
         }
         if (!found) {
-            printf("No .img files found in %s\n", img_param);
+            result = 1; printf("No .img files found in %s\n", img_param);
         }
 #endif
     } else {
-        extract_single_img(img_param, folder_param, verbose);
+        result |= extract_single_img(img_param, folder_param, verbose);
     }
-    printf("[DONE] Extraction completed!\n");
+    if (!result) printf("[DONE] Extraction completed!\n");
+
+    return result;
 }
 
-void process_pack(const char* img_param, const char* folder_param, int allow_all, int verbose) {
+int process_pack(const char* img_param, const char* folder_param, int allow_all, int verbose) {
+    int result = 0;
     int has_subdirs = 0;
 
 #if defined(_WIN32)
@@ -670,7 +714,7 @@ void process_pack(const char* img_param, const char* folder_param, int allow_all
                     char out_img_path[PATH_MAX];
                     snprintf(out_img_path, sizeof(out_img_path), "%s\\%s.img", img_param, fd.cFileName);
 
-                    pack_single_folder(subfolder_in, out_img_path, allow_all, verbose);
+                    result |= pack_single_folder(subfolder_in, out_img_path, allow_all, verbose);
                 }
             } while (FindNextFileA(hFind, &fd));
             FindClose(hFind);
@@ -691,7 +735,7 @@ void process_pack(const char* img_param, const char* folder_param, int allow_all
                         char out_img_path[PATH_MAX];
                         snprintf(out_img_path, sizeof(out_img_path), "%s/%s.img", ent->d_name, ent->d_name);
 
-                        pack_single_folder(subfolder_in, out_img_path, allow_all, verbose);
+                        result |= pack_single_folder(subfolder_in, out_img_path, allow_all, verbose);
                     }
                 }
             }
@@ -708,12 +752,15 @@ void process_pack(const char* img_param, const char* folder_param, int allow_all
             snprintf(final_img_path, sizeof(final_img_path), "%s" PATH_SEP_STR "%s.img", img_param, folder_name);
         }
 
-        pack_single_folder(folder_param, final_img_path, allow_all, verbose);
+        result |= pack_single_folder(folder_param, final_img_path, allow_all, verbose);
     }
-    printf("[DONE] Packing completed!\n");
+    if (!result) printf("[DONE] Packing completed!\n");
+
+    return result;
 }
 
-void process_rebuild(const char* img_param, int keep_bak, int verbose) {
+int process_rebuild(const char* img_param, int keep_bak, int verbose) {
+    int result = 0;
     if (is_directory(img_param)) {
         printf("[BATCH] Searching for .img in directory: %s\n", img_param);
 
@@ -729,12 +776,12 @@ void process_rebuild(const char* img_param, int keep_bak, int verbose) {
                     char full_img_path[PATH_MAX];
                     snprintf(full_img_path, sizeof(full_img_path), "%s\\%s", img_param, fd.cFileName);
 
-                    rebuild_single_img_safe(full_img_path, keep_bak, verbose);
+                    result |= rebuild_single_img_safe(full_img_path, keep_bak, verbose);
                 }
             } while (FindNextFileA(hFind, &fd));
             FindClose(hFind);
         } else {
-            printf("No .img files found in %s\n", img_param);
+            result = 1; printf("No .img files found in %s\n", img_param);
         }
 #else
         DIR* dir = opendir(img_param);
@@ -749,19 +796,21 @@ void process_rebuild(const char* img_param, int keep_bak, int verbose) {
                     char full_img_path[PATH_MAX];
                     snprintf(full_img_path, sizeof(full_img_path), "%s/%s", img_param, ent->d_name);
 
-                    rebuild_single_img_safe(full_img_path, keep_bak, verbose);
+                    result |= rebuild_single_img_safe(full_img_path, keep_bak, verbose);
                 }
             }
             closedir(dir);
         }
         if (!found) {
-            printf("No .img files found in %s\n", img_param);
+            result = 1; printf("No .img files found in %s\n", img_param);
         }
 #endif
     } else {
-        rebuild_single_img_safe(img_param, keep_bak, verbose);
+        result |= rebuild_single_img_safe(img_param, keep_bak, verbose);
     }
-    printf("[DONE] Rebuild completed!\n");
+    if (!result) printf("[DONE] Rebuild completed!\n");
+
+    return result;
 }
 
 char* parse_path(int* i, int argc, char* argv[]) {
@@ -855,14 +904,14 @@ int main(int argc, char* argv[]) {
 
     if (strcmp(mode, "extract") == 0) {
         if (!folder_path) { printf("[ERROR] For -extract you must specify -folder\n"); exit_code = 1; }
-        else { process_extract(img_path, folder_path, verbose); }
+        else { exit_code = process_extract(img_path, folder_path, verbose); }
     } else if (strcmp(mode, "pack") == 0) {
         if (!folder_path) { printf("[ERROR] For -pack you must specify -folder\n"); exit_code = 1; }
-        else { process_pack(img_path, folder_path, allow_all, verbose); }
+        else { exit_code = process_pack(img_path, folder_path, allow_all, verbose); }
     } else if (strcmp(mode, "verify") == 0) {
-        verify_single_img(img_path, verbose);
+        exit_code = verify_single_img(img_path, verbose);
     } else if (strcmp(mode, "rebuild") == 0) {
-        process_rebuild(img_path, keep_bak, verbose);
+        exit_code = process_rebuild(img_path, keep_bak, verbose);
     }
 
     if (img_path) free(img_path);

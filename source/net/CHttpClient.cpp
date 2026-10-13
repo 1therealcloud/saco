@@ -152,9 +152,10 @@ CHttpClient::ErrorCode CHttpClient::DownloadFile(const char* url, const std::fil
 {
     Reset();
     auto temporary = destination;
-    temporary += L".part";
+    static std::atomic<std::uint64_t> sequence{};
+    temporary += L"." + std::to_wstring(GetCurrentProcessId()) + L"." + std::to_wstring(sequence.fetch_add(1, std::memory_order_relaxed)) + L".part";
     FILE* file = nullptr;
-    if (_wfopen_s(&file, temporary.c_str(), L"wb") != 0)
+    if (_wfopen_s(&file, temporary.c_str(), L"wbx") != 0)
         return m_error = ERROR_FILE_IO;
     Transfer transfer{*this, file, false, 0, 0, maxBytes};
     Perform(HTTP_GET, url, "", "", transfer, "");
@@ -162,8 +163,13 @@ CHttpClient::ErrorCode CHttpClient::DownloadFile(const char* url, const std::fil
         m_error = ERROR_FILE_IO;
     if (m_error == ERROR_OK && (m_Response.response_code < 200 || m_Response.response_code >= 300))
         m_error = ERROR_BAD_HTTP_STATUS;
-    if (m_error == ERROR_OK && !MoveFileExW(temporary.c_str(), destination.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
-        m_error = ERROR_FILE_IO;
+    if (m_error == ERROR_OK)
+    {
+        static std::mutex commitMutex;
+        const std::scoped_lock lock(commitMutex);
+        if (!MoveFileExW(temporary.c_str(), destination.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+            m_error = ERROR_FILE_IO;
+    }
     if (m_error != ERROR_OK)
     {
         std::error_code ignored;

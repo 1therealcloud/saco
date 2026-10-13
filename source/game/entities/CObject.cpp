@@ -45,6 +45,78 @@ namespace
         Player
     };
 
+    struct MaterialGeometry
+    {
+        RpGeometry* source = nullptr;
+        RpGeometry* geometry = nullptr;
+        ~MaterialGeometry()
+        {
+            if (geometry)
+                RpGeometryDestroy(geometry);
+            if (source)
+                RpGeometryDestroy(source);
+        }
+    };
+
+    std::unique_ptr<MaterialGeometry> CloneMaterialGeometry(RpGeometry* source)
+    {
+        // Stream plugins as well as mesh data; do not copy RenderWare structs bytewise.
+        RwMemory memory{};
+        auto* output = RwStreamOpen(rwSTREAMMEMORY, rwSTREAMWRITE, &memory);
+        if (!output)
+            return {};
+        // Bind the existing textures after reading; texture streaming would depend
+        // on whichever TXD is current during this object's render hook.
+        std::vector<std::pair<RpMaterial*, RwTexture*>> textures;
+        for (int i = 0; i < RpGeometryGetNumMaterials(source); ++i)
+        {
+            auto* material = RpGeometryGetMaterial(source, i);
+            if (std::none_of(textures.begin(), textures.end(), [material](const auto& entry) {
+                    return entry.first == material;
+                }))
+                textures.emplace_back(material, material->texture);
+        }
+        for (const auto& [material, texture] : textures)
+            material->texture = nullptr;
+        const bool written = RpGeometryStreamWrite(source, output) != nullptr;
+        for (const auto& [material, texture] : textures)
+            material->texture = texture;
+        RwStreamClose(output, &memory);
+        RpGeometry* clone = nullptr;
+        if (written)
+        {
+            if (auto* input = RwStreamOpen(rwSTREAMMEMORY, rwSTREAMREAD, &memory))
+            {
+                if (RwStreamFindChunk(input, rwID_GEOMETRY, nullptr, nullptr))
+                    clone = RpGeometryStreamRead(input);
+                RwStreamClose(input, nullptr);
+            }
+        }
+        if (memory.start)
+            RwFree(memory.start);
+        if (!clone)
+            return {};
+        if (RpGeometryGetNumMaterials(clone) != RpGeometryGetNumMaterials(source))
+        {
+            RpGeometryDestroy(clone);
+            return {};
+        }
+        for (int i = 0; i < RpGeometryGetNumMaterials(source); ++i)
+        {
+            auto* original = RpGeometryGetMaterial(source, i);
+            auto* material = RpGeometryGetMaterial(clone, i);
+            RpMaterialSetTexture(material, original->texture);
+            material->color = original->color;
+            material->surfaceProps = original->surfaceProps;
+        }
+        clone->flags = (source->flags | rpGEOMETRYMODULATEMATERIALCOLOR) & ~rpGEOMETRYPRELIT;
+        auto result = std::make_unique<MaterialGeometry>();
+        ++source->refCount;
+        result->source = source;
+        result->geometry = clone;
+        return result;
+    }
+
     struct Runtime
     {
         CMatrix start = CMatrix::Unity();
@@ -63,6 +135,7 @@ namespace
         void* attachedNative = nullptr;
         std::uint32_t attachedHandle = 0;
         CObject* attachedObject = nullptr;
+        std::unordered_map<RpGeometry*, std::unique_ptr<MaterialGeometry>> materialGeometries;
     };
     float NormalizeHeadingR5(float degrees)
     {
@@ -228,6 +301,13 @@ namespace
             RpAtomic* atomic;
             RwUInt32 flags;
         };
+        struct AtomicState
+        {
+            RpAtomic* atomic;
+            RpGeometry* geometry;
+            RwResEntry* instance;
+        };
+        std::vector<AtomicState> atomics;
         std::vector<MaterialState> materials;
         std::vector<GeometryState> geometries;
         CObject& object;
@@ -253,7 +333,33 @@ namespace
         {
             ZoneScoped;
             auto* geometry = RpAtomicGetGeometry(atomic);
-            if (!geometry || std::any_of(geometries.begin(), geometries.end(), [geometry](const auto& state) {
+            if (!geometry)
+                return;
+            const int materialCount = std::min(RpGeometryGetNumMaterials(geometry), static_cast<int>(CObject::MAX_MATERIALS));
+            bool textured = false;
+            for (int i = 0; i < materialCount; ++i)
+                textured |= object.m_material.m_nType[i] == CObject::MATERIAL_TYPE_TEXTURE;
+            // Single-morph, non-native geometry keeps its instance on the geometry.
+            if (textured && !atomic->repEntry && (geometry->flags & rpGEOMETRYPRELIT) && !(geometry->flags & rpGEOMETRYNATIVEFLAGSMASK) &&
+                RpGeometryGetNumMorphTargets(geometry) == 1)
+            {
+                auto& cache = g_objects.at(&object).materialGeometries;
+                auto found = cache.find(geometry);
+                if (found == cache.end())
+                {
+                    auto clone = CloneMaterialGeometry(geometry);
+                    if (clone)
+                        found = cache.emplace(geometry, std::move(clone)).first;
+                }
+                if (found != cache.end())
+                {
+                    atomics.push_back({atomic, geometry, atomic->repEntry});
+                    geometry = found->second->geometry;
+                    atomic->geometry = geometry;
+                    atomic->repEntry = nullptr;
+                }
+            }
+            if (std::any_of(geometries.begin(), geometries.end(), [geometry](const auto& state) {
                     return state.geometry == geometry;
                 }))
                 return;
@@ -308,6 +414,13 @@ namespace
                 if ((state.geometry->flags ^ state.flags) & rpGEOMETRYPRELIT)
                     InvalidateInstance(state);
                 state.geometry->flags = state.flags;
+            }
+            for (const auto& state : atomics)
+            {
+                if (state.atomic->repEntry)
+                    RwResourcesFreeResEntry(state.atomic->repEntry);
+                state.atomic->geometry = state.geometry;
+                state.atomic->repEntry = state.instance;
             }
         }
     };

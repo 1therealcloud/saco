@@ -87,7 +87,8 @@ void CTextDrawPool::Draw()
 CTextDraw* CTextDrawPool::Create(int id, const CTextDraw::Transmit* transmit, const char* text)
 {
     ZoneScoped;
-    if (id < 0 || id >= MAX_SLOTS || !transmit)
+    if (id < 0 || id >= MAX_SLOTS || !transmit || !std::isfinite(transmit->m_fLetterWidth) || !std::isfinite(transmit->m_fLetterHeight) || !std::isfinite(transmit->m_fBoxWidth) ||
+        !std::isfinite(transmit->m_fBoxHeight) || !std::isfinite(transmit->m_fX) || !std::isfinite(transmit->m_fY))
         return nullptr;
     const std::uint16_t index = static_cast<std::uint16_t>(id);
 
