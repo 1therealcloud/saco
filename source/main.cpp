@@ -244,6 +244,8 @@ void Process()
 void Frame(IDirect3DDevice9* device)
 {
     ZoneScoped;
+
+    // update map marker (rpc)
     CVector mapPosition{};
     if (CGame::GetMapClickPosition(mapPosition) && g_netGame && g_netGame->GetState() == CNetGame::GAME_MODE_CONNECTED)
         g_netGame->MapMarker(mapPosition.x, mapPosition.y, mapPosition.z);
@@ -252,9 +254,11 @@ void Frame(IDirect3DDevice9* device)
     if (g_audioStream && g_audioStream->IsPlaying())
         g_audioStream->ControlGameRadio();
 
+    // wait for the game to load
     if (!device || CGame::GetState() != 9 || FAILED(device->TestCooperativeLevel()))
         return;
 
+    // init gameplay
     static bool gameplayInitialized = false;
     if (!gameplayInitialized)
     {
@@ -269,14 +273,13 @@ void Frame(IDirect3DDevice9* device)
 DWORD WINAPI InitializeThread(LPVOID)
 {
     ZoneScoped;
+
     // check gta version
     if (!IsGtaSa10Us())
     {
         MessageBoxA(nullptr, "Unsupported GTA version.\r\nSA:MP only supports GTA:SA v1.0 US.", "SA:MP - Version Error", MB_OK | MB_ICONERROR);
         return 1;
     }
-
-    g_sampUserDirectory = GetSampUserDirectory();
 
     // alloc debug-only console
 #if defined(_DEBUG)
@@ -314,7 +317,7 @@ DWORD WINAPI InitializeThread(LPVOID)
         return 1;
     }
 
-    // open saa archive
+    // open saa archive with original keys
     if (!g_archive.Open("samp.saa", keys))
     {
         Log("failed to load samp.saa!");
@@ -380,6 +383,10 @@ DWORD WINAPI InitializeThread(LPVOID)
 
     // init settings & config
     // ------------------------------------------------------------
+
+    // get samp user directory
+    g_sampUserDirectory = GetSampUserDirectory();
+
     g_settings.Initialize();
 
     const auto& userDirectory = g_sampUserDirectory;
