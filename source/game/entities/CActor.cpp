@@ -164,7 +164,7 @@ void CActor::Destroy()
 void CActor::PerformAnimation(const char* animation, const char* file, float frameDelta, int lockA, int lockX, int lockY, int lockF, int time)
 {
     ZoneScoped;
-    if (!IsCurrentPed(this) || !animation || !file || std::strcmp(file, "SEX") == 0)
+    if (!IsCurrentPed(this) || !animation || !file || _stricmp(file, "SEX") == 0)
         return;
 
     if (!IsAnimationLoaded(file))

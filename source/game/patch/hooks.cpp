@@ -32,6 +32,7 @@
 #include "players/CLocalPlayer.h"
 #include "players/PlayerColors.h"
 #include "game/entities/CPed.h"
+#include "game/AnimationNames.h"
 #include "pools/CActorPool.h"
 #include "pools/CVehiclePool.h"
 #include "players/CRemotePlayer.h"
@@ -42,6 +43,88 @@ EventHandlerFn g_eventHandler = nullptr;
 namespace game::hooks
 {
     void* crimeReportPed = nullptr;
+}
+
+namespace
+{
+    using AddAnimationFn = void*(__cdecl*)(void*, int, int);
+    using BlendAnimationFn = void*(__cdecl*)(void*, int, int, float);
+    AddAnimationFn g_addAnimation = nullptr;
+    BlendAnimationFn g_blendAnimation = nullptr;
+    void* g_nativeAnimationClump = nullptr;
+    int g_nativeAnimationGroup = 0;
+    int g_nativeAnimationId = 0;
+    float g_nativeAnimationDelta = 0.0f;
+
+    bool IsLocalAnimation(void* clump, int group, int id)
+    {
+        auto* ped = static_cast<const std::uint8_t*>(CPed::GetLocalPedHandle());
+        return ped && clump && *reinterpret_cast<void* const*>(ped + 0x18) == clump && (group != 0 || id != 160);
+    }
+
+    void* __cdecl AddAnimationHook(void* clump, int group, int id)
+    {
+        if (IsLocalAnimation(clump, group, id))
+        {
+            g_nativeAnimationClump = clump;
+            g_nativeAnimationGroup = group;
+            g_nativeAnimationId = id;
+        }
+        return g_addAnimation(clump, group, id);
+    }
+
+    void* __cdecl BlendAnimationHook(void* clump, int group, int id, float delta)
+    {
+        if (IsLocalAnimation(clump, group, id))
+        {
+            g_nativeAnimationClump = clump;
+            g_nativeAnimationGroup = group;
+            g_nativeAnimationId = id;
+            g_nativeAnimationDelta = delta;
+        }
+        return g_blendAnimation(clump, group, id, delta);
+    }
+}
+
+bool game::hooks::InstallAnimationHooks()
+{
+    return hook::install(0x4D3AA0, &AddAnimationHook, &g_addAnimation) && hook::install(0x4D4610, &BlendAnimationHook, &g_blendAnimation);
+}
+
+Animation game::hooks::GetNativeAnimation()
+{
+    Animation result{};
+    auto* ped = static_cast<const std::uint8_t*>(CPed::GetLocalPedHandle());
+    if (!ped || !g_nativeAnimationClump || *reinterpret_cast<void* const*>(ped + 0x18) != g_nativeAnimationClump)
+        return result;
+
+    using GetAssociationFn = const std::uint8_t*(__cdecl*)(int, int);
+    const auto* association = reinterpret_cast<GetAssociationFn>(0x4D3A60)(g_nativeAnimationGroup, g_nativeAnimationId);
+    const auto* hierarchy = association ? *reinterpret_cast<const std::uint8_t* const*>(association + 0x10) : nullptr;
+    if (!hierarchy)
+        return result;
+
+    // R5 maps the hierarchy's uppercase name hash to the first network ID.
+    static const auto ids = [] {
+        std::unordered_map<std::uint32_t, std::uint16_t> values;
+        values.reserve(game::animations::names.size());
+        using NameHashFn = std::uint32_t(__cdecl*)(const char*);
+        const auto hashName = reinterpret_cast<NameHashFn>(0x53CF30);
+        for (std::size_t id = 1; id < game::animations::names.size(); ++id)
+            if (const auto* separator = std::strchr(game::animations::names[id], ':'))
+                values.try_emplace(hashName(separator + 1), static_cast<std::uint16_t>(id));
+        return values;
+    }();
+    const auto found = ids.find(*reinterpret_cast<const std::uint32_t*>(hierarchy));
+    if (found == ids.end())
+    {
+        result.m_value = 0xFFFFFFFFu;
+        return result;
+    }
+    result.m_nId = found->second;
+    result.m_nFramedelta = Animation::EncodeFrameDelta(g_nativeAnimationDelta);
+    result.m_value |= 0x80000000u;
+    return result;
 }
 
 void* __cdecl CrimeReportPedHook(int)

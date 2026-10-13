@@ -1061,6 +1061,7 @@ void CRemotePlayer::Process()
         return;
     const TICK now = GetTickCount();
     auto& runtime = Runtime(this);
+    m_pPed->ProcessAnimation();
     if (runtime.enteringVehicle || runtime.exitingVehicle)
     {
         const bool task = runtime.enteringVehicle ? m_pPed->HasVehicleEntryTask() : m_pPed->HasVehicleExitTask();
@@ -1234,12 +1235,16 @@ void CRemotePlayer::Process()
         {
             m_pPed->PerformNetworkAnimation(m_animation);
             if (!m_animation.m_value && runtime.lastAnimation == 0x1804067C)
+            {
                 m_pPed->PerformAnimation("VEND_EAT_P", "VENDING", 4.0f, 0, 0, 0, 0, -1);
+                m_animation.m_value = 0xFFFFFFFFu;
+            }
             runtime.lastAnimation = m_animation.m_value;
             m_bPerformingCustomAnimation = FALSE;
         }
 
-        m_pPed->ProcessAnimation();
+        if (!m_bPerformingCustomAnimation && !m_animation.m_value && m_pPed->PerformingCustomAnimation())
+            m_pPed->PerformAnimation("crry_prtial", "CARRY", 4.0f, 0, 0, 0, 0, 0);
         ProcessHead();
 
         m_pPed->SetKeys(m_onfootData.m_controllerState.m_value, m_onfootData.m_controllerState.m_sLeftStickX, m_onfootData.m_controllerState.m_sLeftStickY);
@@ -1289,7 +1294,6 @@ void CRemotePlayer::Process()
     if (m_nStatus == PLAYER_STATUS_TIMEOUT && elapsed < IDLE_TIMEOUT_MS)
         m_nStatus = 0;
 
-    m_bPerformingCustomAnimation = m_pPed->PerformingCustomAnimation();
     if (m_nState != PLAYER_STATE_WASTED && !m_pPed->IsDead())
         m_pPed->SetHealth(100.0f);
 }

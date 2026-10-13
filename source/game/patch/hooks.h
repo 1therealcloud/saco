@@ -9,6 +9,7 @@
 #pragma once
 
 #include "sync/BulletSync.h"
+#include "sync/Animation.h"
 
 #include "game/RenderWare/rw/skeleton.h"
 
@@ -60,6 +61,8 @@ namespace game::hooks
     LRESULT CALLBACK WindowProcHook(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
 
     bool InstallPlayerHooks();
+    bool InstallAnimationHooks();
+    Animation GetNativeAnimation();
     bool InstallHudHooks();
     bool InstallFrameLimiterHooks();
     bool InstallPickupHook();

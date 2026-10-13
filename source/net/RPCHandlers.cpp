@@ -3111,6 +3111,9 @@ void RPCHandlers::ApplyPlayerAnimation(RPCParameters* pParams)
     if (!ped || !ped->HasNativePed() || !ped->IsValid())
         return;
 
+    if (playerId != players->m_localInfo.m_nId)
+        if (auto* remote = players->GetPlayer(playerId))
+            remote->m_bPerformingCustomAnimation = TRUE;
     ped->PerformAnimation(animName.data(), animLib.data(), delta, loop, lockX, lockY, freeze, static_cast<int>(time));
 }
 
@@ -3138,7 +3141,10 @@ void RPCHandlers::ClearPlayerAnimation(RPCParameters* pParams)
     if (playerId == pool->m_localInfo.m_nId)
         ped = g_game ? g_game->GetPlayerPed() : nullptr;
     else if (auto* remote = pool->GetPlayer(playerId))
+    {
         ped = remote->m_pPed;
+        remote->m_bPerformingCustomAnimation = FALSE;
+    }
     if (ped && ped->IsValid())
         ped->ClearTasks();
 }

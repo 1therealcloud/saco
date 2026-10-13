@@ -9,9 +9,20 @@
 #pragma once
 
 #include <cstdint>
+#include <cmath>
 
 struct Animation
 {
+    static std::uint8_t EncodeFrameDelta(float value)
+    {
+        if (!std::isfinite(value))
+            return 0;
+        float byte = std::fmod(std::trunc(value), 256.0f);
+        if (byte < 0)
+            byte += 256.0f;
+        return static_cast<std::uint8_t>(byte);
+    }
+
     union
     {
         struct
