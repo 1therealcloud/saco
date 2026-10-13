@@ -8,7 +8,8 @@
 
 #include <stdafx.h>
 
-#include <shlobj.h> // winapi
+#include <shlobj.h> // GetSampUserDirectory()
+#include <chrono>
 
 #include "main.h"
 
@@ -44,8 +45,6 @@
 #include "sync/KeyStuff.h"
 
 #include "render/render.h"
-
-#include <chrono>
 
 // original samp keys container
 static const std::vector<saa::KeySet> keys = {saa::OfficialKeySet()};
