@@ -23,7 +23,7 @@ namespace exceptions
         EXCEPTION_RECORD* g_exception = nullptr;
         volatile LONG g_handlingException = 0;
 
-        std::wstring g_dumpDirectory;
+        wchar_t g_dumpDirectory[MAX_PATH]{};
         HANDLE g_dumpRequested = nullptr;
         HANDLE g_dumpThread = nullptr;
         DWORD g_dumpThreadId = 0;
@@ -38,7 +38,7 @@ namespace exceptions
             GetLocalTime(&time);
 
             wchar_t path[MAX_PATH]{};
-            if (_snwprintf_s(path, _countof(path), _TRUNCATE, L"%s\\%04u%02u%02u-%02u%02u%02u-%03u-%lu.dmp", g_dumpDirectory.c_str(), time.wYear, time.wMonth, time.wDay,
+            if (_snwprintf_s(path, _countof(path), _TRUNCATE, L"%s\\%04u%02u%02u-%02u%02u%02u-%03u-%lu.dmp", g_dumpDirectory, time.wYear, time.wMonth, time.wDay,
                              time.wHour, time.wMinute, time.wSecond, time.wMilliseconds, GetCurrentProcessId()) < 0)
             {
 #if defined(_DEBUG)
@@ -110,7 +110,8 @@ namespace exceptions
 #endif // _DEBUG
                 return;
             }
-            g_dumpDirectory = directory.wstring();
+            if (wcscpy_s(g_dumpDirectory, directory.c_str()) != 0)
+                return;
 
             g_dumpRequested = CreateEventW(nullptr, FALSE, FALSE, nullptr);
             if (!g_dumpRequested)
@@ -143,6 +144,13 @@ namespace exceptions
             g_dumpException = *info->ExceptionRecord;
             g_dumpException.ExceptionRecord = nullptr;
             g_dumpContext = *info->ContextRecord;
+
+            // ExitProcess has already stopped other threads before DLL teardown.
+            if (WaitForSingleObject(g_dumpThread, 0) == WAIT_OBJECT_0)
+            {
+                write_minidump();
+                return;
+            }
 
             if (!SetEvent(g_dumpRequested))
             {
