@@ -13,3 +13,6 @@
 [submodule "third-party/tracy"]
 	path = third-party/tracy
 	url = https://github.com/wolfpld/tracy.git
+[submodule "third-party/curl"]
+	path = third-party/curl
+	url = https://github.com/curl/curl.git

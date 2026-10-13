@@ -24,3 +24,24 @@ set_target_properties(bass PROPERTIES
     #IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/bass/bass.dll"
     INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/bass"
 )
+
+# Keep libcurl self-contained, using Windows TLS and the dynamic MSVC runtime.
+function(add_samp_curl)
+    set(BUILD_SHARED_LIBS OFF)
+    set(BUILD_STATIC_LIBS ON)
+    set(BUILD_CURL_EXE OFF)
+    set(BUILD_TESTING OFF)
+    set(CURL_DISABLE_INSTALL ON)
+    set(CURL_STATIC_CRT OFF)
+    set(HTTP_ONLY ON)
+    set(CURL_USE_SCHANNEL ON)
+    set(CURL_USE_OPENSSL OFF)
+    set(CURL_USE_LIBPSL OFF)
+    set(USE_LIBIDN2 OFF)
+    set(USE_NGHTTP2 OFF)
+    set(CURL_ZLIB OFF)
+    set(CURL_BROTLI OFF)
+    set(CURL_ZSTD OFF)
+    add_subdirectory(curl EXCLUDE_FROM_ALL)
+endfunction()
+add_samp_curl()

@@ -7,7 +7,7 @@
 # cmake -B build -A Win32; cmake --build build --config Release
 
 cmake_minimum_required(VERSION 3.21)
-project(saco LANGUAGES CXX)
+project(saco LANGUAGES C CXX)
 
 # only Win32 is supported
 if (NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
@@ -147,6 +147,7 @@ target_precompile_headers(samp PRIVATE
 
 target_link_libraries(samp PRIVATE
     DirectXMath
+    CURL::libcurl
     bass
     minhook
     raknet
