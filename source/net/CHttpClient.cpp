@@ -7,52 +7,331 @@
  */
 
 #include <stdafx.h>
-
 #include "CHttpClient.h"
+#include <curl/curl.h>
+#include <io.h>
+#include <memory>
 
-#include <cctype>
-#include <cstdio>
-#include <cstdlib>
-
-namespace
+struct CHttpClient::Transfer
 {
-    bool StartsWithHttp(const std::string& value)
+    CHttpClient& client;
+    FILE* file = nullptr;
+    bool uploading = false;
+    std::uint64_t size = 0;
+    std::uint64_t received = 0;
+    std::uint64_t limit = MAX_ENTITY_LENGTH;
+    bool head = false;
+
+    static std::size_t Write(char* data, std::size_t size, std::size_t count, void* context) noexcept
     {
-        return value.size() >= 4 && value[0] == 'H' && value[1] == 'T' && value[2] == 'T' && value[3] == 'P';
+        auto& transfer = *static_cast<Transfer*>(context);
+        const auto bytes = size * count;
+        if (bytes > transfer.limit - transfer.received)
+        {
+            transfer.client.m_error = ERROR_TOO_BIG_CONTENT;
+            return 0;
+        }
+        try
+        {
+            if (transfer.file && !transfer.uploading)
+            {
+                if (std::fwrite(data, 1, bytes, transfer.file) != bytes)
+                {
+                    transfer.client.m_error = ERROR_FILE_IO;
+                    return 0;
+                }
+            }
+            else
+                transfer.client.m_Response.response.append(data, bytes);
+            transfer.received += bytes;
+            return bytes;
+        }
+        catch (...)
+        {
+            transfer.client.m_error = ERROR_CANNOT_WRITE;
+            return 0;
+        }
     }
-}
+    static std::size_t Header(char* data, std::size_t size, std::size_t count, void* context) noexcept
+    {
+        auto& transfer = *static_cast<Transfer*>(context);
+        const auto bytes = size * count;
+        try
+        {
+            auto& header = transfer.client.m_Response.header;
+            if (bytes >= 5 && std::memcmp(data, "HTTP/", 5) == 0)
+            {
+                header.clear();
+                // Keep only the final response when curl follows redirects.
+                transfer.client.m_Response.response.clear();
+                transfer.received = 0;
+                if (transfer.file && !transfer.uploading && (_fseeki64(transfer.file, 0, SEEK_SET) != 0 || _chsize_s(_fileno(transfer.file), 0) != 0))
+                {
+                    transfer.client.m_error = ERROR_FILE_IO;
+                    return 0;
+                }
+                if (transfer.file && !transfer.uploading && _fseeki64(transfer.file, 0, SEEK_SET) != 0)
+                {
+                    transfer.client.m_error = ERROR_FILE_IO;
+                    return 0;
+                }
+            }
+            if (header.size() + bytes > 65536)
+            {
+                transfer.client.m_error = ERROR_TOO_BIG_CONTENT;
+                return 0;
+            }
+            header.append(data, bytes);
+            return bytes;
+        }
+        catch (...)
+        {
+            transfer.client.m_error = ERROR_CANNOT_WRITE;
+            return 0;
+        }
+    }
+    static std::size_t Read(char* data, std::size_t size, std::size_t count, void* context) noexcept
+    {
+        auto& transfer = *static_cast<Transfer*>(context);
+        const auto bytes = std::fread(data, 1, size * count, transfer.file);
+        if (std::ferror(transfer.file))
+        {
+            transfer.client.m_error = ERROR_FILE_IO;
+            return CURL_READFUNC_ABORT;
+        }
+        return bytes;
+    }
+    static int Seek(void* context, curl_off_t offset, int origin) noexcept
+    {
+        return _fseeki64(static_cast<Transfer*>(context)->file, offset, origin) == 0 ? CURL_SEEKFUNC_OK : CURL_SEEKFUNC_FAIL;
+    }
+    static int Progress(void* context, curl_off_t downloadTotal, curl_off_t downloaded, curl_off_t uploadTotal, curl_off_t uploaded) noexcept
+    {
+        auto& transfer = *static_cast<Transfer*>(context);
+        auto& client = transfer.client;
+        client.m_total.store(static_cast<std::uint64_t>(transfer.uploading ? uploadTotal : downloadTotal), std::memory_order_relaxed);
+        client.m_transferred.store(static_cast<std::uint64_t>(transfer.uploading ? uploaded : downloaded), std::memory_order_relaxed);
+        if (!transfer.uploading && !transfer.head && downloadTotal > 0 && static_cast<std::uint64_t>(downloadTotal) > transfer.limit)
+        {
+            client.m_error = ERROR_TOO_BIG_CONTENT;
+            return 1;
+        }
+        if (client.m_cancelled.load(std::memory_order_relaxed))
+        {
+            client.m_error = ERROR_REQUEST_CANCELLED;
+            return 1;
+        }
+        return 0;
+    }
+};
 
-CHttpClient::CHttpClient()
-{
-    WSADATA data{};
-    m_initialized = WSAStartup(MAKEWORD(2, 2), &data) == 0;
-}
-
+CHttpClient::CHttpClient() : m_initialized(curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK)
+{}
 CHttpClient::~CHttpClient()
 {
-    Disconnect();
     if (m_initialized)
-        WSACleanup();
+        curl_global_cleanup();
 }
-
-int CHttpClient::ProcessURL(int type, char* url, char* data, char* referer)
+void CHttpClient::Reset()
 {
-    ZoneScoped;
-    return static_cast<int>(ProcessUrl(type, static_cast<const char*>(url), static_cast<const char*>(data), static_cast<const char*>(referer)));
+    m_Response = {};
+    m_error = ERROR_OK;
+    m_errorText.clear();
+    m_hasResponse = false;
+    m_cancelled.store(false, std::memory_order_relaxed);
+    m_transferred.store(0, std::memory_order_relaxed);
+    m_total.store(0, std::memory_order_relaxed);
 }
-
 CHttpClient::ErrorCode CHttpClient::ProcessUrl(int type, const char* url, const char* data, const char* referer)
 {
-    ZoneScoped;
-    Log("[http] request type=%d, url=%s", type, url ? url : "");
     Reset();
+    Transfer transfer{*this};
+    return Perform(type, url, data, referer, transfer, "application/x-www-form-urlencoded");
+}
+CHttpClient::ErrorCode CHttpClient::DownloadFile(const char* url, const std::filesystem::path& destination, std::uint64_t maxBytes)
+{
+    Reset();
+    auto temporary = destination;
+    temporary += L".part";
+    FILE* file = nullptr;
+    if (_wfopen_s(&file, temporary.c_str(), L"wb") != 0)
+        return m_error = ERROR_FILE_IO;
+    Transfer transfer{*this, file, false, 0, 0, maxBytes};
+    Perform(HTTP_GET, url, "", "", transfer, "");
+    if (std::fclose(file) != 0 && m_error == ERROR_OK)
+        m_error = ERROR_FILE_IO;
+    if (m_error == ERROR_OK && (m_Response.response_code < 200 || m_Response.response_code >= 300))
+        m_error = ERROR_BAD_HTTP_STATUS;
+    if (m_error == ERROR_OK && !MoveFileExW(temporary.c_str(), destination.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+        m_error = ERROR_FILE_IO;
+    if (m_error != ERROR_OK)
+    {
+        std::error_code ignored;
+        std::filesystem::remove(temporary, ignored);
+    }
+    return m_error;
+}
+CHttpClient::ErrorCode CHttpClient::UploadFile(const char* url, const std::filesystem::path& path, const char* contentType, int type)
+{
+    Reset();
+    if (type != HTTP_POST && type != HTTP_PUT)
+        return m_error = ERROR_CANNOT_WRITE;
+    FILE* raw = nullptr;
+    if (_wfopen_s(&raw, path.c_str(), L"rb") != 0)
+        return m_error = ERROR_FILE_IO;
+    const std::unique_ptr<FILE, decltype(&std::fclose)> file(raw, &std::fclose);
+    if (_fseeki64(raw, 0, SEEK_END) != 0)
+        return m_error = ERROR_FILE_IO;
+    const auto length = _ftelli64(raw);
+    if (length < 0 || _fseeki64(raw, 0, SEEK_SET) != 0)
+        return m_error = ERROR_FILE_IO;
+    Transfer transfer{*this, raw, true, static_cast<std::uint64_t>(length)};
+    Perform(type, url, "", "", transfer, contentType);
+    if (m_error == ERROR_OK && (m_Response.response_code < 200 || m_Response.response_code >= 300))
+        m_error = ERROR_BAD_HTTP_STATUS;
+    return m_error;
+}
+CHttpClient::ErrorCode CHttpClient::Perform(int type, const char* url, const char* data, const char* referer, Transfer& transfer, const char* contentType)
+{
+    ZoneScoped;
+    transfer.head = type == HTTP_HEAD;
     if (!m_initialized)
-        return static_cast<ErrorCode>(m_iError = HTTP_ERROR_NO_SOCKET);
-    InitializeRequest(type, url, data, referer);
-    if (m_iError == HTTP_SUCCESS)
-        Process();
+        return m_error = ERROR_NO_SOCKET;
+    if (!url || !*url || (referer && std::strpbrk(referer, "\r\n")) || (contentType && std::strpbrk(contentType, "\r\n")))
+        return m_error = ERROR_BAD_HOST;
+    if (type != HTTP_GET && type != HTTP_POST && type != HTTP_HEAD && type != HTTP_PUT)
+        return m_error = ERROR_CANNOT_WRITE;
 
-    return static_cast<ErrorCode>(m_iError);
+    const std::unique_ptr<CURLU, decltype(&curl_url_cleanup)> parsed(curl_url(), &curl_url_cleanup);
+    const std::string address = std::strstr(url, "://") ? url : std::string("http://") + url;
+    if (!parsed || curl_url_set(parsed.get(), CURLUPART_URL, address.c_str(), 0) != CURLUE_OK)
+        return m_error = ERROR_BAD_HOST;
+    char* scheme = nullptr;
+    if (curl_url_get(parsed.get(), CURLUPART_SCHEME, &scheme, 0) != CURLUE_OK)
+        return m_error = ERROR_BAD_HOST;
+    const bool https = _stricmp(scheme, "https") == 0;
+    const bool allowed = _stricmp(scheme, "http") == 0 || https;
+    curl_free(scheme);
+    if (!allowed)
+        return m_error = ERROR_BAD_HOST;
+
+    const std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> easy(curl_easy_init(), &curl_easy_cleanup);
+    if (!easy)
+        return m_error = ERROR_NO_SOCKET;
+    char errors[CURL_ERROR_SIZE]{};
+    CURLcode result = CURLE_OK;
+    auto set = [&](CURLoption option, auto value) {
+        if (result == CURLE_OK)
+            result = curl_easy_setopt(easy.get(), option, value);
+    };
+    set(CURLOPT_CURLU, parsed.get());
+    set(CURLOPT_PROTOCOLS_STR, "http,https");
+    set(CURLOPT_REDIR_PROTOCOLS_STR, https ? "https" : "http,https");
+    set(CURLOPT_SSL_VERIFYPEER, 1L);
+    set(CURLOPT_SSL_VERIFYHOST, 2L);
+    set(CURLOPT_FOLLOWLOCATION, transfer.uploading ? 0L : 1L);
+    set(CURLOPT_MAXREDIRS, 5L);
+    set(CURLOPT_CONNECTTIMEOUT, 10L);
+    set(CURLOPT_TIMEOUT, 120L);
+    set(CURLOPT_LOW_SPEED_LIMIT, 1L);
+    set(CURLOPT_LOW_SPEED_TIME, 30L);
+    set(CURLOPT_NOSIGNAL, 1L);
+    set(CURLOPT_USERAGENT, "SAMP/0.2.0");
+    set(CURLOPT_ERRORBUFFER, errors);
+    set(CURLOPT_WRITEFUNCTION, &Transfer::Write);
+    set(CURLOPT_WRITEDATA, &transfer);
+    set(CURLOPT_HEADERFUNCTION, &Transfer::Header);
+    set(CURLOPT_HEADERDATA, &transfer);
+    set(CURLOPT_XFERINFOFUNCTION, &Transfer::Progress);
+    set(CURLOPT_XFERINFODATA, &transfer);
+    set(CURLOPT_NOPROGRESS, 0L);
+    if (referer && *referer)
+        set(CURLOPT_REFERER, referer);
+    if (type == HTTP_HEAD)
+        set(CURLOPT_NOBODY, 1L);
+    if (type == HTTP_POST)
+        set(CURLOPT_POST, 1L);
+    if (type == HTTP_PUT)
+    {
+        if (transfer.uploading)
+            set(CURLOPT_UPLOAD, 1L);
+        else
+            set(CURLOPT_CUSTOMREQUEST, "PUT");
+    }
+
+    curl_slist* headers = nullptr;
+    if (type == HTTP_POST || type == HTTP_PUT)
+    {
+        const std::string header = std::string("Content-Type: ") + (contentType ? contentType : "application/octet-stream");
+        headers = curl_slist_append(nullptr, header.c_str());
+        if (!headers)
+            return m_error = ERROR_CANNOT_WRITE;
+        set(CURLOPT_HTTPHEADER, headers);
+        if (transfer.uploading)
+        {
+            set(CURLOPT_READFUNCTION, &Transfer::Read);
+            set(CURLOPT_READDATA, &transfer);
+            set(CURLOPT_SEEKFUNCTION, &Transfer::Seek);
+            set(CURLOPT_SEEKDATA, &transfer);
+            if (type == HTTP_POST)
+                set(CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(transfer.size));
+            else
+                set(CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(transfer.size));
+        }
+        else
+        {
+            set(CURLOPT_POSTFIELDS, data ? data : "");
+            set(CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(data ? std::strlen(data) : 0));
+        }
+    }
+    if (result == CURLE_OK)
+        result = curl_easy_perform(easy.get());
+    curl_slist_free_all(headers);
+    long status = 0;
+    curl_easy_getinfo(easy.get(), CURLINFO_RESPONSE_CODE, &status);
+    m_Response.response_code = static_cast<std::uint32_t>(status);
+    m_Response.header_len = static_cast<std::uint32_t>(m_Response.header.size());
+    m_Response.response_len = static_cast<std::uint32_t>(m_Response.response.size());
+    char* mime = nullptr;
+    curl_easy_getinfo(easy.get(), CURLINFO_CONTENT_TYPE, &mime);
+    if (mime && _strnicmp(mime, "text/html", 9) == 0)
+        m_Response.content_type = CONTENT_TYPE_HTML;
+    else if (mime && _strnicmp(mime, "text/", 5) == 0)
+        m_Response.content_type = CONTENT_TYPE_TEXT;
+    m_hasResponse = status != 0;
+    if (result != CURLE_OK && m_error == ERROR_OK)
+    {
+        switch (result)
+        {
+            case CURLE_COULDNT_RESOLVE_HOST:
+                m_error = ERROR_BAD_HOST;
+                break;
+            case CURLE_OPERATION_TIMEDOUT:
+                m_error = ERROR_REQUEST_TIMEOUT;
+                break;
+            case CURLE_ABORTED_BY_CALLBACK:
+                m_error = ERROR_REQUEST_CANCELLED;
+                break;
+            case CURLE_PEER_FAILED_VERIFICATION:
+            case CURLE_SSL_CONNECT_ERROR:
+                m_error = ERROR_TLS_FAILED;
+                break;
+            case CURLE_COULDNT_CONNECT:
+                m_error = ERROR_CANNOT_CONNECT;
+                break;
+            case CURLE_SEND_ERROR:
+            case CURLE_READ_ERROR:
+            case CURLE_WRITE_ERROR:
+                m_error = ERROR_CANNOT_WRITE;
+                break;
+            default:
+                m_error = ERROR_INCORRECT_RESPONSE;
+                break;
+        }
+    }
+    if (result != CURLE_OK)
+        m_errorText = errors[0] ? errors : curl_easy_strerror(result);
+    return m_error;
 }
 
 bool CHttpClient::GetHeaderValue(const char* headerName, char* returnBuffer, int bufferSize)
@@ -90,417 +369,4 @@ bool CHttpClient::GetHeaderValue(const char* headerName, char* returnBuffer, int
         headers.remove_prefix(end + 1);
     }
     return false;
-}
-
-bool CHttpClient::Connect(const char* host, int port)
-{
-    ZoneScoped;
-    if (!host || !*host)
-    {
-        m_iError = HTTP_ERROR_BAD_HOST;
-        return false;
-    }
-
-    addrinfo hints{};
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    addrinfo* addresses = nullptr;
-    const std::string service = std::to_string(port);
-    if (getaddrinfo(host, service.c_str(), &hints, &addresses) != 0 || !addresses)
-    {
-        m_iError = HTTP_ERROR_BAD_HOST;
-        return false;
-    }
-    sockaddr_in address{};
-    std::memcpy(&address, addresses->ai_addr, sizeof(address));
-    freeaddrinfo(addresses);
-
-    m_iSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (m_iSocket == INVALID_SOCKET)
-    {
-        m_iError = HTTP_ERROR_NO_SOCKET;
-        return false;
-    }
-
-    const DWORD timeout = 10000;
-    setsockopt(m_iSocket, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout), sizeof(timeout));
-    setsockopt(m_iSocket, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&timeout), sizeof(timeout));
-
-    if (connect(m_iSocket, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == SOCKET_ERROR)
-    {
-        Disconnect();
-        m_iError = HTTP_ERROR_CANT_CONNECT;
-        return false;
-    }
-
-    return true;
-}
-
-void CHttpClient::Disconnect()
-{
-    if (m_iSocket == INVALID_SOCKET)
-        return;
-
-    closesocket(m_iSocket);
-    m_iSocket = INVALID_SOCKET;
-}
-
-bool CHttpClient::SendView(std::string_view data)
-{
-    ZoneScoped;
-    if (m_iSocket == INVALID_SOCKET)
-    {
-        m_iError = HTTP_ERROR_CANT_WRITE;
-        return false;
-    }
-
-    // R5 does one send() and only checks for an error. Looping here preserves
-    // the wire data but fixes the partial-send case.
-    std::size_t offset = 0;
-
-    while (offset < data.size())
-    {
-        const std::size_t left = data.size() - offset;
-        const int amount = static_cast<int>(std::min<std::size_t>(left, static_cast<std::size_t>(std::numeric_limits<int>::max())));
-
-        const int sent = send(m_iSocket, data.data() + offset, amount, 0);
-        if (sent == SOCKET_ERROR || sent <= 0)
-        {
-            m_iError = HTTP_ERROR_CANT_WRITE;
-            return false;
-        }
-
-        offset += static_cast<std::size_t>(sent);
-    }
-
-    return true;
-}
-
-bool CHttpClient::Send(const char* buffer)
-{
-    ZoneScoped;
-    return buffer && SendView(buffer);
-}
-
-int CHttpClient::Receive(char* buffer, int bufferSize)
-{
-    if (m_iSocket == INVALID_SOCKET || !buffer || bufferSize <= 0)
-        return SOCKET_ERROR;
-
-    return recv(m_iSocket, buffer, bufferSize, 0);
-}
-
-void CHttpClient::InitializeRequest(int type, const char* url, const char* postData, const char* referer)
-{
-    ZoneScoped;
-    if (!url)
-    {
-        m_iError = HTTP_ERROR_BAD_HOST;
-        return;
-    }
-
-    m_Request.rtype = type;
-    m_Request.referer = referer ? referer : "";
-
-    if (type == HTTP_POST)
-        m_Request.data = postData ? postData : "";
-
-    // R5 does not understand "http://". It expects host[:port]/path.
-    std::string useUrl = url;
-
-    std::size_t slash = useUrl.find('/');
-    if (slash == std::string::npos)
-    {
-        useUrl.push_back('/');
-        slash = useUrl.size() - 1;
-    }
-
-    m_Request.host.assign(useUrl.data(), slash);
-    m_Request.file.assign(useUrl.data() + slash, useUrl.size() - slash);
-
-    const std::size_t colon = m_Request.host.find(':');
-    if (colon != std::string::npos)
-    {
-        // R5 uses atoi() and stores the result in an unsigned short.
-        const int parsedPort = std::atoi(m_Request.host.c_str() + colon + 1);
-        m_Request.port = static_cast<std::uint16_t>(parsedPort);
-        m_Request.host.resize(colon);
-    }
-    else
-    {
-        m_Request.port = 80;
-    }
-}
-
-void CHttpClient::HandleEntity()
-{
-    ZoneScoped;
-    std::array<char, RECV_BUFFER_SIZE> buffer{};
-    std::string response;
-
-    bool headerGot = false;
-    bool hasContentLength = false;
-    std::size_t contentLength = 0;
-
-    while (true)
-    {
-        const int bytesRead = Receive(buffer.data(), static_cast<int>(buffer.size()));
-        if (bytesRead == SOCKET_ERROR)
-        {
-            Disconnect();
-            m_iError = HTTP_ERROR_MALFORMED_RESPONSE;
-            return;
-        }
-        if (bytesRead == 0)
-            break;
-
-        response.append(buffer.data(), static_cast<std::size_t>(bytesRead));
-
-        if (!headerGot && response.size() > 64 * 1024)
-        {
-            Disconnect();
-            m_iError = HTTP_ERROR_MALFORMED_RESPONSE;
-            return;
-        }
-        if (!headerGot)
-        {
-            std::size_t headerEnd = response.find("\r\n\r\n");
-            std::size_t separatorLength = 4;
-
-            if (headerEnd == std::string::npos)
-            {
-                headerEnd = response.find("\n\n");
-                separatorLength = 2;
-            }
-
-            if (headerEnd != std::string::npos)
-            {
-                headerGot = true;
-
-                m_Response.header.assign(response.data(), headerEnd);
-                m_Response.header_len = static_cast<std::uint32_t>(headerEnd);
-
-                response.erase(0, headerEnd + separatorLength);
-
-                const char* contentLengthHeader = StrIStr(m_Response.header.c_str(), "CONTENT-LENGTH:");
-                if (contentLengthHeader)
-                {
-                    hasContentLength = true;
-
-                    contentLengthHeader += std::strlen("CONTENT-LENGTH:");
-                    while (*contentLengthHeader == ' ' || *contentLengthHeader == '\t')
-                        ++contentLengthHeader;
-
-                    contentLength = static_cast<std::size_t>(std::max(0, std::atoi(contentLengthHeader)));
-
-                    if (contentLength > MAX_ENTITY_LENGTH)
-                    {
-                        Disconnect();
-                        m_iError = HTTP_ERROR_CONTENT_TOO_BIG;
-                        return;
-                    }
-                }
-            }
-        }
-
-        if (headerGot && m_Request.rtype == HTTP_HEAD)
-        {
-            response.clear();
-            break;
-        }
-        if (headerGot && response.size() > MAX_ENTITY_LENGTH)
-        {
-            Disconnect();
-            m_iError = HTTP_ERROR_CONTENT_TOO_BIG;
-            return;
-        }
-        // R5 stops receiving once at least Content-Length body bytes are present.
-        // It does not truncate response data if a recv() happened to provide more.
-        if (headerGot && hasContentLength && response.size() >= contentLength)
-            break;
-    }
-
-    Disconnect();
-
-    if (!headerGot || !StartsWithHttp(m_Response.header) || (m_Request.rtype != HTTP_HEAD && hasContentLength && response.size() < contentLength))
-    {
-        m_iError = HTTP_ERROR_MALFORMED_RESPONSE;
-        return;
-    }
-
-    char responseCode[4]{};
-
-    if (m_Response.header.size() >= 12)
-    {
-        responseCode[0] = m_Response.header[9];
-        responseCode[1] = m_Response.header[10];
-        responseCode[2] = m_Response.header[11];
-    }
-
-    m_Response.response_code = static_cast<std::uint32_t>(std::atoi(responseCode));
-    m_Response.response = std::move(response);
-    m_Response.response_len = static_cast<std::uint32_t>(m_Response.response.size());
-
-    // R5 defaults to HTML if Content-Type is absent.
-    m_Response.content_type = CONTENT_TYPE_HTML;
-    m_hasResponse = true;
-
-    char contentType[256]{};
-
-    if (GetHeaderValue("CONTENT-TYPE:", contentType, sizeof(contentType)))
-    {
-        // Keep R5's case-sensitive value checks.
-        if (std::strstr(contentType, "text/html"))
-        {
-            m_Response.content_type = CONTENT_TYPE_HTML;
-        }
-        else if (std::strstr(contentType, "text/plain"))
-        {
-            m_Response.content_type = CONTENT_TYPE_TEXT;
-        }
-        else
-        {
-            m_Response.content_type = CONTENT_TYPE_UNKNOWN;
-        }
-    }
-}
-
-void CHttpClient::Process()
-{
-    ZoneScoped;
-    if (!Connect(m_Request.host.c_str(), m_Request.port))
-        return;
-
-    std::string request;
-
-    switch (m_Request.rtype)
-    {
-        case HTTP_GET:
-            request = BuildGetRequest(m_Request);
-            break;
-
-        case HTTP_POST:
-            request = BuildPostRequest(m_Request);
-            break;
-
-        case HTTP_HEAD:
-            request = BuildHeadRequest(m_Request);
-            break;
-
-        default:
-            Disconnect();
-            m_iError = HTTP_ERROR_CANT_WRITE;
-            return;
-    }
-
-    if (!SendView(request))
-    {
-        Disconnect();
-        return;
-    }
-
-    HandleEntity();
-}
-
-void CHttpClient::Reset()
-{
-    Disconnect();
-
-    m_Request = {};
-    m_Response = {};
-    m_iError = HTTP_SUCCESS;
-    m_hasResponse = false;
-}
-
-const char* CHttpClient::StrIStr(const char* haystack, const char* needle)
-{
-    ZoneScoped;
-    if (!haystack || !needle)
-        return nullptr;
-
-    if (!*needle)
-        return haystack;
-
-    const std::size_t needleLength = std::strlen(needle);
-
-    for (const char* current = haystack; *current; ++current)
-    {
-        std::size_t index = 0;
-
-        while (index < needleLength)
-        {
-            const unsigned char left = static_cast<unsigned char>(current[index]);
-            const unsigned char right = static_cast<unsigned char>(needle[index]);
-
-            if (!left || std::tolower(left) != std::tolower(right))
-                break;
-
-            ++index;
-        }
-
-        if (index == needleLength)
-            return current;
-    }
-
-    return nullptr;
-}
-
-std::string CHttpClient::BuildGetRequest(const HTTP_REQUEST& request)
-{
-    ZoneScoped;
-    std::string result;
-    result.reserve(request.file.size() + request.host.size() + request.referer.size() + 128);
-
-    result += "GET ";
-    result += request.file;
-    result += " HTTP/1.0\r\nAccept: */*\r\nUser-Agent: ";
-    result += USER_AGENT;
-    result += "\r\nReferer: http://";
-    result += request.referer;
-    result += "\r\nHost: ";
-    result += request.host;
-    result += "\r\n\r\n";
-
-    return result;
-}
-
-std::string CHttpClient::BuildPostRequest(const HTTP_REQUEST& request)
-{
-    ZoneScoped;
-    std::string result;
-    result.reserve(request.file.size() + request.host.size() + request.referer.size() + request.data.size() + 192);
-
-    result += "POST ";
-    result += request.file;
-    result += " HTTP/1.0\r\nAccept: */*\r\nUser-Agent: ";
-    result += USER_AGENT;
-    result += "\r\nReferer: http://";
-    result += request.referer;
-    result += "\r\nHost: ";
-    result += request.host;
-    result += "\r\nContent-type: application/x-www-form-urlencoded\r\nContent-length: ";
-    result += std::to_string(request.data.size());
-    result += "\r\n\r\n";
-    result += request.data;
-
-    return result;
-}
-
-std::string CHttpClient::BuildHeadRequest(const HTTP_REQUEST& request)
-{
-    ZoneScoped;
-    std::string result;
-    result.reserve(request.file.size() + request.host.size() + request.referer.size() + 128);
-
-    result += "HEAD ";
-    result += request.file;
-    result += " HTTP/1.0\r\nAccept: */*\r\nUser-Agent: ";
-    result += USER_AGENT;
-    result += "\r\nReferer: http://";
-    result += request.referer;
-    result += "\r\nHost: ";
-    result += request.host;
-    result += "\r\n\r\n";
-
-    return result;
 }
