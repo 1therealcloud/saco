@@ -44,7 +44,11 @@ public:
     BOOL Delete(std::uint8_t id);
     void Show(std::uint8_t id);
     void Hide(std::uint8_t id);
+    void UpdatePlayerControllable(bool enabled);
     char* GetTextPointer(const char* text);
     void Process();
     void Process(const CControllerState& current, const CControllerState& previous);
+
+private:
+    bool m_restorePlayerControl = true;
 };

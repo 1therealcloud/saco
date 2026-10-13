@@ -7,7 +7,6 @@
  */
 
 #include <stdafx.h>
-#include "game/CGame.h"
 #include "game/Scripting.h"
 #include "sync/KeyStuff.h"
 #include "game/CPad.h"
@@ -67,11 +66,14 @@ void CMenuPool::Show(std::uint8_t id)
     if (!menu)
         return;
     Hide(m_nCurrent);
+    const auto* pad = KeyStuff::GetInternalKeys();
+    m_restorePlayerControl = !pad || !pad->bPlayerSafe;
     menu->Show();
     m_nCurrent = menu->IsVisible() ? id : INVALID_MENU;
     m_bCanceled = false;
     constexpr scm::OpcodeInfo opSetControl{0x01B4, "ii"};
-    scm::ProcessCommand(&opSetControl, 0, int(m_nCurrent == INVALID_MENU));
+    if (m_nCurrent != INVALID_MENU)
+        scm::ProcessCommand(&opSetControl, 0, 0);
 }
 
 void CMenuPool::Hide(std::uint8_t id)
@@ -84,7 +86,16 @@ void CMenuPool::Hide(std::uint8_t id)
     m_nCurrent = INVALID_MENU;
     m_bCanceled = false;
     constexpr scm::OpcodeInfo opSetControl{0x01B4, "ii"};
-    scm::ProcessCommand(&opSetControl, 0, 1);
+    scm::ProcessCommand(&opSetControl, 0, int(m_restorePlayerControl));
+}
+
+void CMenuPool::UpdatePlayerControllable(bool enabled)
+{
+    if (m_nCurrent == INVALID_MENU)
+        return;
+    m_restorePlayerControl = enabled;
+    constexpr scm::OpcodeInfo opSetControl{0x01B4, "ii"};
+    scm::ProcessCommand(&opSetControl, 0, 0);
 }
 
 char* CMenuPool::GetTextPointer(const char* text)
@@ -128,14 +139,7 @@ void CMenuPool::Process(const CControllerState& current, const CControllerState&
     CMenu* menu = GetAt(m_nCurrent);
     if (!menu || !menu->IsVisible())
     {
-        const bool wasVisible = m_nCurrent != INVALID_MENU;
-        m_nCurrent = INVALID_MENU;
-        m_bCanceled = false;
-        if (wasVisible)
-        {
-            constexpr scm::OpcodeInfo opSetControl{0x01B4, "ii"};
-            scm::ProcessCommand(&opSetControl, 0, 1);
-        }
+        Hide(m_nCurrent);
         return;
     }
     // close on the next tick; don't emit the same event again before closing

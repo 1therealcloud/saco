@@ -3986,6 +3986,8 @@ void RPCHandlers::TogglePlayerControllable(RPCParameters* pParams)
 
     if (auto* ped = g_game ? g_game->GetPlayerPed() : nullptr)
         ped->SetControllable(moveable != 0);
+    if (auto* menus = g_netGame ? g_netGame->GetMenuPool() : nullptr)
+        menus->UpdatePlayerControllable(moveable != 0);
 }
 
 // -----------------------------------------------------------------------------
