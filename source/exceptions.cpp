@@ -361,31 +361,6 @@ namespace exceptions
             }
         }
 
-        void log_exception()
-        {
-            if (!g_exception || !g_context)
-                return;
-
-            Log("[exceptions] type=%s code=0x%08X address=%p", exception_name(g_exception->ExceptionCode), g_exception->ExceptionCode, g_exception->ExceptionAddress);
-
-            char module[MAX_PATH + 32]{};
-            if (crash_module(module, sizeof(module)))
-                Log("[exceptions] module=%s", module);
-
-            if ((g_exception->ExceptionCode == EXCEPTION_ACCESS_VIOLATION || g_exception->ExceptionCode == EXCEPTION_IN_PAGE_ERROR) && g_exception->NumberParameters >= 2)
-            {
-                Log("[exceptions] access=%s memory=%p", access_name(g_exception->ExceptionInformation[0]), reinterpret_cast<void*>(g_exception->ExceptionInformation[1]));
-            }
-
-            if (g_exception->ExceptionCode == EXCEPTION_IN_PAGE_ERROR && g_exception->NumberParameters >= 3)
-                Log("[exceptions] io status=0x%08X", static_cast<unsigned>(g_exception->ExceptionInformation[2]));
-
-            Log("[exceptions] eax=%08X ebx=%08X ecx=%08X edx=%08X", g_context->Eax, g_context->Ebx, g_context->Ecx, g_context->Edx);
-
-            Log("[exceptions] esi=%08X edi=%08X ebp=%08X esp=%08X eip=%08X eflags=%08X", g_context->Esi, g_context->Edi, g_context->Ebp, g_context->Esp, g_context->Eip,
-                g_context->EFlags);
-        }
-
         INT_PTR CALLBACK dialog_proc(HWND dialog, UINT message, WPARAM wParam, LPARAM)
         {
             switch (message)
@@ -450,7 +425,6 @@ namespace exceptions
 
             request_minidump(info);
 
-            log_exception();
             release_cursor(true);
 
             const HWND gameWindow = get_game_window();
