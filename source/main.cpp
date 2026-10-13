@@ -237,10 +237,6 @@ void Process()
     if (CGame::IsPaused())
         return;
 
-    // debug mode
-    if (g_settings.m_bDebugMode)
-        return;
-
     CObject::ProcessAll(CGame::FrameSeconds());
 }
 
