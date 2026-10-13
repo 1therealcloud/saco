@@ -4940,7 +4940,7 @@ void RPCHandlers::SetPlayerVirtualWorld(RPCParameters* pParams)
 void RPCHandlers::ModelInfo(RPCParameters* pParams)
 {
     ZoneScoped;
-    if (!g_DLClient || !pParams || !pParams->input)
+    if (!g_DLClient || !pParams || !pParams->input || pParams->numberOfBitsOfData < 39u * 8u)
         return;
     BitStream bs(pParams->input, BITS_TO_BYTES(pParams->numberOfBitsOfData), false);
     std::uint32_t index{}, dffCrc{}, txdCrc{}, dffSize{}, txdSize{};
@@ -4949,7 +4949,26 @@ void RPCHandlers::ModelInfo(RPCParameters* pParams)
     if (!bs.Read(index) || !bs.Read(count) || !bs.Read(type) || !bs.Read(virtualWorld) || !bs.Read(baseId) || !bs.Read(newId) || !bs.Read(dffCrc) || !bs.Read(txdCrc) ||
         !bs.Read(dffSize) || !bs.Read(txdSize) || !bs.Read(timeOn) || !bs.Read(timeOff))
         return;
-    // TODO: queue metadata in CCustomModelsPool.
+    if (!g_netGame || count <= 0 ||
+        (g_netGame->GetState() != CNetGame::GAME_MODE_WAITJOIN && g_netGame->GetState() != CNetGame::GAME_MODE_CONNECTED &&
+         g_netGame->GetState() != CNetGame::GAME_MODE_RESTARTING))
+        return;
+    CCustomModelInfo info{};
+    info.m_nType = static_cast<CustomModelType>(type);
+    info.m_nVirtualWorld = virtualWorld;
+    info.m_nStandardModelId = baseId;
+    info.m_nCustomModelId = newId;
+    info.m_nDffCrc = dffCrc;
+    info.m_nTxdCrc = txdCrc;
+    info.m_nDffSize = dffSize;
+    info.m_nTxdSize = txdSize;
+    info.m_nTimeOn = timeOn;
+    info.m_nTimeOff = timeOff;
+    const bool accepted = g_netGame->GetCustomModelsPool().Set(index, static_cast<std::uint32_t>(count), info);
+#if defined(_DEBUG)
+    Log("[dl:metadata] index=%u count=%d model=%d base=%d type=%u accepted=%d ready=%d", index, count, newId, baseId, type, accepted, g_netGame->GetCustomModelsPool().IsReady());
+#endif // _DEBUG
+    (void)accepted;
 }
 
 // 0.3.DL-only RPC 183: variant 1 binary file, variant 6 HTTP URL.

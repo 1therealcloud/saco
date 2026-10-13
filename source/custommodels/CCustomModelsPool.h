@@ -47,6 +47,17 @@ struct CCustomModelInfo
 
 struct CCustomModelsPool
 {
-    // keep empty slots so rpc model indices stay stable
+    static constexpr std::uint32_t MAX_MODELS = 65536;
+    static constexpr std::uint32_t MAX_FILE_SIZE = 64u * 1024u * 1024u;
+    bool Set(std::uint32_t index, std::uint32_t count, const CCustomModelInfo& info);
+    CCustomModelInfo* Get(std::uint32_t index) const;
+    std::uint32_t GetCount() const;
+    std::uint32_t GetReceivedCount() const;
+    bool IsReady() const;
+    void Clear();
+
+private:
+    // Empty slots preserve server indices while metadata arrives out of order.
     std::vector<std::unique_ptr<CCustomModelInfo>> m_models{};
+    std::uint32_t m_receivedCount{};
 };

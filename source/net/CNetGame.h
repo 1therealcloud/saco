@@ -19,6 +19,7 @@
 #include "pools/CPlayerPool.h"
 #include "pools/CTextDrawPool.h"
 #include "pools/CVehiclePool.h"
+#include "custommodels/CCustomModelsPool.h"
 #include "sync/Synchronization.h"
 #include "utils/math/CVector.h"
 
@@ -234,4 +235,11 @@ public:
     CVehiclePool* GetVehiclePool();
     RakClientInterface* GetRakClient();
     __int64 GetCounter();
+    CCustomModelsPool& GetCustomModelsPool()
+    {
+        return m_customModels;
+    }
+
+private:
+    CCustomModelsPool m_customModels;
 };

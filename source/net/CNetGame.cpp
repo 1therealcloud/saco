@@ -795,8 +795,7 @@ CNetGame::~CNetGame()
 void CNetGame::SetState(int value)
 {
     ZoneScoped;
-    const bool resetSession = value == GAME_MODE_WAITCONNECT &&
-                              (m_nGameState == GAME_MODE_CONNECTED || m_nGameState == GAME_MODE_WAITJOIN || m_nGameState == GAME_MODE_RESTARTING);
+    const bool resetSession = value == GAME_MODE_WAITCONNECT && (m_nGameState == GAME_MODE_CONNECTED || m_nGameState == GAME_MODE_WAITJOIN || m_nGameState == GAME_MODE_RESTARTING);
 
     if (resetSession || (m_nGameState == GAME_MODE_CONNECTED && value != GAME_MODE_CONNECTED))
     {
@@ -816,6 +815,7 @@ void CNetGame::SetState(int value)
     {
         BuildingRemoval::RestoreAll();
         CSrvNetStats::Reset();
+        m_customModels.Clear();
         ResetPools();
         PlayerColors::Initialize();
     }
