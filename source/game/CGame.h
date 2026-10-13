@@ -135,6 +135,7 @@ public:
     void SetWantedLevel(char level);                               // 0xA1420
     void SetNumberOfIntroTextLinesThisFrame(unsigned short value); // 0xA1430
     void DrawGangZone(float* position, std::uint32_t color);       // 0xA1440
+    void DisableEnterExits();
     void EnableZoneDisplaying(bool enable);                        // 0xA1520
     void EnableStuntBonus(bool enable);                            // 0xA1540
     void LoadScene(const char* file);                              // 0xA15B0

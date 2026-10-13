@@ -754,6 +754,24 @@ void CGame::DrawGangZone(float* position, std::uint32_t color)
     reinterpret_cast<void(__cdecl*)(float*, const std::uint32_t*, bool)>(0x5853D0)(position, &color, menuVisible != 0);
 }
 
+void CGame::DisableEnterExits()
+{
+    const auto* pool = *reinterpret_cast<const std::uint8_t* const*>(0x96A7D8);
+    if (!pool)
+        return;
+    std::uint8_t* entries{};
+    int count{};
+    std::memcpy(&entries, pool, sizeof(entries));
+    std::memcpy(&count, pool + 8, sizeof(count));
+    if (!entries || count <= 0 || count > 65536)
+        return;
+    for (int i = 0; i < count; ++i)
+    {
+        const std::uint16_t flags = 0;
+        std::memcpy(entries + i * 60 + 48, &flags, sizeof(flags));
+    }
+}
+
 void CGame::EnableZoneDisplaying(bool enable)
 {
     Mem<std::uint8_t>(0xBAA3F8) = enable ? 0 : 1;

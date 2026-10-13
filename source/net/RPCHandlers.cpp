@@ -1558,6 +1558,8 @@ void RPCHandlers::InitGame(RPCParameters* pParams)
     settings.m_fChatRadius = globalChatRadius;
     settings.m_fNameTagsDrawDist = nameTagDistance;
     settings.m_bEnterExit = !disableEnterExits;
+    if (disableEnterExits && g_game)
+        g_game->DisableEnterExits();
     // r5 reads the wire flag, then unconditionally enables nametag LOS at 0x10798
     settings.m_bNoNametagsBehindWalls = true;
     settings.m_bManualVehicleEngineAndLight = manualVehicleEngineAndLights;
