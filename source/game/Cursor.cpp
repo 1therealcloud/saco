@@ -49,7 +49,9 @@ namespace game::cursor
         {
             if (!patch::read(kReadMouseCall, readMouse.data(), readMouse.size()) || !patch::read(kSetMousePosition, &setMousePos, sizeof(setMousePos)))
             {
+#if defined(_DEBUG)
                 Log("failed to save game mouse instructions!");
+#endif // _DEBUG
                 ExitProcess(1);
             }
         }
@@ -66,7 +68,9 @@ namespace game::cursor
             const auto& mouseBytes = blockMouse ? disabledInput : readMouse;
             if (!patch::write(kReadMouseCall, mouseBytes.data(), mouseBytes.size()) || !patch::write<std::uint8_t>(kSetMousePosition, blockMouse ? ret : setMousePos))
             {
+#if defined(_DEBUG)
                 Log("failed to change game mouse state!");
+#endif // _DEBUG
                 ExitProcess(1);
             }
             mouseBlocked = blockMouse;
@@ -79,7 +83,9 @@ namespace game::cursor
             const auto& keyBytes = blockKeys ? disabledInput : readKeys;
             if (!patch::write(kReadKeysCall, keyBytes.data(), keyBytes.size()))
             {
+#if defined(_DEBUG)
                 Log("failed to change game input state!");
+#endif // _DEBUG
                 ExitProcess(1);
             }
             keysBlocked = blockKeys;

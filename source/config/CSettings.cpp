@@ -113,7 +113,11 @@ void CSettings::Initialize()
     std::filesystem::create_directories(std::filesystem::path(m_szModelCache) / "local", error);
 
     if (error)
+    {
+#if defined(_DEBUG)
         Log("[settings] failed to create model cache: %s", error.message().c_str());
+#endif // _DEBUG
+    }
 }
 
 // init

@@ -179,7 +179,9 @@ void RPCHandlers::SetPlayerSkillLevel(RPCParameters* pParams)
     if (playerId == pool->m_localInfo.m_nId)
     {
         AimStuff::SetLocalPlayerStat(static_cast<int>(skillId), level);
+#if defined(_DEBUG)
         Log("[rpc:skill] local player=%u, skill=%u, level=%u", playerId, skillId, level);
+#endif // _DEBUG
     }
     else if (auto* remote = pool->GetPlayer(playerId); remote && remote->m_pPed)
         remote->m_pPed->SetPlayerStat(static_cast<int>(skillId), level);
@@ -914,7 +916,9 @@ void RPCHandlers::SendGameTimeUpdate(RPCParameters* pParams)
 void RPCHandlers::WorldPlayerAdd(RPCParameters* pParams)
 {
     ZoneScoped;
+#if defined(_DEBUG)
     Log("WorldPlayerAdd");
+#endif // _DEBUG
 
     if (!pParams || !pParams->input)
         return;
@@ -985,7 +989,9 @@ void RPCHandlers::WorldPlayerAdd(RPCParameters* pParams)
 void RPCHandlers::DeathBroadcast(RPCParameters* pParams)
 {
     ZoneScoped;
+#if defined(_DEBUG)
     Log("DeathBroadcast");
+#endif // _DEBUG
 
     if (!pParams || !pParams->input)
         return;
@@ -1012,7 +1018,9 @@ void RPCHandlers::DeathBroadcast(RPCParameters* pParams)
 void RPCHandlers::WorldPlayerRemove(RPCParameters* pParams)
 {
     ZoneScoped;
+#if defined(_DEBUG)
     Log("WorldPlayerRemove");
+#endif // _DEBUG
 
     if (!pParams || !pParams->input)
         return;
@@ -1557,7 +1565,9 @@ void RPCHandlers::InitGame(RPCParameters* pParams)
     settings.m_bClassesAvailable = spawnsAvailable != 0;
     g_netGame->m_nClassesAvailable = spawnsAvailable;
     settings.m_bNameTags = showNameTags;
+#if defined(_DEBUG)
     Log("[nametags] enabled=%d, walls=%d, wire walls=%d, distance=%.1f", showNameTags, settings.m_bNoNametagsBehindWalls, nameTagLos, nameTagDistance);
+#endif // _DEBUG
     settings.m_nPlayerMarkersMode = static_cast<int>(showPlayerMarkers);
     settings.m_nWorldTimeHour = worldTime;
     settings.m_nWorldTimeMinute = 0;
@@ -1582,8 +1592,10 @@ void RPCHandlers::InitGame(RPCParameters* pParams)
 
     g_netGame->ProcessGameStuff();
 
+#if defined(_DEBUG)
     Log("[net:init] connected: player=%u, host=%s, classes=%u, rates=%u/%u/%u, multiplier=%u, lagcomp=%u", playerId, hostName.c_str(), spawnsAvailable, onFootRate, inCarRate,
         weaponRate, multiplier, lagCompMode);
+#endif // _DEBUG
 
     g_chat->PrintDebug("Connected to {B9C9BF}%.64s", hostName.c_str());
 
@@ -1721,7 +1733,9 @@ void RPCHandlers::RequestClass(RPCParameters* pParams)
     localPlayer->SetSpawnInfo(&spawnInfo);
     localPlayer->PrepareForClassSelection_Outcome(TRUE);
 
+#if defined(_DEBUG)
     Log("[rpc:RequestClass] accepted: class=%d team=%u skin=%u custom=%u", localPlayer->m_classSelection.m_nSelected, team, baseSkinId, customSkinId);
+#endif // _DEBUG
 }
 
 // -----------------------------------------------------------------------------
@@ -3566,7 +3580,9 @@ void RPCHandlers::SetPlayerName(RPCParameters* pParams)
 void RPCHandlers::SetPlayerPos(RPCParameters* pParams)
 {
     ZoneScoped;
+#if defined(_DEBUG)
     Log("SetPlayerPos");
+#endif // _DEBUG
 
     float x{};
     float y{};
@@ -3601,7 +3617,9 @@ void RPCHandlers::SetPlayerPos(RPCParameters* pParams)
 void RPCHandlers::SetPlayerPosFindZ(RPCParameters* pParams)
 {
     ZoneScoped;
+#if defined(_DEBUG)
     Log("SetPlayerPosFindZ");
+#endif // _DEBUG
 
     CVector position{};
 
@@ -3626,7 +3644,9 @@ void RPCHandlers::SetPlayerPosFindZ(RPCParameters* pParams)
 void RPCHandlers::SetPlayerHealth(RPCParameters* pParams)
 {
     ZoneScoped;
+#if defined(_DEBUG)
     Log("SetPlayerHealth");
+#endif // _DEBUG
     if (!pParams || !pParams->input)
         return;
 

@@ -307,7 +307,9 @@ namespace
             {
                 if (GetLastError() == ERROR_FILE_EXISTS || GetLastError() == ERROR_ALREADY_EXISTS)
                     continue;
+#if defined(_DEBUG)
                 Log("[screenshot] create failed, error=%lu", GetLastError());
+#endif // _DEBUG
                 return result;
             }
             const bool encoded = stbi_write_png_to_func(WritePng, &file, static_cast<int>(width), static_cast<int>(height), 3, rgba.data(), static_cast<int>(width * 3)) != 0;
@@ -316,16 +318,22 @@ namespace
             {
                 FILE_DISPOSITION_INFO disposition{TRUE};
                 SetFileInformationByHandle(file.handle, FileDispositionInfo, &disposition, sizeof(disposition));
+#if defined(_DEBUG)
                 Log("[screenshot] PNG write failed: %s", path.c_str());
+#endif // _DEBUG
             }
             else
             {
                 result.index = index;
+#if defined(_DEBUG)
                 Log("[screenshot] saved: %s", path.c_str());
+#endif // _DEBUG
             }
             return result;
         }
+#if defined(_DEBUG)
         Log("[screenshot] all 1000 screenshot names are occupied");
+#endif // _DEBUG
         return result;
     }
 }
@@ -350,7 +358,9 @@ namespace screenshot
             }
             catch (const std::exception& error)
             {
+#if defined(_DEBUG)
                 Log("[screenshot] PNG worker failed: %s", error.what());
+#endif // _DEBUG
                 return {true, false, -1};
             }
         }
@@ -364,7 +374,9 @@ namespace screenshot
         UINT width = 0, height = 0;
         if (!Capture(device, rgba, width, height))
         {
+#if defined(_DEBUG)
             Log("[screenshot] capture failed");
+#endif // _DEBUG
             return result;
         }
         try
@@ -374,12 +386,16 @@ namespace screenshot
         }
         catch (const std::system_error&)
         {
+#if defined(_DEBUG)
             Log("[screenshot] failed to start PNG worker");
+#endif // _DEBUG
             return result;
         }
         catch (const std::bad_alloc&)
         {
+#if defined(_DEBUG)
             Log("[screenshot] failed to allocate PNG job");
+#endif // _DEBUG
             return result;
         }
     }

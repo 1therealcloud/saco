@@ -79,7 +79,9 @@ namespace scm
         std::uint16_t previous = 0;
         if (!patch::read(kScmDispatchPatch, &previous, sizeof(previous)) || (previous != kScmEnabled && previous != kScmDisabled) || !patch::write(kScmDispatchPatch, kScmEnabled))
         {
+#if defined(_DEBUG)
             Log("[scm] failed to enable opcode dispatch");
+#endif // _DEBUG
             ExitProcess(1);
         }
         g_executing = true;
@@ -91,7 +93,9 @@ namespace scm
         // keep gta's existing dispatch mode instead of disabling the game's scm
         if (!patch::write(kScmDispatchPatch, previous))
         {
+#if defined(_DEBUG)
             Log("[scm] failed to restore opcode dispatch");
+#endif // _DEBUG
             ExitProcess(1);
         }
         return result;
@@ -221,31 +225,41 @@ namespace scm
         switch (type)
         {
             case EventType::Paintjob:
+#if defined(_DEBUG)
                 Log("[scm:09c6] paintjob: vehicle=%u, paintjob=%d, param3=%u", param1, static_cast<std::int32_t>(param2), param3);
+#endif // _DEBUG
                 break;
 
             case EventType::CarComponent:
+#if defined(_DEBUG)
                 Log("[scm:09c6] component: vehicle=%u, model=%u, param3=%u", param1, param2, param3);
+#endif // _DEBUG
                 break;
 
             case EventType::CarColor:
             {
                 const auto primary = static_cast<std::uint8_t>(param2);
                 const auto secondary = static_cast<std::uint8_t>(param3);
+#if defined(_DEBUG)
                 Log("[scm:09c6] color: vehicle=%u, primary=%u, secondary=%u", param1, static_cast<unsigned>(primary), static_cast<unsigned>(secondary));
+#endif // _DEBUG
 
                 auto* pool = *reinterpret_cast<std::uint8_t**>(0xB74494);
                 // gta's GetAt checks the generation but does not check the slot bounds
                 if (!pool || static_cast<std::int32_t>(param1) < 0 || (param1 >> 8) >= *reinterpret_cast<const std::uint32_t*>(pool + 8))
                 {
+#if defined(_DEBUG)
                     Log("[scm:09c6] color skipped: invalid vehicle handle");
+#endif // _DEBUG
                     break;
                 }
                 const auto getVehicle = reinterpret_cast<std::uint8_t*(__thiscall*)(void*, int)>(0x4048E0);
                 auto* vehicle = getVehicle(pool, static_cast<int>(param1));
                 if (!vehicle)
                 {
+#if defined(_DEBUG)
                     Log("[scm:09c6] color skipped: vehicle no longer exists");
+#endif // _DEBUG
                     break;
                 }
                 // native part of r5 CVehicle::SetColor; wrapper caching needs CVehicle later
@@ -255,13 +269,17 @@ namespace scm
             }
 
             case EventType::EnterExitModShop:
+#if defined(_DEBUG)
                 Log("[scm:09c6] modshop: vehicle=%u, state=%s, param2=%u, param3=%u", param1, param2 ? "enter" : "exit", param2, param3);
-                // r5 caches the vehicle colors on modshop exit
+#endif // _DEBUG                                                                                                                                                                   \
+    // r5 caches the vehicle colors on modshop exit
                 break;
 
             default:
                 // r5 ignores other types, including CASHWIN's event 5
+#if defined(_DEBUG)
                 Log("[scm:09c6] ignored: type=%d, param1=%u, param2=%u, param3=%u", static_cast<std::int32_t>(type), param1, param2, param3);
+#endif // _DEBUG
                 break;
         }
     }
@@ -302,7 +320,9 @@ namespace scm
         if (!game::hooks::InstallScmHooks())
             return false;
 
+#if defined(_DEBUG)
         Log("[scm] installed");
+#endif // _DEBUG
 
         return true;
     }

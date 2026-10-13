@@ -83,7 +83,9 @@ CObjectEdit::CObjectEdit(IDirect3DDevice9* device)
     state.fontLoaded = AddFontResourceExA("sampaux3.ttf", FR_PRIVATE, nullptr) != 0;
     if (!state.fontLoaded)
     {
+#if defined(_DEBUG)
         Log("[objectedit] failed to load sampaux3.ttf from the game directory");
+#endif // _DEBUG
         return;
     }
     m_pLine = new CRender(m_pDevice);

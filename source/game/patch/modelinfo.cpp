@@ -146,14 +146,18 @@ namespace game::patch::modelinfo
             // don't take over a model table owned by another limit adjuster
             if (activeTable != address::vanillaModelInfoPtrs)
             {
+#if defined(_DEBUG)
                 Log("[game::patch::modelinfo] external modelinfo table 0x%08X; signed ids unavailable", activeTable);
+#endif // _DEBUG
                 return true;
             }
 
             if (!readable_span(activeTable, kOriginalSlotCount * sizeof(void*)) || !::patch::expect(kNegativeGuard, kGuardOriginal.data(), kGuardOriginal.size()) ||
                 !game::hooks::BuildModelGuardDetour(plan.guardDetour))
             {
+#if defined(_DEBUG)
                 Log("[game::patch::modelinfo] original table or streaming guard differs from gta 1.0 us");
+#endif // _DEBUG
                 return false;
             }
 
@@ -164,8 +168,10 @@ namespace game::patch::modelinfo
             const bool secondOK = second.valid == expected;
             if (firstOK == secondOK)
             {
+#if defined(_DEBUG)
                 Log("[game::patch::modelinfo] reference validation failed/ambiguous: v1=%u (0x%08X), v2=%u (0x%08X)", static_cast<unsigned>(first.valid),
                     static_cast<unsigned>(first.firstMismatch), static_cast<unsigned>(second.valid), static_cast<unsigned>(second.firstMismatch));
+#endif // _DEBUG
                 return false;
             }
 
@@ -222,13 +228,17 @@ namespace game::patch::modelinfo
                     const auto& entry = plan.references[--attempted];
                     restored = ::patch::write(entry.operand, entry.previous) && restored;
                 }
+#if defined(_DEBUG)
                 Log("[game::patch::modelinfo] signed relocation failed; rollback=%s", restored ? "ok" : "failed");
+#endif // _DEBUG
                 return false;
             }
 
             g_signedInstalled = true;
+#if defined(_DEBUG)
             Log("[game::patch::modelinfo] signed CModelInfo installed: variant=%u, sites=%u, table=0x%08X, ids=[%d,%d]", plan.variant,
                 static_cast<unsigned>(plan.references.size()), relocated, kSignedMinId, kSignedMaxId);
+#endif // _DEBUG
             return true;
         }
 

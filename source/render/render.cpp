@@ -307,14 +307,18 @@ namespace render
         g_fonts = std::make_unique<CFonts>(device, &g_config);
         if (!g_fonts->GetFont())
         {
+#if defined(_DEBUG)
             Log("failed to create fonts!");
+#endif // _DEBUG
             ExitProcess(1);
         }
         g_render = std::make_unique<CRender>(device);
         ApplyGuiFontConfig();
         if (!CGui::Initialize(device))
         {
+#if defined(_DEBUG)
             Log("failed to initialize GUI!");
+#endif // _DEBUG
             MessageBoxA(nullptr,
                         "Failed to initialize GUI.\r\nCheck that sampgui.png and mouse.png are present "
                         "in the game directory.",
@@ -324,7 +328,9 @@ namespace render
         const auto& userDirectory = g_sampUserDirectory;
         if (userDirectory.empty())
         {
+#if defined(_DEBUG)
             Log("failed to resolve chat log directory!");
+#endif // _DEBUG
             ExitProcess(1);
         }
         const std::string chatLogPath = userDirectory + "chatlog.txt";
@@ -619,7 +625,9 @@ namespace render
             g_licensePlate->OnResetDevice();
         if (g_fonts && !g_fonts->Reset())
         {
+#if defined(_DEBUG)
             Log("failed to recreate fonts!");
+#endif // _DEBUG
             ExitProcess(1);
         }
         if (g_objectEdit)
@@ -643,7 +651,9 @@ namespace render
             g_dialog->UpdateRects();
         if (CGui::IsInitialized() && !CGui::GetCursorTexture())
         {
+#if defined(_DEBUG)
             Log("failed to recreate GUI cursor!");
+#endif // _DEBUG
             ExitProcess(1);
         }
         if (g_input)

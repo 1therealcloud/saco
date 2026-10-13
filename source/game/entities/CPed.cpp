@@ -1506,7 +1506,9 @@ void CPed::SetModelIndex(int model)
     // the shared model clump and invalidates other player peds using that skin
     if (!patch::write<std::uint8_t>(0x5A82C0, 0xC3))
     {
+#if defined(_DEBUG)
         Log("[game:ped] failed to disable clothes rebuilding");
+#endif // _DEBUG
         ExitProcess(1);
     }
     DestroyCommandTask();

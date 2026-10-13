@@ -150,10 +150,14 @@ static bool InitializeGameplay(IDirect3DDevice9* device)
 
         if (!game::inputhandler::install())
         {
+#if defined(_DEBUG)
             Log("failed to install input handler!");
+#endif // _DEBUG
             ExitProcess(1);
         }
+#if defined(_DEBUG)
         Log("[inputhandler] installed");
+#endif // _DEBUG
     });
 
     return !g_settings.m_bDebugMode || Debug::Initialize();
@@ -295,7 +299,9 @@ DWORD WINAPI InitializeThread(LPVOID)
     // init minhook
     if (MH_Initialize() != MH_OK)
     {
+#if defined(_DEBUG)
         Log("failed to initialize MinHook!");
+#endif // _DEBUG
         return 1;
     }
 
@@ -309,56 +315,72 @@ DWORD WINAPI InitializeThread(LPVOID)
     // 0x53C900 - default gta shutdown function
     if (!game::hooks::InstallShutdownHook())
     {
+#if defined(_DEBUG)
         Log("failed to install game shutdown hook!");
+#endif // _DEBUG
         return 1;
     }
 
     // open saa archive with original keys
     if (!g_archive.Open("samp.saa", keys))
     {
+#if defined(_DEBUG)
         Log("failed to load samp.saa!");
+#endif // _DEBUG
         return 1;
     }
 
     // hook filesystem
     if (!filesystem::install())
     {
+#if defined(_DEBUG)
         Log("failed to install filesystem!");
+#endif // _DEBUG
         return 1;
     }
 
     // install patches
     if (!game::patch::install())
     {
+#if defined(_DEBUG)
         Log("failed to apply patches!");
+#endif // _DEBUG
         return 1;
     }
 
     // init game loop hock
     if (!game::hooks::InstallGameLoopHook())
     {
+#if defined(_DEBUG)
         Log("failed to init game loop hook!");
+#endif // _DEBUG
         return 1;
     }
 
     // init script engine
     if (!scm::install())
     {
+#if defined(_DEBUG)
         Log("failed to install SCM opcodes!");
+#endif // _DEBUG
         return 1;
     }
 
     // hook gxt
     if (!game::hooks::InstallMenuTextHook())
     {
+#if defined(_DEBUG)
         Log("failed to install menu text hook!");
+#endif // _DEBUG
         return 1;
     }
 
     // init building removal
     if (!game::hooks::InstallBuildingRemovalHooks())
     {
+#if defined(_DEBUG)
         Log("failed to install building removal hook!");
+#endif // _DEBUG
         return 1;
     }
 
@@ -366,13 +388,17 @@ DWORD WINAPI InitializeThread(LPVOID)
     g_game = std::make_unique<CGame>();
     if (!g_game || !g_game->InitGame())
     {
+#if defined(_DEBUG)
         Log("failed to initialize CGame!");
+#endif // _DEBUG
         return 1;
     }
 
     if (!game::hooks::InstallCameraHook())
     {
+#if defined(_DEBUG)
         Log("failed to install GTA camera process hook!");
+#endif // _DEBUG
         return 1;
     }
 
@@ -392,7 +418,9 @@ DWORD WINAPI InitializeThread(LPVOID)
     const auto& userDirectory = g_sampUserDirectory;
     if (userDirectory.empty() || !g_config.Load((userDirectory + "sa-mp.cfg").c_str()))
     {
+#if defined(_DEBUG)
         Log("failed to load sa-mp.cfg!");
+#endif // _DEBUG
         return 1;
     }
 
@@ -403,20 +431,28 @@ DWORD WINAPI InitializeThread(LPVOID)
     bool multicore = true;
     g_config.GetParam(CConfig::PARAM_MULTICORE, multicore);
     if (!multicore && !SetProcessAffinityMask(GetCurrentProcess(), 1))
+    {
+#if defined(_DEBUG)
         Log("[config] failed to apply multicore=0, error=%lu", GetLastError());
+#endif // _DEBUG
+    }
 
     // init d3d9 hook
     // ------------------------------------------------------------
     if (!d3d9hook::install())
     {
+#if defined(_DEBUG)
         Log("failed to install d3d9 hooks!");
+#endif // _DEBUG
         return 1;
     }
 
     // r5 enters state 8 after game-side startup
     if (!g_game->StartGame())
     {
+#if defined(_DEBUG)
         Log("failed to start CGame!");
+#endif // _DEBUG
         return 1;
     }
 

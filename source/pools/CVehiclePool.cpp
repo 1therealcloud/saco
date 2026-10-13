@@ -516,7 +516,9 @@ void CVehiclePool::AddToWaitingList(const VehicleInfo* info)
 
     if (slot == WAITING_LIST_SIZE)
     {
+#if defined(_DEBUG)
         Log("All vehicle waiting slots are consumed!");
+#endif // _DEBUG
         if (auto it = g_spawnAppearances.find(this); it != g_spawnAppearances.end())
             it->second.erase(info->m_nId);
         return;
@@ -573,7 +575,9 @@ BOOL CVehiclePool::Create(VehicleInfo* info)
             if (const auto entry = appearances->second.find(id); entry != appearances->second.end())
                 pendingAppearance = entry->second;
 
+#if defined(_DEBUG)
         Log("Warning: vehicle %u was not deleted", static_cast<unsigned int>(id));
+#endif // _DEBUG
         Delete(id);
         if (pendingAppearance)
             g_spawnAppearances[this][id] = std::move(*pendingAppearance);

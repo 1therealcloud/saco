@@ -219,7 +219,9 @@ IDirect3DTexture9* CObjectMaterialText::Create(const char* text, const char* fon
     if (!textFont.IsValid())
     {
         // Exact R5 diagnostic string from samp.dll +0xEA704.
+#if defined(_DEBUG)
         Log("SignText: Can't create font %s", font);
+#endif // _DEBUG
 
         return nullptr;
     }

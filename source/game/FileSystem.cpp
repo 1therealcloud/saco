@@ -329,7 +329,9 @@ namespace filesystem
             const auto target = reinterpret_cast<LPVOID>(GetProcAddress(kernel32, name));
             if (!target)
             {
+#if defined(_DEBUG)
                 Log("[filesystem] can't find %s", name);
+#endif // _DEBUG
                 return false;
             }
 
@@ -337,7 +339,9 @@ namespace filesystem
             const auto status = MH_CreateHook(target, detour, &trampoline);
             if (status != MH_OK)
             {
+#if defined(_DEBUG)
                 Log("[filesystem] can't hook %s, status=%d", name, static_cast<int>(status));
+#endif // _DEBUG
                 return false;
             }
 
@@ -367,14 +371,18 @@ namespace filesystem
 
         if (!g_archive.IsOpen())
         {
+#if defined(_DEBUG)
             Log("[filesystem] archive isn't open");
+#endif // _DEBUG
             return false;
         }
 
         const auto kernel32 = GetModuleHandleW(L"kernel32.dll");
         if (!kernel32)
         {
+#if defined(_DEBUG)
             Log("[filesystem] can't get kernel32.dll");
+#endif // _DEBUG
             return false;
         }
 
@@ -397,7 +405,9 @@ namespace filesystem
             const auto status = MH_QueueEnableHook(target);
             if (status != MH_OK)
             {
+#if defined(_DEBUG)
                 Log("[filesystem] can't queue hook, status=%d", static_cast<int>(status));
+#endif // _DEBUG
                 RemoveHooks();
                 return false;
             }
@@ -406,14 +416,17 @@ namespace filesystem
         const auto status = MH_ApplyQueued();
         if (status != MH_OK)
         {
+#if defined(_DEBUG)
             Log("[filesystem] can't enable hooks, status=%d", static_cast<int>(status));
+#endif // _DEBUG
             RemoveHooks();
             return false;
         }
 
         g_installed = true;
+#if defined(_DEBUG)
         Log("[filesystem] installed");
+#endif // _DEBUG
         return true;
     }
-
 }

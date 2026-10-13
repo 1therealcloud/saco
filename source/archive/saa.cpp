@@ -230,26 +230,34 @@ namespace saa
 
     bool Archive::Open(const std::string& path, const std::vector<KeySet>& trustedKeys, SignatureVerifier verifier)
     {
+#if defined(_DEBUG)
         Log("[saa::open] path=%s", path.c_str());
+#endif // _DEBUG
 
         Close();
         std::ifstream file(path, std::ios::binary | std::ios::ate);
         if (!file)
         {
+#if defined(_DEBUG)
             Log("[saa::open] can't open file");
+#endif // _DEBUG
             return false;
         }
         const std::streamsize size = file.tellg();
         if (size <= 0)
         {
+#if defined(_DEBUG)
             Log("[saa::open] file is empty");
+#endif // _DEBUG
             return false;
         }
         std::vector<std::uint8_t> image(static_cast<std::size_t>(size));
         file.seekg(0);
         if (!file.read(reinterpret_cast<char*>(image.data()), size))
         {
+#if defined(_DEBUG)
             Log("[saa::open] read failed, size=%lld", static_cast<long long>(size));
+#endif // _DEBUG
             return false;
         }
         return OpenMemory(std::move(image), trustedKeys, verifier);
@@ -259,11 +267,15 @@ namespace saa
     {
         Close();
         image_ = std::move(image);
+#if defined(_DEBUG)
         Log("[saa::open] image size=%zu", image_.size());
+#endif // _DEBUG
 
         if (!ParseHeader() || !LoadEntries(trustedKeys, verifier))
         {
+#if defined(_DEBUG)
             Log("[saa::open] failed");
+#endif // _DEBUG
             Close();
             return false;
         }
@@ -272,14 +284,20 @@ namespace saa
         std::uint32_t files = 0;
         for (std::uint32_t i = 0; i < kMaxEntries; ++i)
             files += IsValidFile(i);
+#if defined(_DEBUG)
         Log("[saa::open] success, files=%u", files);
+#endif // _DEBUG
         return true;
     }
 
     void Archive::Close()
     {
         if (open_)
+        {
+#if defined(_DEBUG)
             Log("[saa::close] cached files=%zu", cache_.size());
+#endif // _DEBUG
+        }
 
         open_ = false;
         matchedKeyIndex_ = -1;
@@ -293,7 +311,9 @@ namespace saa
     {
         if (image_.size() < kHeaderSize)
         {
+#if defined(_DEBUG)
             Log("[saa::header] too small");
+#endif // _DEBUG
             return false;
         }
         // completeId is at 0xF8 and xorKey right after it
@@ -301,14 +321,18 @@ namespace saa
         const std::uint32_t id = ReadLe32(&image_[0xF8]) ^ xorKey;
         if ((id & 0x000FFFFFu) != kFileId || (id & 0x00700000u) != (kFileVersion << 20))
         {
+#if defined(_DEBUG)
             Log("[saa::header] bad id=0x%08X", id);
+#endif // _DEBUG
             return false;
         }
         invalidIndex_ = static_cast<std::uint8_t>((xorKey >> 5) & 0xFFu);
         signatureSize_ = (id >> 23) & 0xFFu;
         if (signatureSize_ == 0)
         {
+#if defined(_DEBUG)
             Log("[saa::header] zero signature size");
+#endif // _DEBUG
             return false;
         }
         return true;
@@ -319,7 +343,9 @@ namespace saa
         constexpr std::uint32_t tableSize = kMaxEntries * sizeof(Entry);
         if (verifier == nullptr || trustedKeys.empty() || image_.size() < kHeaderSize + tableSize + signatureSize_)
         {
+#if defined(_DEBUG)
             Log("[saa::entries] no verifier/keys or image too small");
+#endif // _DEBUG
             return false;
         }
 
@@ -335,10 +361,14 @@ namespace saa
         }
         if (matchedKeyIndex_ < 0)
         {
+#if defined(_DEBUG)
             Log("[saa::entries] signature check failed (no trusted key matched)");
+#endif // _DEBUG
             return false;
         }
+#if defined(_DEBUG)
         Log("[saa::entries] signature ok, key set #%d", matchedKeyIndex_);
+#endif // _DEBUG
 
         std::uint8_t table[tableSize];
         std::memcpy(table, image_.data() + (signatureBegin - tableSize), tableSize);
@@ -427,7 +457,9 @@ namespace saa
         {
             if (++guard > kMaxEntries)
             {
+#if defined(_DEBUG)
                 Log("[saa::file] id=%u, broken chain", id);
+#endif // _DEBUG
                 return false;
             }
             const std::uint32_t d = entries_[previous].Decode(kMask);
@@ -438,7 +470,9 @@ namespace saa
         const std::uint32_t padded = AlignBlock(fileSize);
         if (offset + padded > image_.size())
         {
+#if defined(_DEBUG)
             Log("[saa::file] id=%u, data out of range (offset=%llu, size=%u)", id, static_cast<unsigned long long>(offset), padded);
+#endif // _DEBUG
             return false;
         }
 
@@ -459,10 +493,16 @@ namespace saa
 
 #if defined(SAA_LOG_NAMES)
         const char* name = BuiltinNameFromHash(entry.nameHash);
+#   if defined(_DEBUG)
         Log("[saa::file] id=%u, name=%s, size=%u", id, name ? name : "?", fileSize);
+#   endif // _DEBUG
 #else
-        Log("[saa::file] id=%u, size=%u", id, fileSize);
-#endif // SAA_LOG_NAMES
+        {
+#   if defined(_DEBUG)
+            Log("[saa::file] id=%u, size=%u", id, fileSize);
+#   endif // _DEBUG
+        }
+#endif    // SAA_LOG_NAMES
         return true;
     }
 

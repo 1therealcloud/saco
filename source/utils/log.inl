@@ -3,12 +3,13 @@
 // do not include precompiled header in this file
 //#include <stdafx.h>
 
+#if defined(_DEBUG)
+
 #include <cstdarg>
 #include <cstdio>
 
 inline void Log(const char* fmt, ...)
 {
-#if defined(_DEBUG)
     va_list args;
     va_start(args, fmt);
 
@@ -16,5 +17,5 @@ inline void Log(const char* fmt, ...)
     putchar('\n');
 
     va_end(args);
-#endif
 }
+#endif // _DEBUG

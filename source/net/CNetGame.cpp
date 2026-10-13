@@ -737,7 +737,9 @@ CNetGame::CNetGame(const char* hostAddress, int port, const char* nick, const ch
                   _TRUNCATE);                                          // copy m_szHostAddress -> hostAddress
     strncpy_s(m_szHostname, sizeof(m_szHostname), "SA-MP", _TRUNCATE); // set default server name
 
+#if defined(_DEBUG)
     Log("[CNetGame::CNetGame] net=%p, host=%s, port=%d, nick=%s", this, m_szHostAddress, m_nPort, nick ? nick : "");
+#endif // _DEBUG
 
     // initialize sync buffers
     KeyStuff::Initialize();
@@ -764,7 +766,9 @@ CNetGame::CNetGame(const char* hostAddress, int port, const char* nick, const ch
 CNetGame::~CNetGame()
 {
     ZoneScoped;
+#if defined(_DEBUG)
     Log("[CNetGame::~CNetGame] net=%p, pools=%p, transport=%p", this, m_pPools, m_pRakClient);
+#endif // _DEBUG
     ResetMarkers();
 
     if (m_pRakClient)
@@ -821,7 +825,9 @@ void CNetGame::SetState(int value)
 void CNetGame::InitializePools()
 {
     ZoneScoped;
+#if defined(_DEBUG)
     Log("[CNetGame::InitializePools] initializing: previous=%p", m_pPools);
+#endif // _DEBUG
 
     auto* pools = new Pools{};
 
@@ -843,7 +849,9 @@ void CNetGame::InitializePools()
 void CNetGame::InitializeGameLogic()
 {
     ZoneScoped;
+#if defined(_DEBUG)
     Log("[CNetGame::InitializeGameLogic] initializing defaults");
+#endif // _DEBUG
     if (!m_pSettings)
         return;
 
@@ -888,7 +896,9 @@ void CNetGame::Connect()
     if (!m_pRakClient || !m_szHostAddress[0] || m_nPort < 1 || m_nPort > 65535)
         return;
 
+#if defined(_DEBUG)
     Log("[CNetGame::Connect()] host=%s, port=%d", m_szHostAddress, m_nPort);
+#endif // _DEBUG
 
     char message[320]{};
     sprintf_s(message, "Connecting to %s:%d...", m_szHostAddress, m_nPort);
@@ -897,7 +907,9 @@ void CNetGame::Connect()
 
     // connect to server
     const bool started = m_pRakClient->Connect(m_szHostAddress, static_cast<unsigned short>(m_nPort), 0, 0, 5);
+#if defined(_DEBUG)
     Log("[net:connect] started=%d, auth revision=3", started);
+#endif // _DEBUG
 
     m_lastConnectAttempt = GetTimeNow();
     SetState(started ? GAME_MODE_CONNECTING : GAME_MODE_WAITCONNECT); // set game state
@@ -915,7 +927,9 @@ void CNetGame::Disconnect()
 void CNetGame::SpawnScreen()
 {
     // TODO: remove this wrapper
+#if defined(_DEBUG)
     Log("[CNetGame::SpawnScreen] class selection requested");
+#endif // _DEBUG
     if (auto* pool = GetPlayerPool())
         if (auto* player = pool->GetLocalPlayer())
             player->PrepareForClassSelection();
@@ -1009,7 +1023,9 @@ void CNetGame::ResetPlayerPool()
     ZoneScoped;
     if (g_chatBubble)
         g_chatBubble->Clear();
+#if defined(_DEBUG)
     Log("[CNetGame::ResetPlayerPool]");
+#endif // _DEBUG
     if (!m_pPools)
         return;
 
@@ -1026,7 +1042,9 @@ void CNetGame::ResetPlayerPool()
 // reset vehicle pool
 void CNetGame::ResetVehiclePool()
 {
+#if defined(_DEBUG)
     Log("[CNetGame::ResetVehiclePool]");
+#endif // _DEBUG
     if (m_pPools)
     {
         ResetPool(m_pPools->m_pVehicle);
@@ -1037,7 +1055,9 @@ void CNetGame::ResetVehiclePool()
 void CNetGame::ResetTextDrawPool()
 {
     ZoneScoped;
+#if defined(_DEBUG)
     Log("[CNetGame::ResetTextDrawPool]");
+#endif // _DEBUG
     if (g_textDrawSelection)
         g_textDrawSelection->Disable(false);
     if (m_pPools)
@@ -1050,7 +1070,9 @@ void CNetGame::ResetTextDrawPool()
 void CNetGame::ResetObjectPool()
 {
     ZoneScoped;
+#if defined(_DEBUG)
     Log("[CNetGame::ResetObjectPool]");
+#endif // _DEBUG
     if (g_objectSelection)
         g_objectSelection->Enable(FALSE);
     if (g_objectEdit && g_objectEdit->m_bEnabled)
@@ -1064,7 +1086,9 @@ void CNetGame::ResetObjectPool()
 // reset gang zone pool
 void CNetGame::ResetGangZonePool()
 {
+#if defined(_DEBUG)
     Log("[CNetGame::ResetGangZonePool]");
+#endif // _DEBUG
     if (m_pPools)
     {
         ResetPool(m_pPools->m_pGangZone);
@@ -1074,7 +1098,9 @@ void CNetGame::ResetGangZonePool()
 // reset pickup pool
 void CNetGame::ResetPickupPool()
 {
+#if defined(_DEBUG)
     Log("[CNetGame::ResetPickupPool]");
+#endif // _DEBUG
     if (m_pPools)
     {
         ResetPool(m_pPools->m_pPickup);
@@ -1084,7 +1110,9 @@ void CNetGame::ResetPickupPool()
 // reset menu pool
 void CNetGame::ResetMenuPool()
 {
+#if defined(_DEBUG)
     Log("[CNetGame::ResetMenuPool]");
+#endif // _DEBUG
     if (m_pPools)
     {
         ResetPool(m_pPools->m_pMenu);
@@ -1094,7 +1122,9 @@ void CNetGame::ResetMenuPool()
 // reset label pool
 void CNetGame::ResetLabelPool()
 {
+#if defined(_DEBUG)
     Log("[CNetGame::ResetLabelPool]");
+#endif // _DEBUG
     if (m_pPools)
     {
         ResetPool(m_pPools->m_pLabel);
@@ -1104,7 +1134,9 @@ void CNetGame::ResetLabelPool()
 // reset actor pool
 void CNetGame::ResetActorPool()
 {
+#if defined(_DEBUG)
     Log("[CNetGame::ResetActorPool]");
+#endif // _DEBUG
     if (m_pPools)
     {
         ResetPool(m_pPools->m_pActor);
@@ -1269,7 +1301,9 @@ void CNetGame::CreateMarker(std::uint8_t index, CVector position, char icon, int
 void CNetGame::ResetPools()
 {
     ZoneScoped;
+#if defined(_DEBUG)
     Log("[CNetGame::ResetPools]");
+#endif // _DEBUG
 
     ResetPlayerPool();
     ResetTextDrawPool();
@@ -1289,7 +1323,9 @@ void CNetGame::ShutdownForRestart()
     ZoneScoped;
     if (g_chatBubble)
         g_chatBubble->Clear();
+#if defined(_DEBUG)
     Log("[CNetGame::ShutdownForRestart] starting");
+#endif // _DEBUG
     if (!m_pSettings)
         return;
 
@@ -1409,7 +1445,11 @@ void CNetGame::UpdateNetwork()
 
         if (packetId != ID_PLAYER_SYNC && packetId != ID_VEHICLE_SYNC && packetId != ID_PASSENGER_SYNC && packetId != ID_AIM_SYNC && packetId != ID_TRAILER_SYNC &&
             packetId != ID_UNOCCUPIED_SYNC)
+        {
+#if defined(_DEBUG)
             Log("[net:receive] id=%u, length=%u", static_cast<unsigned>(packetId), packet->length);
+#endif // _DEBUG
+        }
         switch (packetId)
         {
             case ID_RSA_PUBLIC_KEY_MISMATCH:
@@ -1646,20 +1686,28 @@ void CNetGame::Packet_AuthKey(Packet* packet)
     std::string challenge(length, '\0');
     if (!input.Read(challenge.data(), length))
         return;
+#if defined(_DEBUG)
     Log("[authentication] challenge=%s, wire length=%u, last byte=%02X", challenge.c_str(), static_cast<unsigned>(length), static_cast<unsigned char>(challenge.back()));
+#endif // _DEBUG
     const auto key = authentication::make_auth_key(g_archive, challenge);
     if (!key)
     {
+#if defined(_DEBUG)
         Log("[authentication] failed to generate auth key");
+#endif // _DEBUG
         return;
     }
+#if defined(_DEBUG)
     Log("[authentication] response=%s", key->c_str());
+#endif // _DEBUG
     BitStream response;
     response.Write(static_cast<std::uint8_t>(ID_AUTH_KEY));
     response.Write(static_cast<std::uint8_t>(key->size()));
     response.Write(key->data(), static_cast<int>(key->size()));
     const bool sent = m_pRakClient->Send(&response, SYSTEM_PRIORITY, RELIABLE, 0);
+#if defined(_DEBUG)
     Log("[authentication] response sent=%d, length=%u", sent, static_cast<unsigned>(key->size()));
+#endif // _DEBUG
 }
 
 // --------------------------------------------------
@@ -1684,7 +1732,9 @@ void CNetGame::Packet_ConnectionSucceeded(Packet* packet)
     const auto& userDirectory = g_sampUserDirectory;
     if (userDirectory.empty() || nick.empty() || nick.size() > 24)
     {
+#if defined(_DEBUG)
         Log("[net:join] invalid nickname or user directory");
+#endif // _DEBUG
         return;
     }
     const std::string gpci = authentication::make_gpci(userDirectory);
@@ -1693,7 +1743,9 @@ void CNetGame::Packet_ConnectionSucceeded(Packet* packet)
     GetPlayerPool()->m_localInfo.m_nId = playerId;
     SetState(GAME_MODE_WAITJOIN);
     const bool sent = ClientJoin(authentication::client_version(), 1, nick.c_str(), response, gpci.c_str(), version.data());
+#if defined(_DEBUG)
     Log("[net:join] sent=%d, player=%u, nick=%s, version=%.*s, gpci=%s", sent, playerId, nick.c_str(), static_cast<int>(version.size()), version.data(), gpci.c_str());
+#endif // _DEBUG
 }
 
 // --------------------------------------------------
@@ -1814,7 +1866,9 @@ bool CNetGame::DeathNotification(std::uint8_t reason, std::uint16_t killerId)
 bool CNetGame::SendCommand(const char* text)
 {
     ZoneScoped;
+#if defined(_DEBUG)
     Log("SendCommand");
+#endif // _DEBUG
 
     if (!m_pRakClient || !text)
         return false;

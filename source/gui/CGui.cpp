@@ -335,7 +335,9 @@ namespace cgui
             D3DSURFACE_DESC desc{};
             if (FAILED(g_cursor->GetLevelDesc(0, &desc)) || desc.Width != 32 || desc.Height != 32)
             {
+#if defined(_DEBUG)
                 Log("[gui] unexpected cursor dimensions: %ux%u", desc.Width, desc.Height);
+#endif // _DEBUG
                 Release(g_cursor);
                 return false;
             }

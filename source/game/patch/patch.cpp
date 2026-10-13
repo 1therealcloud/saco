@@ -56,25 +56,33 @@ namespace game::patch
 
         if (!base::install())
         {
+#if defined(_DEBUG)
             Log("[game::patch] base patches failed");
+#endif // _DEBUG
             return false;
         }
 
         if (!modelinfo::install())
         {
+#if defined(_DEBUG)
             Log("[game::patch] modelinfo patches failed");
+#endif // _DEBUG
             return false;
         }
 
         if (!streaming::install())
         {
+#if defined(_DEBUG)
             Log("[game::patch] streaming patches failed");
+#endif // _DEBUG
             return false;
         }
 
         if (!pools::install())
         {
+#if defined(_DEBUG)
             Log("[game::patch] pool patches failed");
+#endif // _DEBUG
             return false;
         }
 
@@ -95,7 +103,9 @@ namespace game::patch
 
         if (!game::hooks::InstallVehicleHooks())
         {
+#if defined(_DEBUG)
             Log("[game::patch] vehicle siren hook failed");
+#endif // _DEBUG
             return false;
         }
 
@@ -104,7 +114,9 @@ namespace game::patch
 
         installed = true;
 
+#if defined(_DEBUG)
         Log("[game::patch] installed");
+#endif // _DEBUG
         return true;
     }
 }

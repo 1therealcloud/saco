@@ -192,7 +192,9 @@ namespace Commands
         {
             if (!g_fonts->Reset())
             {
+#if defined(_DEBUG)
                 Log("failed to recreate fonts!");
+#endif // _DEBUG
                 ExitProcess(1);
             }
         }

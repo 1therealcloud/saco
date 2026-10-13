@@ -85,9 +85,17 @@ CDeathWindow::CDeathWindow(IDirect3DDevice9* device)
         g_weaponFontLoaded = AddFontResourceExA("gtaweap3.ttf", FR_PRIVATE, nullptr) != 0;
         g_auxFontLoaded = AddFontResourceExA("sampaux3.ttf", FR_PRIVATE, nullptr) != 0;
         if (!g_weaponFontLoaded)
+        {
+#if defined(_DEBUG)
             Log("[deathwindow] failed to load gtaweap3.ttf from the game directory");
+#endif // _DEBUG
+        }
         if (!g_auxFontLoaded)
+        {
+#if defined(_DEBUG)
             Log("[deathwindow] failed to load sampaux3.ttf from the game directory");
+#endif // _DEBUG
+        }
     }
     ResetFonts();
     std::memset(m_entry, 0, sizeof(m_entry));

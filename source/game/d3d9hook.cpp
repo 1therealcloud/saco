@@ -49,7 +49,11 @@ namespace d3d9hook
             {
                 static HRESULT previous = D3D_OK;
                 if (FAILED(result) && result != previous)
+                {
+#if defined(_DEBUG)
                     Log("[d3d9hook:present] result=%08X", static_cast<unsigned>(result));
+#endif // _DEBUG
+                }
                 previous = result;
                 FrameMark;
             }
@@ -70,10 +74,18 @@ namespace d3d9hook
             }
 
             if (device == g_device)
+            {
+#if defined(_DEBUG)
                 Log("[d3d9hook:reset] begin, lost=%d", g_deviceLost);
+#endif // _DEBUG
+            }
             const HRESULT result = g_reset(device, parameters);
             if (device == g_device)
+            {
+#if defined(_DEBUG)
                 Log("[d3d9hook:reset] result=%08X", static_cast<unsigned>(result));
+#endif // _DEBUG
+            }
             if (device == g_device && SUCCEEDED(result) && parameters)
             {
                 render::ResetUiDevice(device, *parameters);
@@ -138,7 +150,9 @@ namespace d3d9hook
             const auto status = MH_CreateHook(hook.target, hook.detour, hook.original);
             if (status != MH_OK)
             {
+#if defined(_DEBUG)
                 Log("[d3d9hook] can't create %s hook, status=%d", hook.name, static_cast<int>(status));
+#endif // _DEBUG
                 ExitProcess(1);
             }
         }
@@ -147,19 +161,25 @@ namespace d3d9hook
             const auto status = MH_QueueEnableHook(hook.target);
             if (status != MH_OK)
             {
+#if defined(_DEBUG)
                 Log("[d3d9hook] can't queue %s hook, status=%d", hook.name, static_cast<int>(status));
+#endif // _DEBUG
                 ExitProcess(1);
             }
         }
         const auto status = MH_ApplyQueued();
         if (status != MH_OK)
         {
+#if defined(_DEBUG)
             Log("[d3d9hook] can't enable hooks, status=%d", static_cast<int>(status));
+#endif // _DEBUG
             ExitProcess(1);
         }
 
         g_installed = true;
+#if defined(_DEBUG)
         Log("[d3d9hook] installed");
+#endif // _DEBUG
         return true;
     }
 

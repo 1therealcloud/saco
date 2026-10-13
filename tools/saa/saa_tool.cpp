@@ -88,7 +88,9 @@ namespace
         if (!ReadWholeFile(directory / "own_private.key", loaded.privateBlob) || !ReadWholeFile(directory / "own_public.key", loaded.keys.publicKeyBlob) ||
             !ReadWholeFile(directory / "own_tea.key", teaKey) || teaKey.size() != saa::kTeaKeySize)
         {
+#if defined(_DEBUG)
             Log("can't load own_private.key / own_public.key / own_tea.key from %s\n", directory.string().c_str());
+#endif // _DEBUG
             return false;
         }
         std::copy(teaKey.begin(), teaKey.end(), loaded.keys.teaKey.begin());
@@ -100,13 +102,17 @@ namespace
         std::vector<std::uint8_t> privateBlob, publicBlob;
         if (!saa::win::GenerateRsaKeyPair(privateBlob, publicBlob))
         {
+#if defined(_DEBUG)
             Log("rsa key generation failed\n");
+#endif // _DEBUG
             return 1;
         }
         std::vector<std::uint8_t> teaKey(saa::kTeaKeySize);
         if (!saa::win::RandomBytes(teaKey.data(), teaKey.size()))
         {
+#if defined(_DEBUG)
             Log("random generation failed\n");
+#endif // _DEBUG
             return 1;
         }
 
@@ -127,10 +133,14 @@ namespace
 
         if (!ok)
         {
+#if defined(_DEBUG)
             Log("can't write key files into %s\n", directory.string().c_str());
+#endif // _DEBUG
             return 1;
         }
+#if defined(_DEBUG)
         Log("keys written to %s (keep own_private.key and own_tea.key safe, regenerating invalidates old archives)\n", directory.string().c_str());
+#endif // _DEBUG
         return 0;
     }
 
@@ -142,7 +152,9 @@ namespace
             std::vector<std::uint8_t> expected;
             if (!ReadWholeFile(path, expected))
             {
+#if defined(_DEBUG)
                 Log("  %s: can't read source file\n", path.c_str());
+#endif // _DEBUG
                 ++mismatchCount;
                 continue;
             }
@@ -151,17 +163,23 @@ namespace
             const std::string name = fs::path(path).filename().string();
             if (!archive.FindFile(name, id) || !archive.FileSize(id, size) || !archive.FileData(id, data))
             {
+#if defined(_DEBUG)
                 Log("  %s: not in archive\n", name.c_str());
+#endif // _DEBUG
                 ++mismatchCount;
             }
             else if (size != expected.size() || std::memcmp(data, expected.data(), expected.size()) != 0)
             {
+#if defined(_DEBUG)
                 Log("  %s: CONTENT MISMATCH\n", name.c_str());
+#endif // _DEBUG
                 ++mismatchCount;
             }
             else
             {
+#if defined(_DEBUG)
                 Log("  %s: ok (%u bytes)\n", name.c_str(), size);
+#endif // _DEBUG
             }
         }
         return mismatchCount;
@@ -181,7 +199,9 @@ namespace
             file.name = path;
             if (!ReadWholeFile(path, file.content))
             {
+#if defined(_DEBUG)
                 Log("can't read %s\n", path.c_str());
+#endif // _DEBUG
                 return 1;
             }
             files.push_back(std::move(file));
@@ -197,12 +217,16 @@ namespace
         std::string error;
         if (!saa::BuildArchive(files, options, image, error))
         {
+#if defined(_DEBUG)
             Log("pack failed: %s\n", error.c_str());
+#endif // _DEBUG
             return 1;
         }
         if (!WriteWholeFile(archivePath, image.data(), image.size()))
         {
+#if defined(_DEBUG)
             Log("can't write %s\n", archivePath.string().c_str());
+#endif // _DEBUG
             return 1;
         }
         std::printf("wrote %s (%zu bytes, %zu files), verifying...\n", archivePath.string().c_str(), image.size(), files.size());
@@ -211,7 +235,9 @@ namespace
         saa::Archive archive;
         if (!archive.OpenMemory(std::move(image), {own.keys}))
         {
+#if defined(_DEBUG)
             Log("self-check FAILED: the reader rejected the archive we just built\n");
+#endif // _DEBUG
             return 1;
         }
         return CompareListWithArchive(archive, paths) == 0 ? 0 : 1;
@@ -227,7 +253,9 @@ namespace
         saa::Archive archive;
         if (!archive.Open(archivePath.string(), {saa::OfficialKeySet(), own.keys}))
         {
+#if defined(_DEBUG)
             Log("archive rejected (neither official nor own signature matches)\n");
+#endif // _DEBUG
             return 1;
         }
         std::printf("signature ok, signed by: %s\n", archive.MatchedKeyIndex() == 0 ? "official R5 key" : "own key");
@@ -245,7 +273,9 @@ namespace
             std::vector<std::uint8_t> content;
             if (!ReadWholeFile(path, content))
             {
+#if defined(_DEBUG)
                 Log("can't read %s\n", path.c_str());
+#endif // _DEBUG
                 return 1;
             }
             saa::BindatEntry entry;
@@ -258,12 +288,16 @@ namespace
         std::string error;
         if (!saa::BuildBindat(entries, blob, error))
         {
+#if defined(_DEBUG)
             Log("bindat failed: %s\n", error.c_str());
+#endif // _DEBUG
             return 1;
         }
         if (!WriteWholeFile(outputPath, blob.data(), blob.size()))
         {
+#if defined(_DEBUG)
             Log("can't write %s\n", outputPath.string().c_str());
+#endif // _DEBUG
             return 1;
         }
         std::printf("wrote %s (%zu entries, %zu bytes)\n", outputPath.string().c_str(), entries.size(), blob.size());

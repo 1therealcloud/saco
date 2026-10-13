@@ -40,14 +40,18 @@ namespace exceptions
             if (_snwprintf_s(path, _countof(path), _TRUNCATE, L"%s\\%04u%02u%02u-%02u%02u%02u-%03u-%lu.dmp", g_dumpDirectory.c_str(), time.wYear, time.wMonth, time.wDay,
                              time.wHour, time.wMinute, time.wSecond, time.wMilliseconds, GetCurrentProcessId()) < 0)
             {
+#if defined(_DEBUG)
                 Log("[exceptions] minidump path is too long");
+#endif // _DEBUG
                 return;
             }
 
             const HANDLE file = CreateFileW(path, GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
             if (file == INVALID_HANDLE_VALUE)
             {
+#if defined(_DEBUG)
                 Log("[exceptions] can't create minidump, error=%lu", GetLastError());
+#endif // _DEBUG
                 return;
             }
 
@@ -62,11 +66,17 @@ namespace exceptions
             CloseHandle(file);
 
             if (written)
+            {
+#if defined(_DEBUG)
                 Log("[exceptions] minidump saved: %ls", path);
+#endif // _DEBUG
+            }
             else
             {
                 DeleteFileW(path);
+#if defined(_DEBUG)
                 Log("[exceptions] can't write minidump, error=%lu", error);
+#endif // _DEBUG
             }
         }
 
@@ -84,7 +94,9 @@ namespace exceptions
 
             if (g_sampUserDirectory.empty())
             {
+#if defined(_DEBUG)
                 Log("[exceptions] SAMP user directory is unavailable");
+#endif // _DEBUG
                 return;
             }
             const auto directory = std::filesystem::path(g_sampUserDirectory) / "crashreports";
@@ -92,7 +104,9 @@ namespace exceptions
             std::filesystem::create_directories(directory, error);
             if (error)
             {
+#if defined(_DEBUG)
                 Log("[exceptions] can't create crashreports directory, error=%d", error.value());
+#endif // _DEBUG
                 return;
             }
             g_dumpDirectory = directory.wstring();
@@ -100,7 +114,9 @@ namespace exceptions
             g_dumpRequested = CreateEventW(nullptr, FALSE, FALSE, nullptr);
             if (!g_dumpRequested)
             {
+#if defined(_DEBUG)
                 Log("[exceptions] can't create minidump event, error=%lu", GetLastError());
+#endif // _DEBUG
                 return;
             }
 
@@ -110,7 +126,9 @@ namespace exceptions
                 const DWORD error = GetLastError();
                 CloseHandle(g_dumpRequested);
                 g_dumpRequested = nullptr;
+#if defined(_DEBUG)
                 Log("[exceptions] can't create minidump thread, error=%lu", error);
+#endif // _DEBUG
             }
         }
 
@@ -127,16 +145,26 @@ namespace exceptions
 
             if (!SetEvent(g_dumpRequested))
             {
+#if defined(_DEBUG)
                 Log("[exceptions] can't request minidump, error=%lu", GetLastError());
+#endif // _DEBUG
                 return;
             }
 
             // do not keep the crash dialog waiting forever if DbgHelp hangs
             const DWORD result = WaitForSingleObject(g_dumpThread, 15000);
             if (result == WAIT_TIMEOUT)
+            {
+#if defined(_DEBUG)
                 Log("[exceptions] minidump thread timed out");
+#endif // _DEBUG
+            }
             else if (result == WAIT_FAILED)
+            {
+#if defined(_DEBUG)
                 Log("[exceptions] can't wait for minidump, error=%lu", GetLastError());
+#endif // _DEBUG
+            }
         }
 
         const char* exception_name(DWORD code)

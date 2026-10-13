@@ -105,7 +105,9 @@ BOOL CAudioStream::Reset()
     m_bInitialized = false;
     if (HIWORD(BASS_GetVersion()) != BASSVERSION || !BASS_Init(-1, 44100, 0, nullptr, nullptr))
     {
+#if defined(_DEBUG)
         Log("[audiostream] BASS_Init failed, error=%d", BASS_ErrorGetCode());
+#endif // _DEBUG
         return FALSE;
     }
     bool proxyOff = false;
@@ -330,11 +332,17 @@ void CAudioStream::Process(State* state)
             }
         }
         else if (!stream && !state->stop.load())
+        {
+#if defined(_DEBUG)
             Log("[audiostream] unable to open %s, error=%d", url.c_str(), BASS_ErrorGetCode());
+#endif // _DEBUG
+        }
     }
     catch (...)
     {
+#if defined(_DEBUG)
         Log("[audiostream] stream worker failed");
+#endif // _DEBUG
     }
     if (stream)
     {

@@ -30,7 +30,9 @@ namespace saa
             HCRYPTPROV provider = 0;
             if (!CryptAcquireContextA(&provider, nullptr, nullptr, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT))
             {
+#if defined(_DEBUG)
                 Log("[saa::verify] CryptAcquireContext failed, error=%lu", GetLastError());
+#endif // _DEBUG
                 return false;
             }
 
@@ -48,11 +50,17 @@ namespace saa
                 }
                 verified = hashed && CryptVerifySignatureA(hash, signature, static_cast<DWORD>(signatureSize), key, nullptr, CRYPT_NOHASHOID) != FALSE;
                 if (!verified)
+                {
+#if defined(_DEBUG)
                     Log("[saa::verify] verify failed, hashed=%d, error=%lu", hashed, GetLastError());
+#endif // _DEBUG
+                }
             }
             else
             {
+#if defined(_DEBUG)
                 Log("[saa::verify] CryptCreateHash/CryptImportKey failed, error=%lu", GetLastError());
+#endif // _DEBUG
             }
             if (key)
                 CryptDestroyKey(key);

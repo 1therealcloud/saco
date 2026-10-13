@@ -293,7 +293,9 @@ bool CSpawnScreen::LoadLogoTexture()
     std::vector<std::uint8_t> encoded;
     if (!ReadFileBytes(path.c_str(), encoded))
     {
+#   if defined(_DEBUG)
         Log("[spawnscreen] failed to load logo.png from the game directory");
+#   endif // _DEBUG
         return false;
     }
 
