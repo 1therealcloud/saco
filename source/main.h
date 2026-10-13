@@ -16,6 +16,11 @@ struct IDirect3DDevice9;
 extern void Frame(IDirect3DDevice9* device); // used by d3d9hook.cpp
 extern void Process();
 
+// log
+#if defined(_DEBUG)
+extern void Log(const char* fmt, ...);
+#endif // _DEBUG
+
 namespace exceptions
 {
     extern void install();

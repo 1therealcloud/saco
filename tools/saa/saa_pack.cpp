@@ -6,6 +6,8 @@
  * The original code is copyright (c) 2026, 1therealcloud.
  */
 
+#include <stdafx.h>
+
 #include "saa_pack.h"
 
 #include <algorithm>

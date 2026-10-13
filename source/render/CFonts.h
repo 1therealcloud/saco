@@ -300,9 +300,7 @@ public:
 
 private:
     void ReleaseFonts();
-#if defined(SACO_BUILD)
     bool ReadFontSettings(int& sizeOffset, int& weight, std::string& face) const;
-#endif // SACO_BUILD
     int GetBaseFontSize() const;
 
 private:

@@ -6,17 +6,11 @@
  * The original code is copyright (c) 2026, 1therealcloud.
  */
 
-#if defined(SACO_BUILD)
-#   include <stdafx.h>
-#else // SACO_BUILD
-#   include "utils/log.inl"
-#endif // SACO_BUILD
+#include <stdafx.h>
+#include <cstdio>
 
 #include "saa_crypto.h"
 
-#if !defined(SACO_BUILD)
-#   include <windows.h>
-#endif // SACO_BUILD
 
 #include <wincrypt.h>
 
@@ -31,7 +25,7 @@ namespace saa
             if (!CryptAcquireContextA(&provider, nullptr, nullptr, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT))
             {
 #if defined(_DEBUG)
-                Log("[saa::verify] CryptAcquireContext failed, error=%lu", GetLastError());
+                std::printf("[saa::verify] CryptAcquireContext failed, error=%lu\n", GetLastError());
 #endif // _DEBUG
                 return false;
             }
@@ -52,14 +46,14 @@ namespace saa
                 if (!verified)
                 {
 #if defined(_DEBUG)
-                    Log("[saa::verify] verify failed, hashed=%d, error=%lu", hashed, GetLastError());
+                    std::printf("[saa::verify] verify failed, hashed=%d, error=%lu\n", hashed, GetLastError());
 #endif // _DEBUG
                 }
             }
             else
             {
 #if defined(_DEBUG)
-                Log("[saa::verify] CryptCreateHash/CryptImportKey failed, error=%lu", GetLastError());
+                std::printf("[saa::verify] CryptCreateHash/CryptImportKey failed, error=%lu\n", GetLastError());
 #endif // _DEBUG
             }
             if (key)

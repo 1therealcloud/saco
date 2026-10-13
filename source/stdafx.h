@@ -39,6 +39,6 @@
 #include <utility>
 #include <vector>
 
-#include "utils/log.inl"
+#include "main.h"
 #include "utils/hook.inl"
 #include "utils/patch.inl"

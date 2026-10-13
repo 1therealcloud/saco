@@ -136,11 +136,6 @@ target_include_directories(samp PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/source/game/RenderWare/rw
 )
 
-# keep the archive sources independent of the game PCH in tools
-target_compile_definitions(samp PRIVATE
-    SACO_BUILD
-)
-
 target_precompile_headers(samp PRIVATE
     source/stdafx.h
 )

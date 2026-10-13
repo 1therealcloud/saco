@@ -6,18 +6,12 @@
  * The original code is copyright (c) 2026, 1therealcloud.
  */
 
-#if defined(SACO_BUILD)
-#   include <stdafx.h>
-#else // SACO_BUILD
-#   include "utils/log.inl"
-#endif // SACO_BUILD
+#include <stdafx.h>
 
 #include "CFonts.h"
 #include "gui/CGui.h"
 
-#if defined(SACO_BUILD)
-#   include "config/CConfig.h"
-#endif // SACO_BUILD
+#include "config/CConfig.h"
 
 #include <cmath>
 
@@ -1342,7 +1336,6 @@ void CFonts::OnResetDevice()
 #endif // _DEBUG
 }
 
-#if defined(SACO_BUILD)
 bool CFonts::ReadFontSettings(int& sizeOffset, int& weight, std::string& face) const
 {
     ZoneScoped;
@@ -1370,7 +1363,6 @@ bool CFonts::ReadFontSettings(int& sizeOffset, int& weight, std::string& face) c
 
     return true;
 }
-#endif // SACO_BUILD
 
 void CFonts::GetFontSettings(int& sizeOffset, int& weight, std::string& face) const
 {
@@ -1379,9 +1371,7 @@ void CFonts::GetFontSettings(int& sizeOffset, int& weight, std::string& face) co
     weight = 700;
     face = "Arial";
 
-#if defined(SACO_BUILD)
     ReadFontSettings(sizeOffset, weight, face);
-#endif // SACO_BUILD
 }
 
 int CFonts::GetBaseFontSize() const

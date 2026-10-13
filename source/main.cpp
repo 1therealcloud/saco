@@ -10,6 +10,8 @@
 
 #include <shlobj.h> // GetSampUserDirectory()
 #include <chrono>
+#include <cstdarg>
+#include <cstdio>
 
 #include "main.h"
 
@@ -65,6 +67,20 @@ CAudio* g_audio = nullptr;             // audio
 
 // game
 std::unique_ptr<CGame> g_game;
+
+// log
+#if defined(_DEBUG)
+void Log(const char* fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+
+    vprintf(fmt, args);
+    putchar('\n');
+
+    va_end(args);
+}
+#endif // _DEBUG
 
 // calculate build number
 #if defined(_DEBUG)

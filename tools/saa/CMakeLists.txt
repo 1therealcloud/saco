@@ -15,4 +15,5 @@ add_executable(saa
 
 target_include_directories(saa PRIVATE ${PROJECT_SOURCE_DIR}/source)
 
-target_link_libraries(saa PRIVATE advapi32)
+target_precompile_headers(saa PRIVATE ${PROJECT_SOURCE_DIR}/source/stdafx.h)
+target_link_libraries(saa PRIVATE advapi32 minhook Tracy::TracyClient)
