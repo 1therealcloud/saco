@@ -115,7 +115,7 @@ namespace game::patch::base
         if (!::patch::nop(0x747483, 6))
             return false;
 
-        // skip the intro states immediately, as in r5, before installing the remaining hooks
+        // skip the intro states after the archive filesystem is installed
         if (!::patch::write<std::uint32_t>(0xC8D4C0, 5))
             return false;
 

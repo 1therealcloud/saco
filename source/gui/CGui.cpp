@@ -2104,7 +2104,7 @@ namespace cgui
         return false;
     }
 
-    ListBox::ListBox(int id, int x, int y, int width, int height) : Control(ControlType::ListBox, id, "", x, y, width, height)
+    ListBox::ListBox(int id, int x, int y, int width, int height) : Control(ControlType::ListBox, id, "", x, y, width, height), m_scrollBar(id, 0, 0, 16, height)
     {}
     void ListBox::AddItem(const char* text, void* data)
     {
@@ -2205,12 +2205,26 @@ namespace cgui
             return item.text.c_str();
         return column <= item.columns.size() ? item.columns[column - 1].c_str() : "";
     }
+    void ListBox::UpdateScrollBar()
+    {
+        const RECT rect = GetScreenRect();
+        m_scrollBar.SetLocation(rect.right - 16, rect.top);
+        m_scrollBar.SetSize(16, m_height);
+        m_scrollBar.SetEnabled(m_enabled);
+        m_scrollBar.SetRange(0, static_cast<int>(m_items.size()));
+        m_scrollBar.SetPageSize(GetVisibleRowCount());
+        m_scrollBar.SetTrackPos(m_top);
+    }
     void ListBox::Render()
     {
         ZoneScoped;
         if (!m_visible)
             return;
+        UpdateScrollBar();
+        m_scrollBar.Render();
+        SetTopIndex(m_scrollBar.GetTrackPos());
         RECT rect = GetScreenRect();
+        rect.right -= 16;
         DrawSkin(ControlType::ListBox, 0, rect, GetState());
         const int rowH = 18;
         const int visible = GetVisibleRowCount();
@@ -2256,6 +2270,15 @@ namespace cgui
         ZoneScoped;
         if (!m_visible || !m_enabled)
             return false;
+        UpdateScrollBar();
+        if (m_scrollBar.MsgProc(message, wParam, lParam))
+        {
+            SetTopIndex(m_scrollBar.GetTrackPos());
+            return true;
+        }
+        if (message == WM_LBUTTONUP && GET_X_LPARAM(lParam) >= GetScreenRect().right - 16)
+            return false;
+
         if (message == WM_KEYDOWN && m_focus && !m_items.empty())
         {
             int next = m_selected;
@@ -2307,7 +2330,7 @@ namespace cgui
         if (message == WM_MOUSEWHEEL && PtIn(rect, x, y))
         {
             const short delta = GET_WHEEL_DELTA_WPARAM(wParam);
-            m_top = std::clamp(m_top - (delta / WHEEL_DELTA) * 3, 0, std::max(0, static_cast<int>(m_items.size()) - 1));
+            SetTopIndex(m_top - (delta / WHEEL_DELTA) * 3);
             return true;
         }
         return false;

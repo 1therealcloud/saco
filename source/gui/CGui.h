@@ -415,49 +415,6 @@ namespace cgui
         bool m_password = false;
     };
 
-    class ListBox final : public Control
-    {
-    public:
-        void SetVisibleRowCount(int count);
-        ListBox(int id, int x, int y, int width, int height);
-        void AddItem(const char* text, void* data = nullptr);
-        void SetItemText(int index, unsigned int column, const char* text);
-        void SetColumnWidth(unsigned int column, int width);
-        void SetTextPadding(int padding);
-        void RemoveAllItems();
-        void RemoveItem(int index);
-        int GetTopIndex() const
-        {
-            return m_top;
-        }
-        void SetTopIndex(int index);
-        int GetSelectedIndex() const
-        {
-            return m_selected;
-        }
-        void SetSelectedIndex(int index);
-        const char* GetSelectedText(unsigned int column = 0) const;
-        void Render() override;
-        bool MsgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
-
-    private:
-        struct Item
-        {
-            std::string text;
-            void* data = nullptr;
-            std::vector<std::string> columns;
-        };
-        std::vector<Item> m_items;
-        std::vector<int> m_columnWidths;
-        int m_textPadding = 4;
-        int m_visibleRowCount = 0;
-        int GetVisibleRowCount() const;
-        int m_selected = -1;
-        int m_top = 0;
-        DWORD m_lastClickTick = 0;
-        int m_lastClickIndex = -1;
-    };
-
     class ScrollBar final : public Control
     {
     public:
@@ -496,6 +453,51 @@ namespace cgui
         bool m_arrowRepeating = false;
         ULONGLONG m_arrowTick = 0;
         POINT m_lastMouse{};
+    };
+
+    class ListBox final : public Control
+    {
+    public:
+        void SetVisibleRowCount(int count);
+        ListBox(int id, int x, int y, int width, int height);
+        void AddItem(const char* text, void* data = nullptr);
+        void SetItemText(int index, unsigned int column, const char* text);
+        void SetColumnWidth(unsigned int column, int width);
+        void SetTextPadding(int padding);
+        void RemoveAllItems();
+        void RemoveItem(int index);
+        int GetTopIndex() const
+        {
+            return m_top;
+        }
+        void SetTopIndex(int index);
+        int GetSelectedIndex() const
+        {
+            return m_selected;
+        }
+        void SetSelectedIndex(int index);
+        const char* GetSelectedText(unsigned int column = 0) const;
+        void Render() override;
+        bool MsgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
+
+    private:
+        void UpdateScrollBar();
+        ScrollBar m_scrollBar;
+        struct Item
+        {
+            std::string text;
+            void* data = nullptr;
+            std::vector<std::string> columns;
+        };
+        std::vector<Item> m_items;
+        std::vector<int> m_columnWidths;
+        int m_textPadding = 4;
+        int m_visibleRowCount = 0;
+        int GetVisibleRowCount() const;
+        int m_selected = -1;
+        int m_top = 0;
+        DWORD m_lastClickTick = 0;
+        int m_lastClickIndex = -1;
     };
 
     class Dialog

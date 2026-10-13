@@ -225,6 +225,7 @@ namespace
         struct GeometryState
         {
             RpGeometry* geometry;
+            RpAtomic* atomic;
             RwUInt32 flags;
         };
         std::vector<MaterialState> materials;
@@ -256,7 +257,7 @@ namespace
                     return state.geometry == geometry;
                 }))
                 return;
-            geometries.push_back({geometry, geometry->flags});
+            geometries.push_back({geometry, atomic, geometry->flags});
             const int count = std::min(RpGeometryGetNumMaterials(geometry), static_cast<int>(CObject::MAX_MATERIALS));
             for (int i = 0; i < count; ++i)
             {
@@ -282,6 +283,16 @@ namespace
                     material->color = {static_cast<RwUInt8>(color), static_cast<RwUInt8>(color >> 8), static_cast<RwUInt8>(color >> 16), static_cast<RwUInt8>(color >> 24)};
                 }
             }
+            if ((geometry->flags ^ geometries.back().flags) & rpGEOMETRYPRELIT)
+                InvalidateInstance(geometries.back());
+        }
+        static void InvalidateInstance(const GeometryState& state)
+        {
+            // PRELIT changes the D3D vertex layout; shared instances must rebuild it.
+            if (state.geometry->repEntry)
+                RwResourcesFreeResEntry(state.geometry->repEntry);
+            if (state.atomic->repEntry)
+                RwResourcesFreeResEntry(state.atomic->repEntry);
         }
         ~MaterialScope()
         {
@@ -293,7 +304,11 @@ namespace
                 state.material->surfaceProps = state.surface;
             }
             for (auto& state : geometries)
+            {
+                if ((state.geometry->flags ^ state.flags) & rpGEOMETRYPRELIT)
+                    InvalidateInstance(state);
                 state.geometry->flags = state.flags;
+            }
         }
     };
 }

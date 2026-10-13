@@ -394,13 +394,21 @@ namespace filesystem
 
         for (const auto target : g_hookTargets)
         {
-            const auto status = MH_EnableHook(target);
+            const auto status = MH_QueueEnableHook(target);
             if (status != MH_OK)
             {
-                Log("[filesystem] can't enable hook, status=%d", static_cast<int>(status));
+                Log("[filesystem] can't queue hook, status=%d", static_cast<int>(status));
                 RemoveHooks();
                 return false;
             }
+        }
+
+        const auto status = MH_ApplyQueued();
+        if (status != MH_OK)
+        {
+            Log("[filesystem] can't enable hooks, status=%d", static_cast<int>(status));
+            RemoveHooks();
+            return false;
         }
 
         g_installed = true;

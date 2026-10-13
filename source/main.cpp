@@ -310,13 +310,6 @@ DWORD WINAPI InitializeThread(LPVOID)
         return 1;
     }
 
-    // install patches
-    if (!game::patch::install())
-    {
-        Log("failed to apply patches!");
-        return 1;
-    }
-
     // open saa archive with original keys
     if (!g_archive.Open("samp.saa", keys))
     {
@@ -328,6 +321,13 @@ DWORD WINAPI InitializeThread(LPVOID)
     if (!filesystem::install())
     {
         Log("failed to install filesystem!");
+        return 1;
+    }
+
+    // install patches
+    if (!game::patch::install())
+    {
+        Log("failed to apply patches!");
         return 1;
     }
 
