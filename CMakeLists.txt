@@ -142,6 +142,7 @@ target_precompile_headers(samp PRIVATE
 
 target_link_libraries(samp PRIVATE
     DirectXMath
+    lzma
     CURL::libcurl
     bass
     minhook

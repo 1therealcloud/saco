@@ -45,3 +45,6 @@ function(add_samp_curl)
     add_subdirectory(curl EXCLUDE_FROM_ALL)
 endfunction()
 add_samp_curl()
+
+add_library(lzma STATIC lzma/C/LzmaDec.c)
+target_include_directories(lzma SYSTEM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/lzma/C)

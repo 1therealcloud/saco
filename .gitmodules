@@ -16,3 +16,6 @@
 [submodule "third-party/curl"]
 	path = third-party/curl
 	url = https://github.com/curl/curl.git
+[submodule "third-party/lzma"]
+	path = third-party/lzma
+	url = https://github.com/ip7z/7zip.git
