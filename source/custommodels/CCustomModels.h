@@ -109,6 +109,7 @@ public:
     std::int32_t DeleteModelInfo(std::uint32_t index);            // 0xD5A0
 
 private:
+    bool DeleteCachedFile(DownloadedFileType type, std::uint32_t crc);
     void CancelDownloads();
     void PublishDownload(bool success);
     void ProcessTransfer();

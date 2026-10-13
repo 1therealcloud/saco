@@ -18,6 +18,8 @@
 #include "game/render/models.h"
 #include "game/ModelInfo.h"
 #include <cstdio>
+#include <charconv>
+#include <unordered_set>
 
 namespace
 {
@@ -36,6 +38,77 @@ namespace
         char name[32]{};
         std::snprintf(name, sizeof(name), "0x%X.%s", crc, type == DownloadedFileType::Dff ? "dff" : "txd");
         return name;
+    }
+    bool ParseNumber(std::string_view text, std::uint32_t& number, int base)
+    {
+        if (text.empty())
+            return false;
+        const auto result = std::from_chars(text.data(), text.data() + text.size(), number, base);
+        return result.ec == std::errc{} && result.ptr == text.data() + text.size();
+    }
+    bool ParseCrc(std::string_view text, std::uint32_t& crc)
+    {
+        return text.size() >= 3 && text.size() <= 10 && text.substr(0, 2) == "0x" && ParseNumber(text.substr(2), crc, 16);
+    }
+    bool ParseCacheName(std::string_view name, DownloadedFileType& type, std::uint32_t& crc)
+    {
+        const auto dot = name.find('.');
+        if (dot == name.npos || !ParseCrc(name.substr(0, dot), crc))
+            return false;
+        const auto extension = name.substr(dot);
+        if (_stricmp(std::string(extension).c_str(), ".dff") == 0)
+            type = DownloadedFileType::Dff;
+        else if (_stricmp(std::string(extension).c_str(), ".txd") == 0)
+            type = DownloadedFileType::Txd;
+        else
+            return false;
+        return true;
+    }
+    bool ParseTemporaryName(std::string_view name, DWORD& processId)
+    {
+        std::uint32_t crc{};
+        if (name.ends_with(".temp") && ParseCrc(name.substr(0, name.size() - 5), crc))
+        {
+            processId = 0;
+            return true;
+        }
+        const auto marker = name.find(".download.");
+        DownloadedFileType type{};
+        if (marker == name.npos || !ParseCacheName(name.substr(0, marker), type, crc))
+            return false;
+        auto suffix = name.substr(marker + 10);
+        const auto dot = suffix.find('.');
+        std::uint32_t pid{}, sequence{};
+        if (dot == suffix.npos || !ParseNumber(suffix.substr(0, dot), pid, 10) || !pid)
+            return false;
+        suffix.remove_prefix(dot + 1);
+        const auto part = suffix.find('.');
+        if (!ParseNumber(suffix.substr(0, part), sequence, 10) || !sequence)
+            return false;
+        if (part != suffix.npos)
+        {
+            suffix.remove_prefix(part + 1);
+            const auto separator = suffix.find('.');
+            std::uint32_t httpPid{};
+            if (separator == suffix.npos || !ParseNumber(suffix.substr(0, separator), httpPid, 10) || httpPid != pid || !suffix.ends_with(".part"))
+                return false;
+            suffix.remove_prefix(separator + 1);
+            if (suffix.size() <= 5 || !ParseNumber(suffix.substr(0, suffix.size() - 5), sequence, 10))
+                return false;
+        }
+        processId = pid;
+        return true;
+    }
+    bool OtherProcessIsRunning(DWORD processId)
+    {
+        if (!processId || processId == GetCurrentProcessId())
+            return false;
+        const HANDLE process = OpenProcess(SYNCHRONIZE, FALSE, processId);
+        if (!process)
+            return GetLastError() != ERROR_INVALID_PARAMETER;
+        const bool running = WaitForSingleObject(process, 0) != WAIT_OBJECT_0;
+        CloseHandle(process);
+        return running;
     }
     constexpr auto MakeCrcTable()
     {
@@ -231,9 +304,98 @@ bool CCustomModels::DoesTxdExist(std::uint32_t crc)
 {
     return !GetCachedFilePath(DownloadedFileType::Txd, crc).empty();
 }
+bool CCustomModels::DeleteCachedFile(DownloadedFileType type, std::uint32_t crc)
+{
+    const auto path = GetCacheFilePath(type, crc);
+    if (path.empty())
+        return false;
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(std::filesystem::symlink_status(path, error)) || error)
+        return false;
+    RefreshCache();
+    if (m_cacheCheck.valid())
+    {
+        m_cacheCheck.wait();
+        m_cacheCheck = {};
+    }
+    return std::filesystem::remove(path, error) && !error;
+}
+bool CCustomModels::DeleteDff(std::uint32_t crc)
+{
+    return DeleteCachedFile(DownloadedFileType::Dff, crc);
+}
+bool CCustomModels::DeleteTxd(std::uint32_t crc)
+{
+    return DeleteCachedFile(DownloadedFileType::Txd, crc);
+}
+bool CCustomModels::DeleteTempFile(const char* fileName)
+{
+    if (!m_bPathInitialized || !fileName || !*fileName)
+        return false;
+    const std::string_view name(fileName);
+    DWORD processId{};
+    if (name.find_first_of("/\\:") != name.npos || !ParseTemporaryName(name, processId) || OtherProcessIsRunning(processId))
+        return false;
+    const auto path = m_serverCachePath / fileName;
+    if (m_currentDownload && !m_currentDownload->m_tempPath.empty())
+    {
+        const auto active = m_currentDownload->m_tempPath.filename().u8string();
+        const std::string_view activeName(reinterpret_cast<const char*>(active.data()), active.size());
+        if (name == activeName || name.starts_with(std::string(activeName) + "."))
+            return false;
+    }
+    std::error_code error;
+    return std::filesystem::is_regular_file(std::filesystem::symlink_status(path, error)) && !error && std::filesystem::remove(path, error) && !error;
+}
+std::uint32_t CCustomModels::ParseFileCrc(const char* fileName)
+{
+    if (!fileName)
+        return 0;
+    const std::string_view name(fileName);
+    std::uint32_t crc{};
+    return ParseCrc(name.substr(0, name.find('.')), crc) ? crc : 0;
+}
 bool CCustomModels::IsKnownFileCrc(std::uint32_t crc) const
 {
-    return FindModelByFile(DownloadedFileType::Dff, crc) >= 0 || FindModelByFile(DownloadedFileType::Txd, crc) >= 0;
+    if (!m_modelsPool.IsReady())
+        return true;
+    for (std::uint32_t i = 0; i < GetCount(); ++i)
+        if (const auto* model = m_modelsPool.Get(i); model && (model->m_nDffCrc == crc || model->m_nTxdCrc == crc))
+            return true;
+    return false;
+}
+void CCustomModels::CleanupCache()
+{
+    if (!m_bPathInitialized || !m_modelsPool.IsReady() || m_cacheCheck.valid())
+        return;
+    std::error_code error;
+    std::unordered_set<std::uint32_t> known;
+    known.reserve(static_cast<std::size_t>(GetCount()) * 2);
+    for (std::uint32_t i = 0; i < GetCount(); ++i)
+        if (const auto* model = m_modelsPool.Get(i))
+        {
+            known.insert(model->m_nDffCrc);
+            known.insert(model->m_nTxdCrc);
+        }
+    std::filesystem::directory_iterator entry(m_serverCachePath, error), end;
+    for (; !error && entry != end; entry.increment(error))
+    {
+        std::error_code fileError;
+        if (!std::filesystem::is_regular_file(entry->symlink_status(fileError)) || fileError)
+            continue;
+        const auto utf8 = entry->path().filename().u8string();
+        const std::string name(reinterpret_cast<const char*>(utf8.data()), utf8.size());
+        DWORD processId{};
+        if (ParseTemporaryName(name, processId))
+            DeleteTempFile(name.c_str());
+        else
+        {
+            DownloadedFileType type{};
+            std::uint32_t crc{};
+            if (ParseCacheName(name, type, crc) && !known.contains(crc) && std::filesystem::remove(entry->path(), fileError) && !fileError)
+                m_cachedFiles.erase(FileKey(type, crc));
+        }
+    }
 }
 std::int32_t CCustomModels::QueueMissingFiles()
 {
@@ -322,6 +484,7 @@ void CCustomModels::Process()
     }
     if (!m_cacheDirty || !m_bPathInitialized || !m_modelsPool.IsReady())
         return;
+    CleanupCache();
     std::unordered_map<std::uint64_t, CachedFile> files;
     for (std::uint32_t i = 0; i < GetCount(); ++i)
     {
