@@ -60,7 +60,8 @@ namespace
     constexpr scm::OpcodeInfo REFRESH_RENDERER{0x04E4, "ff"};
     constexpr scm::OpcodeInfo SET_CELLPHONE{0x0729, "ii"};
     constexpr scm::OpcodeInfo CREATE_PARTICLE{0x066A, "siffffffiv"};
-    constexpr scm::OpcodeInfo DESTROY_PARTICLE{0x064C, "i"};
+    constexpr scm::OpcodeInfo PLAY_PARTICLE{0x064C, "i"};
+    constexpr scm::OpcodeInfo DESTROY_PARTICLE{0x0650, "i"};
     constexpr scm::OpcodeInfo CREATE_STUFF{0x0107, "ifffv"};
     constexpr scm::OpcodeInfo ATTACH_STUFF{0x070A, "iifffiissi"};
     constexpr scm::OpcodeInfo SET_DRUNK_VISUALS{0x052C, "ii"};
@@ -1420,9 +1421,19 @@ void CPed::StartUrinating()
 
     CVector position{};
     GetBonePosition(2, &position);
+    CMatrix matrix = CMatrix::Unity();
+    GetMatrix(&matrix);
+    // attached effects take ped-local offsets, not world coordinates
+    const CVector offset = matrix.InverseTransformPoint(position);
+    if (!std::isfinite(offset.x) || !std::isfinite(offset.y) || !std::isfinite(offset.z))
+        return;
+
     std::uint32_t particle = 0;
-    scm::ProcessCommand(&CREATE_PARTICLE, "water_hydrant", 0, static_cast<double>(position.x), static_cast<double>(position.y), static_cast<double>(position.z), 0.0, 0.0, 0.0, 0,
+    scm::ProcessCommand(&CREATE_PARTICLE, "water_hydrant", m_handle, static_cast<double>(offset.x), static_cast<double>(offset.y), static_cast<double>(offset.z), 0.0, 1.0, 0.0, 0,
                         &particle);
+    if (!particle || particle == std::numeric_limits<std::uint32_t>::max())
+        return;
+    scm::ProcessCommand(&PLAY_PARTICLE, particle);
     m_urinatingParticle = particle;
     m_bDoesUrinating = TRUE;
 }
