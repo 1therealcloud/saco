@@ -20,6 +20,20 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(SAMP_TRACY "Enable Tracy profiling" OFF)
 
+include(CheckIPOSupported)
+check_ipo_supported(RESULT SAMP_IPO_SUPPORTED OUTPUT SAMP_IPO_ERROR LANGUAGES C CXX)
+if (NOT SAMP_IPO_SUPPORTED)
+    message(FATAL_ERROR "Release LTO is unavailable: ${SAMP_IPO_ERROR}")
+endif()
+
+if (MSVC)
+    string(REPLACE "/Ob2" "/Ob3" CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
+    string(REPLACE "/Ob2" "/Ob3" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+endif()
+
+# enable IPO for older dependencies
+set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
+
 add_subdirectory(third-party)
 
 set(RENDERWARE_SOURCES
@@ -164,6 +178,17 @@ target_link_libraries(samp PRIVATE
 )
 
 add_subdirectory(tools)
+
+foreach(target samp minhook raknet lzma libcurl_object libcurl_static TracyClient img saa)
+    set_property(TARGET ${target} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+    if (MSVC)
+        target_compile_options(${target} PRIVATE "$<$<CONFIG:Release>:/Gw>" "$<$<CONFIG:Release>:/Oy->")
+    endif()
+endforeach()
+
+if (MSVC)
+    target_link_options(samp PRIVATE "$<$<CONFIG:Release>:/LTCG>" "$<$<CONFIG:Release>:/OPT:REF>" "$<$<CONFIG:Release>:/OPT:ICF>")
+endif()
 
 #add_custom_command(TARGET samp POST_BUILD
 #    COMMAND ${CMAKE_COMMAND} -E copy_if_different

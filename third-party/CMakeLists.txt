@@ -4,6 +4,15 @@
 #
 # The original code is copyright (c) 2026, 1therealcloud.
 
+if (MSVC)
+    # library debug data only in Debug
+    foreach(language C CXX)
+        string(REGEX REPLACE "(^|[ \t])/(Zi|ZI|Z7)([ \t]|$)" " "
+            CMAKE_${language}_FLAGS_RELWITHDEBINFO "${CMAKE_${language}_FLAGS_RELWITHDEBINFO}")
+    endforeach()
+    set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug>:ProgramDatabase>")
+endif()
+
 add_subdirectory(directxmath EXCLUDE_FROM_ALL)
 
 add_subdirectory(minhook)
