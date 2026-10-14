@@ -111,8 +111,11 @@ namespace
             if ((textureLength && !bs.Read(material.texture.data(), textureLength)) || !bs.Read(material.color))
                 return false;
 
-            // R5 RPC material parser maps 0xffff and ids above 20000 to -1.
-            material.model = sourceModel == 0xFFFF || sourceModel > 20000 ? -1 : static_cast<int>(sourceModel);
+            const int signedModel = sourceModel >= 0x8000 ? static_cast<int>(sourceModel) - 0x10000 : sourceModel;
+            if (g_DLClient && signedModel >= -30000 && signedModel <= -1000)
+                material.model = signedModel;
+            else
+                material.model = sourceModel == 0xFFFF || sourceModel > 20000 ? -1 : static_cast<int>(sourceModel);
             return true;
         }
 

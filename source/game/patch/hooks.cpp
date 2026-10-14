@@ -529,6 +529,35 @@ void __cdecl DrawCrossHairsHook()
     reinterpret_cast<void(__cdecl*)()>(0x0058E020)();
 }
 
+namespace
+{
+    RwInt32 __cdecl ExtraVertexColorsSizeHook(const void* object, RwInt32 offset, RwInt32 size)
+    {
+        if (!object || offset < static_cast<RwInt32>(sizeof(RpGeometry)) || size < 12)
+            return 0;
+        const auto* geometry = static_cast<const RpGeometry*>(object);
+        const auto* colors = *reinterpret_cast<RwRGBA* const*>(static_cast<const std::uint8_t*>(object) + offset);
+        if (!colors)
+            return sizeof(RwUInt32);
+        if (geometry->numVertices < 0 || geometry->numVertices > (INT_MAX - 4) / 4)
+            return 0;
+        return sizeof(RwUInt32) + geometry->numVertices * sizeof(RwRGBA);
+    }
+
+    RwStream* __cdecl ExtraVertexColorsWriteHook(RwStream* stream, RwInt32 length, const void* object, RwInt32 offset, RwInt32 size)
+    {
+        const auto bytes = ExtraVertexColorsSizeHook(object, offset, size);
+        if (!stream || !bytes || length != bytes)
+            return nullptr;
+        const auto* colors = *reinterpret_cast<RwRGBA* const*>(static_cast<const std::uint8_t*>(object) + offset);
+        const RwUInt32 present = colors ? 1 : 0;
+        // The native writer dereferences the first RGBA value as a pointer.
+        if (!RwStreamWrite(stream, &present, sizeof(present)))
+            return nullptr;
+        return !colors || RwStreamWrite(stream, colors, bytes - sizeof(present)) ? stream : nullptr;
+    }
+}
+
 namespace game::hooks
 {
     RadarColorFn g_radarColor = nullptr;
@@ -539,7 +568,8 @@ namespace game::hooks
         return (g_originalRender || hook::install(0x553260, &RenderObjectHook, &g_originalRender)) &&
                (g_originalCameraIgnore || hook::install(0x563F40, &CameraToIgnoreObjectHook, &g_originalCameraIgnore)) &&
                hook::install(0x584770, &RadarTraceColorHook, &g_radarColor) && hook::install(0x53E230, &NativeTextHook, &g_text) && hook::install(0x586650, &GangZoneRadarHook) &&
-               hook::install(0x553AA0, &WorldRenderHook, &g_world) && hook::install(0x5531E0, &FadingRenderHook, &g_fading);
+               hook::install(0x553AA0, &WorldRenderHook, &g_world) && hook::install(0x5531E0, &FadingRenderHook, &g_fading) &&
+               hook::install(0x5D6D80, &ExtraVertexColorsWriteHook) && hook::install(0x5D6DC0, &ExtraVertexColorsSizeHook);
     }
 
     DrawFn g_world = nullptr, g_fading = nullptr, g_text = nullptr;

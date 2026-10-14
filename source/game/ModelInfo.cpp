@@ -277,6 +277,11 @@ namespace ModelInfo
         }
         return true;
     }
+    int GetTextureSlot(int modelId)
+    {
+        const auto* info = GetRelocated(modelId);
+        return info ? Read<std::int16_t>(info, kTxdSlotOffset) : -1;
+    }
     bool SetTextureSlot(int modelId, int slot)
     {
         if (!IsOwnedClone(modelId) || IsReady(modelId) || GetReferences(modelId) || slot < 0 || slot > 32767)

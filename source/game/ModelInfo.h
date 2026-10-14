@@ -25,6 +25,7 @@ namespace ModelInfo
     void RemoveReference(int modelId);
     bool PinBaseModel(int modelId);
     bool SetTextureSlot(int modelId, int slot);
+    int GetTextureSlot(int modelId);
     bool SetCollision(int modelId, void* collision);
     bool AttachPedClump(int modelId, RpClump* clump);
     bool DestroyClone(int modelId);

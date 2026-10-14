@@ -341,7 +341,7 @@ namespace
             const int materialCount = std::min(RpGeometryGetNumMaterials(geometry), static_cast<int>(CObject::MAX_MATERIALS));
             bool textured = false;
             for (int i = 0; i < materialCount; ++i)
-                textured |= object.m_material.m_nType[i] == CObject::MATERIAL_TYPE_TEXTURE;
+                textured |= object.m_material.m_nType[i] == CObject::MATERIAL_TYPE_TEXTURE && object.m_material.m_color[i] != 0;
             // Single-morph, non-native geometry keeps its instance on the geometry.
             if (textured && !atomic->repEntry && (geometry->flags & rpGEOMETRYPRELIT) && !(geometry->flags & rpGEOMETRYNATIVEFLAGSMASK) &&
                 RpGeometryGetNumMorphTargets(geometry) == 1)
@@ -383,8 +383,8 @@ namespace
                 if (object.m_material.m_pTextBackground[i])
                     material->texture = object.m_material.m_pTextBackground[i];
                 const auto color = object.m_material.m_color[i];
-                // transparent black is a valid SA-MP material color too
-                if (object.m_material.m_nType[i] == CObject::MATERIAL_TYPE_TEXTURE)
+                // Zero keeps the model's original material color and vertex lighting.
+                if (object.m_material.m_nType[i] == CObject::MATERIAL_TYPE_TEXTURE && color != 0)
                 {
                     geometry->flags |= rpGEOMETRYMODULATEMATERIALCOLOR;
                     geometry->flags &= ~rpGEOMETRYPRELIT;
@@ -1005,6 +1005,15 @@ void CObject::SetMaterial(int model, int index, const char* txd, const char* tex
     if (index < 0 || index >= MAX_MATERIALS || !txd || !texture)
         return;
 
+    const bool customModel = model >= -30000 && model <= -1000;
+    if (customModel && (!g_DLClient || !g_netGame || !g_netGame->GetCustomModels().LoadObject(model)))
+    {
+#if defined(_DEBUG)
+        Log("[dl:material] source unavailable: model=%d texture=%s", model, texture);
+#endif // _DEBUG
+        return;
+    }
+
     // R5 checks the source-model lookup before discarding the old material.
     if (model > 0 && !ModelInfo::GetRelocated(model))
         return;
@@ -1012,7 +1021,14 @@ void CObject::SetMaterial(int model, int index, const char* txd, const char* tex
     ClearMaterial(index);
     RwTexture* replacement = nullptr;
 
-    if (model > 0)
+    if (customModel)
+    {
+        replacement = game::render::textures::read(ModelInfo::GetTextureSlot(model), texture).release();
+#if defined(_DEBUG)
+        Log("[dl:material] model=%d slot=%d texture=%s found=%d", model, ModelInfo::GetTextureSlot(model), texture, replacement != nullptr);
+#endif // _DEBUG
+    }
+    else if (model > 0)
     {
         auto* info = ModelInfo::GetRelocated(model);
         if (EnsureModelLoaded(model))
