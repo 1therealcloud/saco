@@ -40,30 +40,83 @@ bool CCustomModelsPool::Set(std::uint32_t index, std::uint32_t count, const CCus
     auto* previous = Get(index);
     if (previous && SameMetadata(*previous, info))
     {
-        if (count != m_models.size())
-        {
-            m_models.resize(count);
-            ++m_revision;
-        }
+        if (count != m_models.size() && !Resize(count))
+            return false;
         return true;
     }
     if (previous && (previous->m_bLoaded || previous->m_bDffRequestPending || previous->m_bTxdRequestPending || previous->m_bDffQueued || previous->m_bTxdQueued))
         return false;
-    auto model = std::make_unique<CCustomModelInfo>();
-    model->m_nType = info.m_nType;
-    model->m_nVirtualWorld = info.m_nVirtualWorld;
-    model->m_nStandardModelId = info.m_nStandardModelId;
-    model->m_nCustomModelId = info.m_nCustomModelId;
-    model->m_nDffCrc = info.m_nDffCrc;
-    model->m_nTxdCrc = info.m_nTxdCrc;
-    model->m_nDffSize = info.m_nDffSize;
-    model->m_nTxdSize = info.m_nTxdSize;
-    model->m_nTimeOn = info.m_nTimeOn;
-    model->m_nTimeOff = info.m_nTimeOff;
-    m_models.resize(count);
-    if (!previous)
-        ++m_receivedCount;
-    m_models[index] = std::move(model);
+    try
+    {
+        auto model = std::make_unique<CCustomModelInfo>();
+        model->m_nType = info.m_nType;
+        model->m_nVirtualWorld = info.m_nVirtualWorld;
+        model->m_nStandardModelId = info.m_nStandardModelId;
+        model->m_nCustomModelId = info.m_nCustomModelId;
+        model->m_nDffCrc = info.m_nDffCrc;
+        model->m_nTxdCrc = info.m_nTxdCrc;
+        model->m_nDffSize = info.m_nDffSize;
+        model->m_nTxdSize = info.m_nTxdSize;
+        model->m_nTimeOn = info.m_nTimeOn;
+        model->m_nTimeOff = info.m_nTimeOff;
+        m_models.resize(count);
+        if (!previous)
+            ++m_receivedCount;
+        m_removedSlots.erase(index);
+        m_models[index] = std::move(model);
+        ++m_revision;
+        return true;
+    }
+    catch (const std::bad_alloc&)
+    {
+        return false;
+    }
+}
+bool CCustomModelsPool::Resize(std::uint32_t count)
+{
+    if (count > MAX_MODELS)
+        return false;
+    if (count == m_models.size())
+        return true;
+    for (std::size_t i = count; i < m_models.size(); ++i)
+        if (const auto* model = m_models[i].get();
+            model && (model->m_bLoaded || model->m_bDffRequestPending || model->m_bTxdRequestPending || model->m_bDffQueued || model->m_bTxdQueued))
+            return false;
+    std::uint32_t removed = 0;
+    for (std::size_t i = count; i < m_models.size(); ++i)
+        removed += m_models[i] != nullptr;
+    try
+    {
+        m_models.resize(count);
+    }
+    catch (const std::bad_alloc&)
+    {
+        return false;
+    }
+    for (auto it = m_removedSlots.begin(); it != m_removedSlots.end();)
+        if (*it >= count)
+            it = m_removedSlots.erase(it);
+        else
+            ++it;
+    m_receivedCount -= removed;
+    ++m_revision;
+    return true;
+}
+bool CCustomModelsPool::Remove(std::uint32_t index)
+{
+    const auto* model = Get(index);
+    if (!model || model->m_bLoaded || model->m_bDffRequestPending || model->m_bTxdRequestPending || model->m_bDffQueued || model->m_bTxdQueued)
+        return false;
+    try
+    {
+        m_removedSlots.insert(index);
+    }
+    catch (const std::bad_alloc&)
+    {
+        return false;
+    }
+    m_models[index].reset();
+    --m_receivedCount;
     ++m_revision;
     return true;
 }
@@ -81,11 +134,12 @@ std::uint32_t CCustomModelsPool::GetReceivedCount() const
 }
 bool CCustomModelsPool::IsReady() const
 {
-    return !m_models.empty() && m_receivedCount == m_models.size();
+    return !m_models.empty() && m_receivedCount + m_removedSlots.size() == m_models.size();
 }
 void CCustomModelsPool::Clear()
 {
     m_models.clear();
+    m_removedSlots.clear();
     m_receivedCount = 0;
     ++m_revision;
 }

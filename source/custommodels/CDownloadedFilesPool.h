@@ -56,24 +56,17 @@ struct DownloadedFileInfo
     bool m_bProgressDirty{};
 };
 
-struct DownloadSlot
-{
-    std::uint32_t m_nId{};
-    bool m_bCompleted{};
-    bool m_bActive{};
-    bool m_bValid{};
-    bool m_bInitialized{};
-};
-
 struct CDownloadedFilesPool
 {
     DownloadedFileInfo* Find(DownloadedFileType type, std::uint32_t crc) const;
     bool Queue(DownloadedFileType type, std::uint32_t crc, std::uint32_t size, std::uint32_t modelIndex);
+    DownloadedFileInfo* GetNextQueued();
     std::uint32_t GetCount() const;
     void Clear();
     DownloadedFileInfo* Get(std::uint32_t index) const;
 
 private:
     std::vector<std::unique_ptr<DownloadedFileInfo>> m_files{};
+    std::uint32_t m_nextQueued{};
     std::unordered_map<std::uint64_t, DownloadedFileInfo*> m_byCrc;
 };

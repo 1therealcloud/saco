@@ -46,7 +46,7 @@ public:
     {
         return m_filesPool;
     }
-    DownloadedFileInfo* GetNextDownload() const;
+    DownloadedFileInfo* GetNextDownload();
     bool BeginRequest(DownloadedFileType type, std::uint32_t crc);
     bool StartHttpDownload(DownloadedFileType type, std::uint32_t crc, std::string url, std::string proxy);
     void FinishCurrentDownload(bool success);
@@ -76,13 +76,13 @@ public:
     std::int32_t FindModelByFile(DownloadedFileType type,
                                  std::uint32_t crc) const; // 0xC7E0
     bool BuildDownloadedFileInfo(DownloadedFileType type, std::uint32_t crc,
-                                 DownloadedFileInfo* info);          // 0xC830
-    std::int32_t GetMissingFilesCount() const;                       // 0xC8E0
-    bool IsFileQueued(std::uint32_t count, std::uint32_t crc) const; // 0xC950
-    std::int32_t QueueMissingFiles();                                // 0xC9B0
-    bool IsKnownFileCrc(std::uint32_t crc) const;                    // 0xCA40
-    void CleanupCache();                                             // 0xCA90
-    void RefreshCache();                                             // 0xCBF0
+                                 DownloadedFileInfo* info);              // 0xC830
+    std::int32_t GetMissingFilesCount() const;                           // 0xC8E0
+    bool IsFileQueued(DownloadedFileType type, std::uint32_t crc) const; // 0xC950
+    std::int32_t QueueMissingFiles();                                    // 0xC9B0
+    bool IsKnownFileCrc(std::uint32_t crc) const;                        // 0xCA40
+    void CleanupCache();                                                 // 0xCA90
+    void RefreshCache();                                                 // 0xCBF0
 
     int ResolveSkin(int baseModel, std::uint32_t customModel);
     int ResolveObject(int customModel);
@@ -98,11 +98,10 @@ public:
     std::uint8_t GetObjectTimeOff(std::int32_t customModelId) const; // 0xCF40
 
     bool RemoveModelInfo(std::uint32_t index);                                                                     // 0xCFC0
-    bool PushBack(std::uint32_t index, CCustomModelInfo* modelInfo);                                               // 0xCFF0
+    bool PushBack(std::uint32_t index, const CCustomModelInfo* modelInfo);                                         // 0xCFF0
     void SetExpectedModelsCount(std::uint32_t count);                                                              // 0xD030
     void ProcessDownloadChunk(std::uint8_t state, std::uint32_t bufferSize, const void* data, std::uint32_t size); // 0xD070
     bool StartDownload(DownloadedFileType type, std::uint32_t crc);                                                // 0xD1C0
-    bool RequestFile(std::uint32_t modelIndex, DownloadedFileType type, std::uint32_t crc, std::uint32_t size);    // 0xD270
     void Process();                                                                                                // 0xD390
     std::int32_t SetModelInfo(std::uint32_t index,
                               const CCustomModelInfo* modelInfo); // 0xD550
@@ -113,22 +112,9 @@ private:
     void CancelDownloads();
     void PublishDownload(bool success);
     void ProcessTransfer();
-    void ResetDownloadState(); // 0xB990
     static void MakeSafeDirectoryName(char* destination, std::size_t capacity,
-                                      const char* source);                                  // 0xB9C0
-    void WriteDownloadedData(DownloadedFileInfo* info, const void* data, std::size_t size); // 0xBC30
-    std::int32_t FindDownloadSlot(std::uint32_t id) const;                                  // 0xBCA0
-    static std::size_t DownloadWriteCallback(void* data, std::size_t size, std::size_t count,
-                                             void* userData); // 0xBCD0
-    void InitializeDownloadSlots();                           // 0xBD10
-    bool AcquireDownloadSlot();                               // 0xBD40
-    void ReleaseDownloadSlot();                               // 0xBD90
-    std::uint32_t GetReadyDownloadSlotsCount() const;         // 0xBDE0
-    std::uint32_t GetCompletedDownloadSlotsCount() const;     // 0xBEB0
-    std::uint32_t GetActiveDownloadSlotsCount() const;        // 0xBF40
-    static std::uint32_t ParseFileCrc(const char* fileName);  // 0xC0B0
-    void FinishDownload(DownloadedFileInfo* info, std::uint32_t status,
-                        std::uint32_t result); // 0xC760
+                                      const char* source);   // 0xB9C0
+    static std::uint32_t ParseFileCrc(const char* fileName); // 0xC0B0
 
 private:
     CCustomModelsPool m_modelsPool{};
@@ -152,12 +138,8 @@ private:
     bool m_cacheReady{};
     bool m_cacheFailed{};
 
-    std::int32_t m_nDownloadState{};
     std::int32_t m_nVirtualWorld{};
     std::uint32_t m_nExpectedModelsCount{};
-    bool m_bModelListReady{};
-    bool m_bDownloadsFinished{};
-    bool m_bHttpSlotsEnabled{};
 
     DownloadedFileInfo* m_currentDownload{};
     std::shared_ptr<CHttpClient> m_httpClient;
@@ -168,5 +150,4 @@ private:
     bool m_downloadConfirmed{};
     std::array<std::uint8_t, 4096> m_downloadChunkBuffer{};
     std::size_t m_nDownloadChunkSize{};
-    std::array<DownloadSlot, 6> m_downloadSlots{};
 };

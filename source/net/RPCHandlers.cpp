@@ -4964,7 +4964,11 @@ void RPCHandlers::ModelInfo(RPCParameters* pParams)
     info.m_nTxdSize = txdSize;
     info.m_nTimeOn = timeOn;
     info.m_nTimeOff = timeOff;
-    const bool accepted = g_netGame->GetCustomModelsPool().Set(index, static_cast<std::uint32_t>(count), info);
+    auto& models = g_netGame->GetCustomModels();
+    if (static_cast<std::uint32_t>(count) > CCustomModelsPool::MAX_MODELS || index >= static_cast<std::uint32_t>(count) || static_cast<std::uint32_t>(count) < models.GetCount())
+        return;
+    models.SetExpectedModelsCount(static_cast<std::uint32_t>(count));
+    const bool accepted = models.SetModelInfo(index, &info) >= 0;
 #if defined(_DEBUG)
     Log("[dl:metadata] index=%u count=%d model=%d base=%d type=%u accepted=%d ready=%d", index, count, newId, baseId, type, accepted, g_netGame->GetCustomModelsPool().IsReady());
 #endif // _DEBUG

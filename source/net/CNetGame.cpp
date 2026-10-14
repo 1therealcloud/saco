@@ -2249,6 +2249,9 @@ bool CNetGame::RequestDffFile(std::uint32_t crc)
 {
     if (!g_DLClient || !m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
+    DownloadedFileInfo file{};
+    if (!m_customModels.BuildDownloadedFileInfo(DownloadedFileType::Dff, crc, &file))
+        return false;
     BitStream bs;
     bs.Write(crc);
     return m_pRakClient->RPC(&g_RequestDffFile, &bs, HIGH_PRIORITY, RELIABLE, 0, false);
@@ -2258,6 +2261,9 @@ bool CNetGame::RequestDffFile(std::uint32_t crc)
 bool CNetGame::RequestTxdFile(std::uint32_t crc)
 {
     if (!g_DLClient || !m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
+        return false;
+    DownloadedFileInfo file{};
+    if (!m_customModels.BuildDownloadedFileInfo(DownloadedFileType::Txd, crc, &file))
         return false;
     BitStream bs;
     bs.Write(crc);

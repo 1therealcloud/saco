@@ -237,6 +237,7 @@ void CCustomModels::Reset()
     m_failedLoads.clear();
     m_loadedModels.clear();
     m_modelsPool.Clear();
+    m_nExpectedModelsCount = 0;
     m_filesPool.Clear();
     m_cachedFiles.clear();
     m_nVirtualWorld = 0;
@@ -287,6 +288,51 @@ std::uint32_t CCustomModels::GetCount() const
 {
     return m_modelsPool.GetCount();
 }
+bool CCustomModels::ResizePool(std::uint32_t count)
+{
+    const auto revision = m_modelsPool.GetRevision();
+    if (!m_modelsPool.Resize(count))
+        return false;
+    m_nExpectedModelsCount = count;
+    if (m_modelsPool.GetRevision() != revision)
+        RefreshCache();
+    return true;
+}
+bool CCustomModels::ShrinkPool()
+{
+    auto count = GetCount();
+    while (count && !GetModelInfo(count - 1))
+        --count;
+    return ResizePool(count);
+}
+bool CCustomModels::RemoveModelInfo(std::uint32_t index)
+{
+    if (!m_modelsPool.Remove(index))
+        return false;
+    ShrinkPool();
+    RefreshCache();
+    return true;
+}
+bool CCustomModels::PushBack(std::uint32_t index, const CCustomModelInfo* info)
+{
+    return SetModelInfo(index, info) >= 0;
+}
+void CCustomModels::SetExpectedModelsCount(std::uint32_t count)
+{
+    if (count <= CCustomModelsPool::MAX_MODELS && count >= GetCount())
+        m_nExpectedModelsCount = count;
+}
+std::int32_t CCustomModels::SetModelInfo(std::uint32_t index, const CCustomModelInfo* info)
+{
+    if (!info || index >= CCustomModelsPool::MAX_MODELS)
+        return -1;
+    const auto count = std::max({GetCount(), m_nExpectedModelsCount, index + 1});
+    return m_modelsPool.Set(index, count, *info) ? static_cast<std::int32_t>(index) : -1;
+}
+std::int32_t CCustomModels::DeleteModelInfo(std::uint32_t index)
+{
+    return RemoveModelInfo(index) ? static_cast<std::int32_t>(index) : -1;
+}
 std::int32_t CCustomModels::FindModelByFile(DownloadedFileType type, std::uint32_t crc) const
 {
     if (!ValidType(type))
@@ -295,6 +341,38 @@ std::int32_t CCustomModels::FindModelByFile(DownloadedFileType type, std::uint32
         if (const auto* model = m_modelsPool.Get(i); model && Applies(*model, m_nVirtualWorld) && (type == DownloadedFileType::Dff ? model->m_nDffCrc : model->m_nTxdCrc) == crc)
             return static_cast<std::int32_t>(i);
     return -1;
+}
+bool CCustomModels::IsDffRequestPending(std::uint32_t crc) const
+{
+    return m_currentDownload && m_currentDownload->m_nType == DownloadedFileType::Dff && m_currentDownload->m_nExpectedCrc == crc;
+}
+bool CCustomModels::IsTxdRequestPending(std::uint32_t crc) const
+{
+    return m_currentDownload && m_currentDownload->m_nType == DownloadedFileType::Txd && m_currentDownload->m_nExpectedCrc == crc;
+}
+bool CCustomModels::IsFileQueued(DownloadedFileType type, std::uint32_t crc) const
+{
+    const auto* file = m_filesPool.Find(type, crc);
+    return file && file->m_state != DownloadState::Complete && file->m_state != DownloadState::Failed;
+}
+bool CCustomModels::BuildDownloadedFileInfo(DownloadedFileType type, std::uint32_t crc, DownloadedFileInfo* output)
+{
+    if (!output || !ValidType(type))
+        return false;
+    const auto* queued = m_filesPool.Find(type, crc);
+    const int index = queued ? static_cast<int>(queued->m_nModelIndex) : FindModelByFile(type, crc);
+    const auto* model = index >= 0 ? GetModelInfo(static_cast<std::uint32_t>(index)) : nullptr;
+    if (!model || !Applies(*model, m_nVirtualWorld) || (type == DownloadedFileType::Dff ? model->m_nDffCrc : model->m_nTxdCrc) != crc)
+        return false;
+    DownloadedFileInfo file{};
+    file.m_nType = type;
+    file.m_nExpectedCrc = crc;
+    file.m_nFileSize = type == DownloadedFileType::Dff ? model->m_nDffSize : model->m_nTxdSize;
+    file.m_nModelIndex = static_cast<std::uint32_t>(index);
+    file.m_nRunningCrc = 0xFFFFFFFFu;
+    file.m_bProgressDirty = true;
+    *output = std::move(file);
+    return true;
 }
 bool CCustomModels::DoesDffExist(std::uint32_t crc)
 {
@@ -532,19 +610,15 @@ void CCustomModels::Process()
     }
 }
 
-DownloadedFileInfo* CCustomModels::GetNextDownload() const
+DownloadedFileInfo* CCustomModels::GetNextDownload()
 {
-    if (!IsCacheReady() || m_currentDownload)
-        return nullptr;
-    for (std::uint32_t i = 0; i < m_filesPool.GetCount(); ++i)
-        if (auto* file = m_filesPool.Get(i); file->m_state == DownloadState::Queued)
-            return file;
-    return nullptr;
+    return IsCacheReady() && !m_currentDownload ? m_filesPool.GetNextQueued() : nullptr;
 }
+
 bool CCustomModels::BeginRequest(DownloadedFileType type, std::uint32_t crc)
 {
     auto* file = m_filesPool.Find(type, crc);
-    if (!IsCacheReady() || m_currentDownload || !file || file->m_state != DownloadState::Queued)
+    if (!IsCacheReady() || m_currentDownload || !IsFileQueued(type, crc) || file->m_state != DownloadState::Queued)
         return false;
     m_currentDownload = file;
     file->m_state = DownloadState::Requested;
@@ -579,7 +653,10 @@ void CCustomModels::CancelDownloads()
     m_downloadAcknowledged = m_downloadConfirmed = false;
     for (std::uint32_t i = 0; i < GetCount(); ++i)
         if (auto* model = GetModelInfo(i))
+        {
             model->m_bDffRequestPending = model->m_bTxdRequestPending = false;
+            model->m_bDffQueued = model->m_bTxdQueued = false;
+        }
 }
 bool CCustomModels::StartDownload(DownloadedFileType type, std::uint32_t crc)
 {

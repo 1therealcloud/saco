@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <memory>
 #include <vector>
+#include <unordered_set>
 
 enum class CustomModelType : std::uint8_t
 {
@@ -50,6 +51,8 @@ struct CCustomModelsPool
     static constexpr std::uint32_t MAX_MODELS = 65536;
     static constexpr std::uint32_t MAX_FILE_SIZE = 64u * 1024u * 1024u;
     bool Set(std::uint32_t index, std::uint32_t count, const CCustomModelInfo& info);
+    bool Resize(std::uint32_t count);
+    bool Remove(std::uint32_t index);
     CCustomModelInfo* Get(std::uint32_t index) const;
     std::uint32_t GetCount() const;
     std::uint32_t GetReceivedCount() const;
@@ -60,6 +63,8 @@ struct CCustomModelsPool
 private:
     // Empty slots preserve server indices while metadata arrives out of order.
     std::vector<std::unique_ptr<CCustomModelInfo>> m_models{};
+    // An intentionally deleted slot does not wait for another metadata packet.
+    std::unordered_set<std::uint32_t> m_removedSlots;
     std::uint32_t m_receivedCount{};
     std::uint64_t m_revision{};
 };
