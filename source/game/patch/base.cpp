@@ -103,6 +103,9 @@ namespace
 
         {0x4E8410, RET},                            // disables CAERadioTrackManager::CheckForMissionStatsChanges
         {0x50547A, {0xE9, 0x13, 0x01, 0x00, 0x00}}, // skips both ambient wind sounds in CAEWeatherAudioEntity::Service
+
+        {0x53C159, {0x90, 0x90, 0x90, 0x90, 0x90}}, // disables CPlantMgr::Update
+        {0x5DBAED, {0x33}},                         // disables CPlantMgr::Render
     };
 }
 
