@@ -1511,10 +1511,8 @@ bool game::hooks::RegisterCustomModelPlugins()
                                  : -1;
     instances = savedInstances;
 #if defined(_DEBUG)
-    static bool reported{};
-    if (!reported || offset < 0 || streamOffset < 0)
-        Log("[dl:native] collision plugin: offset=%d stream=%d", offset, streamOffset);
-    reported = true;
+    if (offset < 0 || streamOffset < 0)
+        Log("[dl:native] collision plugin registration failed: offset=%d stream=%d", offset, streamOffset);
 #endif // _DEBUG
     return offset >= 0 && streamOffset >= 0;
 }

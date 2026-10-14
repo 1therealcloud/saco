@@ -114,9 +114,6 @@ namespace game::patch
 
         installed = true;
 
-#if defined(_DEBUG)
-        Log("[game::patch] installed");
-#endif // _DEBUG
         return true;
     }
 }

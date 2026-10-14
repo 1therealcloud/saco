@@ -235,10 +235,6 @@ namespace game::patch::modelinfo
             }
 
             g_signedInstalled = true;
-#if defined(_DEBUG)
-            Log("[game::patch::modelinfo] signed CModelInfo installed: variant=%u, sites=%u, table=0x%08X, ids=[%d,%d]", plan.variant,
-                static_cast<unsigned>(plan.references.size()), relocated, kSignedMinId, kSignedMaxId);
-#endif // _DEBUG
             return true;
         }
 

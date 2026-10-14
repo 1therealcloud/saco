@@ -73,19 +73,11 @@ namespace d3d9hook
                 render::LostUiDevice(device);
             }
 
-            if (device == g_device)
-            {
-#if defined(_DEBUG)
-                Log("[d3d9hook:reset] begin, lost=%d", g_deviceLost);
-#endif // _DEBUG
-            }
             const HRESULT result = g_reset(device, parameters);
-            if (device == g_device)
-            {
 #if defined(_DEBUG)
-                Log("[d3d9hook:reset] result=%08X", static_cast<unsigned>(result));
+            if (device == g_device && FAILED(result))
+                Log("[d3d9hook:reset] failed: result=%08X", static_cast<unsigned>(result));
 #endif // _DEBUG
-            }
             if (device == g_device && SUCCEEDED(result) && parameters)
             {
                 render::ResetUiDevice(device, *parameters);
@@ -177,9 +169,6 @@ namespace d3d9hook
         }
 
         g_installed = true;
-#if defined(_DEBUG)
-        Log("[d3d9hook] installed");
-#endif // _DEBUG
         return true;
     }
 

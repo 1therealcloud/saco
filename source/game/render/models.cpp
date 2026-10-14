@@ -328,9 +328,6 @@ namespace game::render::models
             reinterpret_cast<void(__cdecl*)(void*)>(0x40FC40)(collision);
             return nullptr;
         }
-#if defined(_DEBUG)
-        Log("[dl:native] COL3 attached: id=%d bytes=%d", g_loadingModel, length);
-#endif // _DEBUG
         return stream;
     }
     bool unload_custom(int model)
@@ -440,10 +437,6 @@ namespace game::render::models
                 Model clump;
                 if (scope && input.stream && RwStreamFindChunk(input.stream, rwID_CLUMP, nullptr, nullptr))
                     clump.reset(RpClumpStreamRead(input.stream));
-#if defined(_DEBUG)
-                Log("[dl:native] DFF: id=%d skin=%d dictionary=%d stream=%p clump=%p valid=%d", model, skin, static_cast<bool>(scope), input.stream, clump.get(),
-                    clump ? (skin ? ValidSkin(clump.get()) : ValidObject(clump.get(), info)) : false);
-#endif // _DEBUG
                 if (clump && skin && ValidSkin(clump.get()))
                 {
                     if (ModelInfo::AttachPedClump(model, clump.get()))
@@ -463,7 +456,8 @@ namespace game::render::models
                 }
             }
 #if defined(_DEBUG)
-            Log("[dl:native] result: id=%d loaded=%d references=%d", model, loaded, ModelInfo::GetReferences(model));
+            if (!loaded)
+                Log("[dl:native] model loading failed: id=%d skin=%d references=%d", model, skin, ModelInfo::GetReferences(model));
 #endif // _DEBUG
             if (!loaded)
                 unload_custom(model);

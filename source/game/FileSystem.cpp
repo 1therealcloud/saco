@@ -424,9 +424,6 @@ namespace filesystem
         }
 
         g_installed = true;
-#if defined(_DEBUG)
-        Log("[filesystem] installed");
-#endif // _DEBUG
         return true;
     }
 }

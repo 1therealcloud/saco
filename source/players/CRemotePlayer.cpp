@@ -41,9 +41,6 @@ namespace
         bool taskObserved = false;
         std::uint32_t lastAnimation = 0;
         D3DCOLOR markerColor = 0;
-#if defined(_DEBUG)
-        CRemotePlayer::TICK lastVehicleSnapLog = 0;
-#endif
     };
 
     std::unordered_map<CRemotePlayer*, RuntimeState> g_runtime;
@@ -631,16 +628,6 @@ void CRemotePlayer::UpdateIncarSpeedAndPosition()
     const float snapZ = subtype == 3 || subtype == 4 || subtype == 5 ? INCAR_AIR_WATER_SNAP_Z : INCAR_SNAP_Z;
     if (m_positionDifference.x > INCAR_SNAP_XY || m_positionDifference.y > INCAR_SNAP_XY || m_positionDifference.z > snapZ)
     {
-#if defined(_DEBUG)
-        auto& runtime = Runtime(this);
-        const TICK now = GetTickCount();
-        if (now - runtime.lastVehicleSnapLog >= 1000)
-        {
-            runtime.lastVehicleSnapLog = now;
-            Log("[sync:vehicle-snap] player=%u vehicle=%u error=%.3f/%.3f/%.3f speed=%.3f/%.3f/%.3f", static_cast<unsigned>(m_nId), static_cast<unsigned>(m_nVehicleId),
-                m_positionDifference.x, m_positionDifference.y, m_positionDifference.z, m_incarTargetSpeed.x, m_incarTargetSpeed.y, m_incarTargetSpeed.z);
-        }
-#endif
         matrix.GetPosition() = m_incarTargetPosition;
         m_pVehicle->SetMatrix(matrix);
         m_pVehicle->SetSpeed(m_incarTargetSpeed);

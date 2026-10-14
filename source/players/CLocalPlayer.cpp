@@ -1231,9 +1231,6 @@ void CLocalPlayer::EnterVehicle(int vehicle, BOOL passenger)
         m_nLastVehicle = id;
         m_vehicleEntryPending = true;
         m_vehicleTransitionStarted = g_game ? static_cast<TICK>(g_game->GetTimer()) : GetTickCount();
-#if defined(_DEBUG)
-        Log("[sync:enter] vehicle=%u passenger=%d", static_cast<unsigned>(id), passenger != FALSE);
-#endif
     }
 }
 

@@ -172,9 +172,6 @@ static bool InitializeGameplay(IDirect3DDevice9* device)
 #endif // _DEBUG
             ExitProcess(1);
         }
-#if defined(_DEBUG)
-        Log("[inputhandler] installed");
-#endif // _DEBUG
     });
 
     return !g_settings.m_bDebugMode || Debug::Initialize();

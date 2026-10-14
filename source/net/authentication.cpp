@@ -274,9 +274,6 @@ namespace authentication
         for (std::size_t i = 0; i < kLogoAuthSize; ++i)
             logoMask ^= logo[i];
 
-#if defined(_DEBUG)
-        Log("[authentication] logo mask=%02X, string length=%zu", logoMask, challenge.size());
-#endif // _DEBUG
 
         // FileData() caches the decrypted file; do not keep logo.png cached.
         archive.UnloadFile(logoId);

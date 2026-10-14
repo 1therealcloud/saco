@@ -225,24 +225,15 @@ namespace scm
         switch (type)
         {
             case EventType::Paintjob:
-#if defined(_DEBUG)
-                Log("[scm:09c6] paintjob: vehicle=%u, paintjob=%d, param3=%u", param1, static_cast<std::int32_t>(param2), param3);
-#endif // _DEBUG
                 break;
 
             case EventType::CarComponent:
-#if defined(_DEBUG)
-                Log("[scm:09c6] component: vehicle=%u, model=%u, param3=%u", param1, param2, param3);
-#endif // _DEBUG
                 break;
 
             case EventType::CarColor:
             {
                 const auto primary = static_cast<std::uint8_t>(param2);
                 const auto secondary = static_cast<std::uint8_t>(param3);
-#if defined(_DEBUG)
-                Log("[scm:09c6] color: vehicle=%u, primary=%u, secondary=%u", param1, static_cast<unsigned>(primary), static_cast<unsigned>(secondary));
-#endif // _DEBUG
 
                 auto* pool = *reinterpret_cast<std::uint8_t**>(0xB74494);
                 // gta's GetAt checks the generation but does not check the slot bounds
@@ -269,17 +260,11 @@ namespace scm
             }
 
             case EventType::EnterExitModShop:
-#if defined(_DEBUG)
-                Log("[scm:09c6] modshop: vehicle=%u, state=%s, param2=%u, param3=%u", param1, param2 ? "enter" : "exit", param2, param3);
-#endif // _DEBUG                                                                                                                                                                   \
-    // r5 caches the vehicle colors on modshop exit
+                // r5 caches the vehicle colors on modshop exit
                 break;
 
             default:
                 // r5 ignores other types, including CASHWIN's event 5
-#if defined(_DEBUG)
-                Log("[scm:09c6] ignored: type=%d, param1=%u, param2=%u, param3=%u", static_cast<std::int32_t>(type), param1, param2, param3);
-#endif // _DEBUG
                 break;
         }
     }
@@ -319,10 +304,6 @@ namespace scm
 
         if (!game::hooks::InstallScmHooks())
             return false;
-
-#if defined(_DEBUG)
-        Log("[scm] installed");
-#endif // _DEBUG
 
         return true;
     }

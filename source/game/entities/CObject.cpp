@@ -1025,7 +1025,8 @@ void CObject::SetMaterial(int model, int index, const char* txd, const char* tex
     {
         replacement = game::render::textures::read(ModelInfo::GetTextureSlot(model), texture).release();
 #if defined(_DEBUG)
-        Log("[dl:material] model=%d slot=%d texture=%s found=%d", model, ModelInfo::GetTextureSlot(model), texture, replacement != nullptr);
+        if (!replacement)
+            Log("[dl:material] texture unavailable: model=%d slot=%d texture=%s", model, ModelInfo::GetTextureSlot(model), texture);
 #endif // _DEBUG
     }
     else if (model > 0)
