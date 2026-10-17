@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <filesystem>
 #include <memory>
 
 #include <array>
@@ -116,7 +117,7 @@ namespace saa
         // the archive is accepted if its signature matches any of trustedKeys,
         // and that key set's tea key then decrypts the entry table.
         // a bad signature counts as a failure too
-        bool Open(const std::string& path, const std::vector<KeySet>& trustedKeys, SignatureVerifier verifier = DefaultSignatureVerifier());
+        bool Open(const std::filesystem::path& path, const std::vector<KeySet>& trustedKeys, SignatureVerifier verifier = DefaultSignatureVerifier());
         bool OpenMemory(std::vector<std::uint8_t> image, const std::vector<KeySet>& trustedKeys, SignatureVerifier verifier = DefaultSignatureVerifier());
         void Close();
         bool IsOpen() const

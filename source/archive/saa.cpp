@@ -225,10 +225,10 @@ namespace saa
     }
 #endif
 
-    bool Archive::Open(const std::string& path, const std::vector<KeySet>& trustedKeys, SignatureVerifier verifier)
+    bool Archive::Open(const std::filesystem::path& path, const std::vector<KeySet>& trustedKeys, SignatureVerifier verifier)
     {
 #if defined(_DEBUG)
-        std::printf("[saa::open] path=%s\n", path.c_str());
+        std::printf("[saa::open] path=%s\n", reinterpret_cast<const char*>(path.u8string().c_str()));
 #endif // _DEBUG
 
         Close();

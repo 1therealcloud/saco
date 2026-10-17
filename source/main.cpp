@@ -337,13 +337,23 @@ DWORD WINAPI InitializeThread(LPVOID)
         return 1;
     }
 
+    // gta and plugins can change the working directory during startup
+    std::wstring executablePath(32768, L'\0');
+    const auto pathLength = GetModuleFileNameW(nullptr, executablePath.data(), static_cast<DWORD>(executablePath.size()));
+    if (!pathLength || pathLength >= executablePath.size())
+        return 1;
+    executablePath.resize(pathLength);
+    const auto archivePath = std::filesystem::path(executablePath).parent_path() / L"samp.saa";
+
     // open saa archive with original keys
-    if (!g_archive.Open("samp.saa", keys))
+    if (!g_archive.Open(archivePath, keys))
     {
 #if defined(_DEBUG)
         Log("failed to load samp.saa!");
 #endif // _DEBUG
-        return 1;
+        const auto message = L"Failed to load samp.saa:\n" + archivePath.wstring();
+        MessageBoxW(nullptr, message.c_str(), L"SA:MP - Initialization Error", MB_OK | MB_ICONERROR);
+        ExitProcess(1);
     }
 
     // hook filesystem
