@@ -113,15 +113,14 @@ BOOL CAudioStream::Reset()
     bool proxyOff = false;
     if (m_config)
         m_config->GetParam(CConfig::PARAM_AUDIO_PROXY_OFF, proxyOff);
-    BASS_SetConfigPtr(BASS_CONFIG_NET_AGENT, AUDIOSTREAM_USERAGENT);
+    BASS_SetConfigPtr(BASS_CONFIG_NET_AGENT, const_cast<char*>(AUDIOSTREAM_USERAGENT));
     // bass uses the system proxy for an empty string; nullptr disables it
-    BASS_SetConfigPtr(BASS_CONFIG_NET_PROXY, proxyOff ? nullptr : "");
+    BASS_SetConfigPtr(BASS_CONFIG_NET_PROXY, proxyOff ? nullptr : const_cast<char*>(""));
     BASS_SetConfig(BASS_CONFIG_NET_PLAYLIST, 1);
-    BASS_SetConfig(BASS_CONFIG_NET_TIMEOUT, 10000);
-    // the current SDK omits EAX from its import library, but the DLL retains the R5 export
-    const auto setEax = reinterpret_cast<BOOL(WINAPI*)(int, float, float, float)>(GetProcAddress(GetModuleHandleW(L"bass.dll"), "BASS_SetEAXParameters"));
-    if (setEax)
-        setEax(-1, 0.0f, -1.0f, -1.0f);
+    // 2.4.7 cannot cancel a pending StreamCreateURL; bound connection/read waits
+    BASS_SetConfig(BASS_CONFIG_NET_TIMEOUT, 2000);
+    BASS_SetConfig(BASS_CONFIG_NET_READTIMEOUT, 2000);
+    BASS_SetEAXParameters(-1, 0.0f, -1.0f, -1.0f);
     m_bInitialized = true;
     ControlGameRadio();
     Environment environment;
@@ -140,20 +139,8 @@ BOOL CAudioStream::Stop(bool wait)
     const bool playing = state.playing.load();
     state.stop = true;
     state.wake.notify_all();
-    BASS_StreamCancel(&state);
     if (wait && state.worker.joinable())
-    {
-        // cancellation can race the worker entering StreamCreateURL
-        while (state.playing.load())
-        {
-            BASS_StreamCancel(&state);
-            std::unique_lock lock(state.mutex);
-            state.wake.wait_for(lock, std::chrono::milliseconds(2), [&] {
-                return !state.playing.load();
-            });
-        }
         state.worker.join();
-    }
     return m_bInitialized && playing ? TRUE : FALSE;
 }
 
