@@ -160,7 +160,7 @@ void CPlayerTags::DrawLabelAt(LONG x, LONG y, const char* text, D3DCOLOR color, 
     rect.bottom = y;
 
     // Original: format 0x100 (DT_NOCLIP), always with the SA-MP text shadow.
-    g_fonts->DrawLittleText(text, rect, DT_NOCLIP, color, true);
+    g_fonts->DrawLittleText(text, rect, DT_NOCLIP, color | 0xFF000000u, true);
 
     if (!drawStatus || status != 2 || !g_deathWindow)
         return;
