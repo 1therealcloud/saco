@@ -9,6 +9,7 @@
 #include <stdafx.h>
 
 #include "CFonts.h"
+#include "FontFallback.h"
 #include "gui/CGui.h"
 
 #include "config/CConfig.h"
@@ -64,12 +65,12 @@ namespace
         return static_cast<unsigned>(value - 'a' + 10);
     }
 
-    bool IsLineBreak(unsigned char value)
+    bool IsLineBreak(char32_t value)
     {
         return value == '\n' || value == '\r';
     }
 
-    bool IsSpace(unsigned char value)
+    bool IsSpace(char32_t value)
     {
         return value == ' ' || value == '\t';
     }
@@ -95,6 +96,17 @@ CFont::CFont(IDirect3DDevice9* device, int height, int width, int weight, const 
     if (m_device)
         m_device->AddRef();
 
+    if (m_codePage == CP_UTF8 && m_charSet != SYMBOL_CHARSET)
+    {
+        for (char32_t c = 0; c < 128; ++c)
+            m_characters.push_back(c);
+        for (char32_t c = 0x400; c < 0x500; ++c)
+            m_characters.push_back(c);
+        m_characters.push_back(0xFFFD);
+    }
+    else
+        for (unsigned c = 0; c < 256; ++c)
+            m_characters.push_back(ByteToWide(static_cast<unsigned char>(c)));
     if (!CreateFontObject() || !CreateAtlas())
     {
         ReleaseAtlas();
@@ -200,7 +212,8 @@ bool CFont::CreateAtlas()
     if (!m_dc || !m_font || !m_device)
         return false;
 
-    std::array<RasterGlyph, 256> rasters{};
+    std::vector<RasterGlyph> rasters(m_characters.size());
+    FontFallback fallback(m_dc);
 
     MAT2 matrix{};
     matrix.eM11.value = 1;
@@ -212,16 +225,17 @@ bool CFont::CreateAtlas()
     for (unsigned i = 0; i < rasters.size(); ++i)
     {
         RasterGlyph& raster = rasters[i];
-        const wchar_t character = ByteToWide(static_cast<unsigned char>(i));
+        const wchar_t character = static_cast<wchar_t>(m_characters[i] <= 0xFFFF ? m_characters[i] : 0xFFFD);
         wchar_t rasterCharacter = character;
+        HDC glyphDc = fallback.GetDC(character);
 
         GLYPHMETRICS metrics{};
-        DWORD size = GetGlyphOutlineW(m_dc, rasterCharacter, GGO_GRAY8_BITMAP, &metrics, 0, nullptr, &matrix);
+        DWORD size = GetGlyphOutlineW(glyphDc, rasterCharacter, GGO_GRAY8_BITMAP, &metrics, 0, nullptr, &matrix);
 
         if (size == GDI_ERROR && rasterCharacter != L'?')
         {
             rasterCharacter = L'?';
-            size = GetGlyphOutlineW(m_dc, rasterCharacter, GGO_GRAY8_BITMAP, &metrics, 0, nullptr, &matrix);
+            size = GetGlyphOutlineW(glyphDc, rasterCharacter, GGO_GRAY8_BITMAP, &metrics, 0, nullptr, &matrix);
         }
 
         if (size == GDI_ERROR)
@@ -243,7 +257,7 @@ bool CFont::CreateAtlas()
         raster.pitch = (static_cast<UINT>(raster.width) + 3u) & ~3u;
         raster.bitmap.resize(size);
 
-        if (GetGlyphOutlineW(m_dc, rasterCharacter, GGO_GRAY8_BITMAP, &metrics, size, raster.bitmap.data(), &matrix) == GDI_ERROR)
+        if (GetGlyphOutlineW(glyphDc, rasterCharacter, GGO_GRAY8_BITMAP, &metrics, size, raster.bitmap.data(), &matrix) == GDI_ERROR)
         {
             raster.bitmap.clear();
             raster.width = 0;
@@ -279,7 +293,7 @@ bool CFont::CreateAtlas()
     UINT rowHeight = 0;
     UINT requiredHeight = 1;
 
-    std::array<POINT, 256> positions{};
+    std::vector<POINT> positions(m_characters.size());
 
     for (unsigned i = 0; i < rasters.size(); ++i)
     {
@@ -309,19 +323,20 @@ bool CFont::CreateAtlas()
     if (atlasHeight > caps.MaxTextureHeight)
         return false;
 
-    ReleaseAtlas();
-
-    if (FAILED(m_device->CreateTexture(atlasWidth, atlasHeight, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &m_atlas, nullptr)))
+    IDirect3DTexture9* atlas = nullptr;
+    if (FAILED(m_device->CreateTexture(atlasWidth, atlasHeight, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &atlas, nullptr)))
     {
         return false;
     }
 
     D3DLOCKED_RECT locked{};
-    if (FAILED(m_atlas->LockRect(0, &locked, nullptr, 0)))
+    if (FAILED(atlas->LockRect(0, &locked, nullptr, 0)))
     {
-        ReleaseAtlas();
+        SafeRelease(atlas);
         return false;
     }
+    ReleaseAtlas();
+    m_atlas = atlas;
 
     for (UINT row = 0; row < atlasHeight; ++row)
     {
@@ -334,7 +349,7 @@ bool CFont::CreateAtlas()
     for (unsigned i = 0; i < rasters.size(); ++i)
     {
         const RasterGlyph& raster = rasters[i];
-        Glyph& glyph = m_glyphs[i];
+        Glyph& glyph = m_glyphs[m_characters[i]];
 
         glyph = {};
         glyph.valid = raster.valid;
@@ -392,13 +407,44 @@ bool CFont::CreateAtlas()
     return true;
 }
 
-int CFont::GetKerning(unsigned char left, unsigned char right) const
+const CFont::Glyph& CFont::GetGlyph(char32_t value) const
+{
+    auto found = m_glyphs.find(value);
+    if (found == m_glyphs.end())
+        found = m_glyphs.find(0xFFFD);
+    static const Glyph empty{};
+    return found == m_glyphs.end() ? empty : found->second;
+}
+
+void CFont::EnsureGlyphs(const char* value, int count)
+{
+    if (!value || m_codePage != CP_UTF8 || m_charSet == SYMBOL_CHARSET)
+        return;
+    const std::string_view input(value, count < 0 ? std::strlen(value) : strnlen_s(value, static_cast<std::size_t>(count)));
+    bool changed = false;
+    for (std::size_t i = 0; i < input.size() && m_characters.size() < 4096;)
+    {
+        const auto character = text::Decode(input, i);
+        if (!m_glyphs.contains(character) && std::find(m_characters.begin(), m_characters.end(), character) == m_characters.end())
+        {
+            m_characters.push_back(character);
+            changed = true;
+        }
+    }
+    if (changed)
+    {
+        FlushBatch();
+        CreateAtlas();
+    }
+}
+
+int CFont::GetKerning(char32_t left, char32_t right) const
 {
     ZoneScoped;
-    if (!left || !right || m_kerning.empty())
+    if (!left || !right || left > 0xFFFF || right > 0xFFFF || m_kerning.empty())
         return 0;
 
-    const std::uint32_t key = (static_cast<std::uint32_t>(ByteToWide(left)) << 16) | static_cast<std::uint32_t>(ByteToWide(right));
+    const std::uint32_t key = (static_cast<std::uint32_t>(left) << 16) | static_cast<std::uint32_t>(right);
 
     const auto it = m_kerning.find(key);
     return it != m_kerning.end() ? it->second : 0;
@@ -476,6 +522,8 @@ void CFont::BuildStyledText(const char* text, int count, D3DCOLOR baseColor, boo
 
     if (length > kMaxTextLength)
         return;
+    if (m_codePage == CP_UTF8 && m_charSet != SYMBOL_CHARSET)
+        length = text::Boundary(text, length);
 
     output.reserve(length);
 
@@ -493,10 +541,12 @@ void CFont::BuildStyledText(const char* text, int count, D3DCOLOR baseColor, boo
         }
 
         StyledChar item{};
-        item.value = static_cast<unsigned char>(text[i]);
+        if (m_codePage == CP_UTF8 && m_charSet != SYMBOL_CHARSET)
+            item.value = text::Decode(std::string_view(text, length), i);
+        else
+            item.value = ByteToWide(static_cast<unsigned char>(text[i++]));
         item.color = currentColor;
         output.push_back(item);
-        ++i;
     }
 }
 
@@ -504,11 +554,11 @@ float CFont::MeasureRange(const std::vector<StyledChar>& text, std::size_t begin
 {
     ZoneScoped;
     float width = 0.0f;
-    unsigned char previous = 0;
+    char32_t previous = 0;
 
     for (std::size_t i = begin; i < end; ++i)
     {
-        unsigned char value = text[i].value;
+        char32_t value = text[i].value;
 
         if (value == '\r')
             continue;
@@ -530,7 +580,7 @@ float CFont::MeasureRange(const std::vector<StyledChar>& text, std::size_t begin
             continue;
         }
 
-        const Glyph& glyph = m_glyphs[value];
+        const Glyph& glyph = GetGlyph(value);
         if (!glyph.valid)
             continue;
 
@@ -561,7 +611,7 @@ void CFont::BuildLines(const std::vector<StyledChar>& text, float maxWidth, DWOR
     std::size_t lineStart = 0;
     std::size_t i = 0;
     float runningWidth = 0.0f;
-    unsigned char previous = 0;
+    char32_t previous = 0;
 
     while (i < text.size())
     {
@@ -588,16 +638,16 @@ void CFont::BuildLines(const std::vector<StyledChar>& text, float maxWidth, DWOR
 
         if (wordBreak)
         {
-            const unsigned char value = text[i].value;
+            const char32_t value = text[i].value;
             if (value == '\t')
             {
                 const int tabWidth = std::max(1, m_spaceAdvance * kTabSpaces);
                 runningWidth = static_cast<float>((static_cast<int>(std::floor(runningWidth)) / tabWidth + 1) * tabWidth);
                 previous = 0;
             }
-            else if (m_glyphs[value].valid)
+            else if (GetGlyph(value).valid)
             {
-                runningWidth += static_cast<float>((previous ? GetKerning(previous, value) : 0) + m_glyphs[value].advance);
+                runningWidth += static_cast<float>((previous ? GetKerning(previous, value) : 0) + GetGlyph(value).advance);
                 previous = value;
             }
             const float width = std::max(0.0f, runningWidth);
@@ -649,6 +699,7 @@ int CFont::BuildVertices(const char* text, int count, RECT rect, DWORD format, D
                          SIZE* measured) const
 {
     ZoneScoped;
+    const_cast<CFont*>(this)->EnsureGlyphs(text, count);
     if (!text || std::strlen(text) > kMaxTextLength)
         return BuildVerticesUncached(text, count, rect, format, color, useColorTags, offsetX, offsetY, vertices, measured);
     const auto length = count < 0 ? std::strlen(text) : std::min<std::size_t>(count, std::strlen(text));
@@ -745,11 +796,11 @@ int CFont::BuildVerticesUncached(const char* text, int count, RECT rect, DWORD f
 
         const float lineTop = startY + static_cast<float>(lineIndex * m_lineHeight);
         const float baseline = lineTop + static_cast<float>(m_ascent);
-        unsigned char previous = 0;
+        char32_t previous = 0;
 
         for (std::size_t i = line.begin; i < line.end; ++i)
         {
-            unsigned char value = styled[i].value;
+            char32_t value = styled[i].value;
 
             if (value == '\r')
                 continue;
@@ -772,7 +823,7 @@ int CFont::BuildVerticesUncached(const char* text, int count, RECT rect, DWORD f
                 continue;
             }
 
-            const Glyph& glyph = m_glyphs[value];
+            const Glyph& glyph = GetGlyph(value);
             if (!glyph.valid)
                 continue;
 
@@ -1114,7 +1165,6 @@ int CFont::SubmitVertices(const std::vector<Vertex>& vertices, const RECT* clipR
     {
         const UINT count = static_cast<UINT>(std::min<std::size_t>(16384, vertices.size() - begin));
         result = m_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, static_cast<INT>(firstVertex + begin), 0, count, 0, count / 2);
-
     }
 
     RestoreState(state);

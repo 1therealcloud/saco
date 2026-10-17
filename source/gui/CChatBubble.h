@@ -30,13 +30,13 @@ public:
 
     struct Player
     {
-        BOOL m_bExists;        // 0x000
-        char m_szText[256];    // 0x004
-        int m_creationTick;    // 0x104
-        int m_lifeSpan;        // 0x108
-        D3DCOLOR m_color;      // 0x10C, AARRGGBB with alpha forced to FF by Add()
-        float m_fDrawDistance; // 0x110
-        int m_nMaxLineLength;  // 0x114, R5 actually stores the wrapped line count here
+        BOOL m_bExists;
+        char m_szText[MAX_TEXT_LENGTH * 4 + 128];
+        int m_creationTick;
+        int m_lifeSpan;
+        D3DCOLOR m_color;
+        float m_fDrawDistance;
+        int m_nMaxLineLength;
     };
 
 public:

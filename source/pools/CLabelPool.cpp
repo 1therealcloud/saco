@@ -13,6 +13,7 @@
 #include "game/CGame.h"
 
 #include "CLabelPool.h"
+#include "utils/TextEncoding.inl"
 
 #include "gui/CLabel.h"
 #include "net/CNetGame.h"
@@ -42,16 +43,14 @@ namespace
             return 0;
 
         char buffer[kR5KeyBufferSize]{};
-        std::memcpy(buffer, text, length + 1);
-
+        const auto encoded = text::ToServer(text);
+        std::memcpy(buffer, encoded.c_str(), encoded.size() + 1);
         CGame::ExpandControlKeys(buffer);
-
-        const std::size_t expandedLength = std::strlen(buffer);
-        if (expandedLength > maxLength)
+        const auto expanded = text::FromServer(buffer);
+        if (expanded.size() > maxLength)
             return 0;
-
-        std::memcpy(text, buffer, expandedLength + 1);
-        return expandedLength;
+        std::memcpy(text, expanded.c_str(), expanded.size() + 1);
+        return expanded.size();
     }
 
     D3DCOLOR ToD3DColor(D3DCOLOR rgba)

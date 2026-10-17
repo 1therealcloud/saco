@@ -7,6 +7,7 @@
  */
 
 #include <stdafx.h>
+#include "utils/TextEncoding.inl"
 
 #include <new>
 
@@ -741,7 +742,6 @@ CNetGame::CNetGame(const char* hostAddress, int port, const char* nick, const ch
                   _TRUNCATE);                                          // copy m_szHostAddress -> hostAddress
     strncpy_s(m_szHostname, sizeof(m_szHostname), "SA-MP", _TRUNCATE); // set default server name
 
-
     // initialize sync buffers
     KeyStuff::Initialize();
     AimStuff::Initialize();
@@ -902,7 +902,6 @@ void CNetGame::Connect()
     ZoneScoped;
     if (!m_pRakClient || !m_szHostAddress[0] || m_nPort < 1 || m_nPort > 65535)
         return;
-
 
     char message[320]{};
     sprintf_s(message, "Connecting to %s:%d...", m_szHostAddress, m_nPort);
@@ -1835,13 +1834,14 @@ bool CNetGame::ChatMessage(const char* message)
         return false;
     if (!message)
         return false;
-    const auto length = std::strlen(message);
+    const auto encoded = text::ToServer(message);
+    const auto length = encoded.size();
     if (length > 255)
         return false;
     BitStream bs;
     bs.Write(static_cast<std::uint8_t>(length));
     if (length)
-        bs.Write(message, static_cast<int>(length));
+        bs.Write(encoded.data(), static_cast<int>(length));
     return m_pRakClient->RPC(&g_ChatMessage, &bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, false);
 }
 
@@ -1874,13 +1874,14 @@ bool CNetGame::SendCommand(const char* text)
     if (!m_pRakClient || !text)
         return false;
 
-    const auto length = static_cast<std::uint32_t>(std::strlen(text));
+    const auto encoded = text::ToServer(text);
+    const auto length = static_cast<std::uint32_t>(encoded.size());
 
     BitStream bs;
 
     bs.Write(length);
 
-    bs.Write(text, static_cast<int>(length));
+    bs.Write(encoded.data(), static_cast<int>(length));
 
     return m_pRakClient->RPC(&g_SendCommand, &bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, false);
 }
@@ -1903,15 +1904,15 @@ bool CNetGame::DialogResponse(std::uint16_t dialogId, bool response, std::int16_
     if (!m_pRakClient || !m_pRakClient->IsConnected() || m_nGameState != GAME_MODE_CONNECTED)
         return false;
 
-    const char* text = inputText ? inputText : "";
-    const auto length = static_cast<std::uint8_t>(std::min<std::size_t>(std::strlen(text), 255));
+    const auto encoded = text::ToServer(inputText ? inputText : "");
+    const auto length = static_cast<std::uint8_t>(std::min<std::size_t>(encoded.size(), 255));
 
     BitStream bs;
     bs.Write(dialogId);
     bs.Write(static_cast<std::uint8_t>(response));
     bs.Write(static_cast<std::uint16_t>(listItem));
     bs.Write(length);
-    bs.Write(text, static_cast<int>(length));
+    bs.Write(encoded.data(), static_cast<int>(length));
 
     return m_pRakClient->RPC(&g_DialogResponse, &bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, false);
 }

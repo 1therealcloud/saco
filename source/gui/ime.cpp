@@ -421,7 +421,6 @@ namespace cgui::ime
             device->SetTextureStageState(0, D3DTSS_ALPHAOP, texture ? D3DTOP_MODULATE : D3DTOP_SELECTARG1);
             device->SetTextureStageState(0, D3DTSS_ALPHAARG1, texture ? D3DTA_TEXTURE : D3DTA_DIFFUSE);
             device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, vertices, sizeof(Vertex));
-
         }
 
         RECT IndicatorRect()
@@ -684,10 +683,10 @@ namespace cgui::ime
             case WM_IME_KEYDOWN:
                 if (g_composing && wParam < g_consumedKeys.size())
                     g_consumedKeys[wParam] = true;
-                DefWindowProcA(window, message, wParam, lParam);
+                DefWindowProcW(window, message, wParam, lParam);
                 return true;
             case WM_IME_KEYUP:
-                DefWindowProcA(window, message, wParam, lParam);
+                DefWindowProcW(window, message, wParam, lParam);
                 return true;
         }
         return false;

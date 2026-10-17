@@ -133,7 +133,7 @@ namespace game::inputhandler
                 return MapVirtualKeyA(scanCode, MAPVK_VSC_TO_VK);
             if (wParam == VK_RETURN || wParam == VK_ESCAPE || wParam == VK_BACK || wParam == VK_TAB)
                 return static_cast<UINT>(wParam);
-            const SHORT key = VkKeyScanA(static_cast<char>(wParam));
+            const SHORT key = VkKeyScanW(static_cast<wchar_t>(wParam));
             return key == -1 ? 0 : key & 0xFF;
         }
 

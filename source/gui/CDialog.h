@@ -44,12 +44,12 @@ public:
         CAPTION_ID = 22,
 
         MAX_COLUMNS = 4,
-        MAX_COLUMN_TEXT = 128,
+        MAX_COLUMN_TEXT = 128 * 4,
         MAX_INPUT_TEXT = 128
     };
 
 public:
-    // exact SA-MP 0.3.7-R5 layout
+    // dialog state; text buffers hold UTF-8
     IDirect3DDevice9* m_pDevice;
     unsigned long m_position[2];
     unsigned long m_size[2];
@@ -62,7 +62,7 @@ public:
     unsigned int m_nId;
     char* m_szText;
     unsigned long m_textSize[2];
-    char m_szCaption[65];
+    char m_szCaption[64 * 4 + 1];
     BOOL m_bServerside;
 
     // recovered R5 fields hidden as pad[536] in SAMP-API

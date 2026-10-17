@@ -7,6 +7,7 @@
  */
 
 #include <stdafx.h>
+#include "utils/TextEncoding.inl"
 
 #include "CScoreboard.h"
 
@@ -279,7 +280,7 @@ void CScoreboard::UpdateList()
     auto* pools = g_netGame ? g_netGame->m_pPools : nullptr;
     auto* playerPool = pools ? pools->m_pPlayer : nullptr;
     const bool connected = g_netGame && g_netGame->GetState() == CNetGame::GAME_MODE_CONNECTED;
-    state.serverName = g_netGame ? g_netGame->m_szHostname : "SA-MP";
+    state.serverName = g_netGame ? text::FromServer(g_netGame->m_szHostname) : "SA-MP";
 
     if (playerPool)
     {

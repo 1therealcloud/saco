@@ -10,6 +10,8 @@
 
 #include "CGui.h"
 #include "ime.h"
+#include "utils/TextEncoding.inl"
+#include "render/FontFallback.h"
 
 #include <windowsx.h>
 #include <cmath>
@@ -94,7 +96,7 @@ namespace cgui
         struct FontAtlas
         {
             IDirect3DTexture9* texture = nullptr;
-            std::array<FontGlyph, 256> glyphs{};
+            std::unordered_map<char32_t, FontGlyph> glyphs;
             int height = kDefaultFontHeight;
             UINT width = 0;
             UINT textureHeight = 0;
@@ -126,40 +128,7 @@ namespace cgui
         int g_fontWeight = kDefaultFontWeight;
         bool g_fontDirty = false;
         unsigned int g_fontRevision = 0;
-        HDC g_measureDc = nullptr;
-        HFONT g_measureFont = nullptr;
-        HGDIOBJ g_measureOldFont = nullptr;
-        void ReleaseMeasurement()
-        {
-            ZoneScoped;
-            if (g_measureDc && g_measureOldFont)
-                SelectObject(g_measureDc, g_measureOldFont);
-            if (g_measureFont)
-                DeleteObject(g_measureFont);
-            if (g_measureDc)
-                DeleteDC(g_measureDc);
-            g_measureDc = nullptr;
-            g_measureFont = nullptr;
-            g_measureOldFont = nullptr;
-        }
-        HDC MeasurementDc()
-        {
-            ZoneScoped;
-            if (!g_measureDc)
-            {
-                g_measureDc = CreateCompatibleDC(nullptr);
-                g_measureFont = CreateFontA(g_fontHeight, 0, 0, 0, g_fontWeight, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
-                                            DEFAULT_PITCH, g_fontFace.c_str());
-                if (!g_measureDc || !g_measureFont)
-                {
-                    ReleaseMeasurement();
-                    return nullptr;
-                }
-                g_measureOldFont = SelectObject(g_measureDc, g_measureFont);
-            }
-            return g_measureDc;
-        }
-
+        std::vector<char32_t> g_fontCharacters;
         bool g_initialized = false;
         std::vector<IDirect3DStateBlock9*> g_states;
         std::size_t g_passDepth = 0;
@@ -357,6 +326,14 @@ namespace cgui
             ZoneScoped;
             if (!g_device)
                 return false;
+            if (g_fontCharacters.empty())
+            {
+                for (char32_t c = 0; c < 128; ++c)
+                    g_fontCharacters.push_back(c);
+                for (char32_t c = 0x400; c < 0x500; ++c)
+                    g_fontCharacters.push_back(c);
+                g_fontCharacters.push_back(0xFFFD);
+            }
 
             HDC dc = CreateCompatibleDC(nullptr);
             if (!dc)
@@ -380,23 +357,25 @@ namespace cgui
                 return false;
             }
 
-            constexpr int cols = 16;
-            constexpr int rows = 16;
+            FontFallback fallback(dc);
+            constexpr int cols = 32;
+            const int rows = static_cast<int>((g_fontCharacters.size() + cols - 1) / cols);
             int maxWidth = std::max<int>(1, metrics.tmAveCharWidth);
-            std::array<SIZE, 256> sizes{};
+            std::vector<SIZE> sizes(g_fontCharacters.size());
 
-            for (int c = 0; c < 256; ++c)
+            for (std::size_t i = 0; i < g_fontCharacters.size(); ++i)
             {
+                const auto c = g_fontCharacters[i];
                 if (c < 32 && c != kPasswordGlyph)
                 {
-                    sizes[static_cast<std::size_t>(c)].cx = metrics.tmAveCharWidth;
-                    sizes[static_cast<std::size_t>(c)].cy = metrics.tmHeight;
+                    sizes[i].cx = metrics.tmAveCharWidth;
+                    sizes[i].cy = metrics.tmHeight;
                     continue;
                 }
 
-                const char text[2]{static_cast<char>(c), 0};
+                const wchar_t character = static_cast<wchar_t>(c <= 0xFFFF ? c : 0xFFFD);
                 SIZE size{};
-                const BOOL measured = GetTextExtentPoint32A(dc, text, 1, &size);
+                const BOOL measured = GetTextExtentPoint32W(fallback.GetDC(character), &character, 1, &size);
                 if (c == kPasswordGlyph)
                     size.cx = size.cy = metrics.tmHeight;
                 if (!measured)
@@ -404,7 +383,7 @@ namespace cgui
                     size.cx = metrics.tmAveCharWidth;
                     size.cy = metrics.tmHeight;
                 }
-                sizes[static_cast<std::size_t>(c)] = size;
+                sizes[i] = size;
                 maxWidth = std::max<int>(maxWidth, size.cx);
             }
 
@@ -414,6 +393,14 @@ namespace cgui
             const UINT texW = NextPowerOfTwo(static_cast<UINT>(cellW * cols));
             const UINT texH = NextPowerOfTwo(static_cast<UINT>(cellH * rows));
 
+            D3DCAPS9 caps{};
+            if (FAILED(g_device->GetDeviceCaps(&caps)) || texW > caps.MaxTextureWidth || texH > caps.MaxTextureHeight)
+            {
+                SelectObject(dc, oldFont);
+                DeleteObject(font);
+                DeleteDC(dc);
+                return false;
+            }
             BITMAPINFO bmi{};
             bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
             bmi.bmiHeader.biWidth = static_cast<LONG>(texW);
@@ -440,14 +427,15 @@ namespace cgui
             SetBkMode(dc, OPAQUE);
             PatBlt(dc, 0, 0, static_cast<int>(texW), static_cast<int>(texH), BLACKNESS);
 
-            std::array<FontGlyph, 256> glyphs{};
-            for (int c = 0; c < 256; ++c)
+            std::unordered_map<char32_t, FontGlyph> glyphs;
+            for (std::size_t i = 0; i < g_fontCharacters.size(); ++i)
             {
-                const int col = c % cols;
-                const int row = c / cols;
+                const auto c = g_fontCharacters[i];
+                const int col = static_cast<int>(i % cols);
+                const int row = static_cast<int>(i / cols);
                 const int x = col * cellW;
                 const int y = row * cellH;
-                const SIZE size = sizes[static_cast<std::size_t>(c)];
+                const SIZE size = sizes[i];
                 const int drawWidth = std::clamp<int>(size.cx, 1, maxWidth);
 
                 if (c == kPasswordGlyph)
@@ -460,11 +448,17 @@ namespace cgui
                 }
                 else if (c >= 32)
                 {
-                    const char text[2]{static_cast<char>(c), 0};
-                    TextOutA(dc, x + 1, y + 1, text, 1);
+                    const wchar_t character = static_cast<wchar_t>(c <= 0xFFFF ? c : 0xFFFD);
+                    HDC glyphDc = fallback.GetDC(character);
+                    HGDIOBJ previousFont = nullptr;
+                    if (glyphDc != dc)
+                        previousFont = SelectObject(dc, GetCurrentObject(glyphDc, OBJ_FONT));
+                    TextOutW(dc, x + 1, y + 1, &character, 1);
+                    if (previousFont)
+                        SelectObject(dc, previousFont);
                 }
 
-                FontGlyph& glyph = glyphs[static_cast<std::size_t>(c)];
+                FontGlyph& glyph = glyphs[c];
                 glyph.u0 = static_cast<float>(x + 1) / static_cast<float>(texW);
                 glyph.v0 = static_cast<float>(y + 1) / static_cast<float>(texH);
                 glyph.u1 = static_cast<float>(x + 1 + drawWidth) / static_cast<float>(texW);
@@ -522,7 +516,6 @@ namespace cgui
             g_font.textureHeight = texH;
             g_fontDirty = false;
             ++g_fontRevision;
-            ReleaseMeasurement();
             return true;
         }
 
@@ -832,136 +825,62 @@ namespace cgui
             DrawQuad(RECT{innerRight, innerBottom, destination.right, destination.bottom}, color, g_skin, &br->texture);
         }
 
-        std::size_t NextCharacter(const char* text, std::size_t position)
+        const FontGlyph& GetFontGlyph(char32_t character)
         {
-            ZoneScoped;
-            const unsigned char value = static_cast<unsigned char>(text[position]);
-            std::size_t length = 1;
-            if (GetACP() == CP_UTF8)
-                length = value >= 0xF0 ? 4 : value >= 0xE0 ? 3 : value >= 0xC0 ? 2 : 1;
-            else if (IsDBCSLeadByteEx(CP_ACP, value))
-                length = 2;
-            for (std::size_t i = 1; i < length; ++i)
-                if (!text[position + i])
-                    return position + i;
-            return position + length;
+            auto found = g_font.glyphs.find(character);
+            if (found == g_font.glyphs.end())
+                found = g_font.glyphs.find(0xFFFD);
+            static const FontGlyph empty{};
+            return found == g_font.glyphs.end() ? empty : found->second;
         }
 
-        std::size_t CharacterBoundary(const char* text, std::size_t position)
+        void EnsureFontGlyphs(std::string_view value)
         {
-            ZoneScoped;
-            std::size_t current = 0;
-            while (text[current] && current < position)
+            bool changed = false;
+            for (std::size_t i = 0; i < value.size() && g_fontCharacters.size() < 4096;)
             {
-                const std::size_t next = NextCharacter(text, current);
-                if (next > position)
-                    break;
-                current = next;
-            }
-            return current;
-        }
-
-        std::size_t CharacterCount(const char* text, std::size_t bytes)
-        {
-            std::size_t count = 0;
-            for (std::size_t i = 0; text[i] && i < bytes; i = NextCharacter(text, i))
-                ++count;
-            return count;
-        }
-
-        bool HasMultibyteText(const char* text)
-        {
-            for (std::size_t i = 0; text[i]; ++i)
-                if ((GetACP() == CP_UTF8 && static_cast<unsigned char>(text[i]) >= 0x80) || IsDBCSLeadByteEx(CP_ACP, static_cast<unsigned char>(text[i])))
-                    return true;
-            return false;
-        }
-
-        bool CreateTextTexture(const char* text, IDirect3DTexture9** output, SIZE& extent)
-        {
-            ZoneScoped;
-            HDC dc = CreateCompatibleDC(nullptr);
-            if (!dc)
-                return false;
-            HFONT font = CreateFontA(g_fontHeight, 0, 0, 0, g_fontWeight, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
-                                     DEFAULT_PITCH, g_fontFace.c_str());
-            if (!font)
-            {
-                DeleteDC(dc);
-                return false;
-            }
-            HGDIOBJ oldFont = SelectObject(dc, font);
-            GetTextExtentPoint32A(dc, text, static_cast<int>(std::strlen(text)), &extent);
-            const UINT width = NextPowerOfTwo(std::max<LONG>(1, extent.cx));
-            const UINT height = NextPowerOfTwo(std::max<LONG>(1, extent.cy));
-            BITMAPINFO info{};
-            info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-            info.bmiHeader.biWidth = width;
-            info.bmiHeader.biHeight = -static_cast<LONG>(height);
-            info.bmiHeader.biPlanes = 1;
-            info.bmiHeader.biBitCount = 32;
-            void* pixels = nullptr;
-            HBITMAP bitmap = CreateDIBSection(dc, &info, DIB_RGB_COLORS, &pixels, nullptr, 0);
-            bool success = false;
-            if (bitmap && pixels)
-            {
-                HGDIOBJ oldBitmap = SelectObject(dc, bitmap);
-                std::memset(pixels, 0, width * height * 4);
-                SetBkMode(dc, TRANSPARENT);
-                SetTextColor(dc, RGB(255, 255, 255));
-                TextOutA(dc, 0, 0, text, static_cast<int>(std::strlen(text)));
-                GdiFlush();
-                auto* colors = static_cast<DWORD*>(pixels);
-                for (UINT i = 0; i < width * height; ++i)
+                const auto character = text::Decode(value, i);
+                if (!g_font.glyphs.contains(character) && std::find(g_fontCharacters.begin(), g_fontCharacters.end(), character) == g_fontCharacters.end())
                 {
-                    const DWORD alpha = std::max({colors[i] & 0xFF, (colors[i] >> 8) & 0xFF, (colors[i] >> 16) & 0xFF});
-                    colors[i] = (alpha << 24) | 0xFFFFFF;
+                    g_fontCharacters.push_back(character);
+                    changed = true;
                 }
-                IDirect3DTexture9* texture = nullptr;
-                if (SUCCEEDED(g_device->CreateTexture(width, height, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &texture, nullptr)))
-                {
-                    D3DLOCKED_RECT locked{};
-                    if (SUCCEEDED(texture->LockRect(0, &locked, nullptr, 0)))
-                    {
-                        for (UINT y = 0; y < height; ++y)
-                            std::memcpy(static_cast<BYTE*>(locked.pBits) + y * locked.Pitch, colors + y * width, width * 4);
-                        texture->UnlockRect(0);
-                        FlushUi();
-                        g_textureDescriptions.erase(*output);
-                        Release(*output);
-                        *output = texture;
-                        success = true;
-                    }
-                    else
-                        texture->Release();
-                }
-                SelectObject(dc, oldBitmap);
             }
-            if (bitmap)
-                DeleteObject(bitmap);
-            SelectObject(dc, oldFont);
-            DeleteObject(font);
-            DeleteDC(dc);
-            return success;
+            if (changed && g_device)
+            {
+                FlushUi();
+                CreateFontAtlas();
+            }
         }
 
-        int MeasureText(const char* text, std::size_t count = static_cast<std::size_t>(-1), int passwordSize = 0)
+        std::size_t NextCharacter(const char* value, std::size_t position)
         {
-            ZoneScoped;
-            if (!text)
+            text::Decode(value, position);
+            return position;
+        }
+
+        std::size_t CharacterBoundary(const char* value, std::size_t position)
+        {
+            return text::Boundary(value, position);
+        }
+
+        std::size_t CharacterCount(const char* value, std::size_t bytes)
+        {
+            return text::Count(std::string_view(value, text::Boundary(value, bytes)));
+        }
+
+        int MeasureText(const char* value, std::size_t count = static_cast<std::size_t>(-1), int passwordSize = 0)
+        {
+            if (!value)
                 return 0;
-            if (!passwordSize && HasMultibyteText(text))
-            {
-                if (HDC dc = MeasurementDc())
-                {
-                    SIZE size{};
-                    if (GetTextExtentPoint32A(dc, text, static_cast<int>(std::min(count, std::strlen(text))), &size))
-                        return size.cx;
-                }
-            }
+            const std::string_view input(value, text::Boundary(value, std::min(count, std::strlen(value))));
+            EnsureFontGlyphs(input);
             int width = 0;
-            for (std::size_t i = 0; text[i] && i < count; ++i)
-                width += passwordSize ? passwordSize + 2 : g_font.glyphs[static_cast<unsigned char>(text[i])].advance;
+            for (std::size_t i = 0; i < input.size();)
+            {
+                const auto character = text::Decode(input, i);
+                width += passwordSize ? passwordSize + 2 : GetFontGlyph(character).advance;
+            }
             return width;
         }
 
@@ -998,19 +917,19 @@ namespace cgui
             if (!g_device || !g_font.texture || !text)
                 return;
 
-            count = std::min(count, std::strlen(text));
+            count = text::Boundary(text, std::min(count, std::strlen(text)));
             g_textVertices.reserve(count * 6);
             int textWidth = MeasureText(text, count, passwordSize);
             if (colorTags)
             {
                 textWidth = 0;
                 D3DCOLOR ignored = color;
-                for (std::size_t i = 0; text[i] && i < count; ++i)
+                for (std::size_t i = 0; text[i] && i < count;)
                 {
                     if (count - i >= 8 && ReadColorTag(text + i, ignored))
-                        i += 7;
+                        i += 8;
                     else
-                        textWidth += g_font.glyphs[static_cast<unsigned char>(text[i])].advance;
+                        textWidth += GetFontGlyph(text::Decode(std::string_view(text, count), i)).advance;
                 }
             }
             int x = rect.left;
@@ -1037,14 +956,14 @@ namespace cgui
                     return;
             }
             g_textVertices.clear();
-            for (std::size_t i = 0; text[i] && i < count; ++i)
+            for (std::size_t i = 0; text[i] && i < count;)
             {
                 if (colorTags && count - i >= 8 && ReadColorTag(text + i, color))
                 {
-                    i += 7;
+                    i += 8;
                     continue;
                 }
-                const FontGlyph& glyph = g_font.glyphs[static_cast<unsigned char>(text[i])];
+                const FontGlyph& glyph = GetFontGlyph(text::Decode(std::string_view(text, count), i));
                 const D3DCOLOR fadedColor = ui::FadeColor(color);
                 const RECT dst{x, y, x + (passwordSize ? passwordSize : glyph.width), y + (passwordSize ? passwordSize : glyph.height)};
                 const float l = static_cast<float>(dst.left) - 0.5f;
@@ -1601,7 +1520,6 @@ namespace cgui
     EditBox::~EditBox()
     {
         ime::Blur(this);
-        Release(m_textTexture);
     }
     void EditBox::OnFocus(bool focus)
     {
@@ -1629,31 +1547,20 @@ namespace cgui
     {
         ZoneScoped;
         const int passwordSize = m_password ? std::max(1, Height(GetScreenRect()) / 3) : 0;
+        EnsureFontGlyphs(m_buffer);
         if (m_widthText != m_buffer || m_widthRevision != g_fontRevision || m_widthPasswordSize != passwordSize || m_prefixWidths.empty())
         {
             m_widthText = m_buffer;
             m_widthRevision = g_fontRevision;
             m_widthPasswordSize = passwordSize;
             m_prefixWidths.assign(m_buffer.size() + 1, 0);
-            bool measured = false;
-            const bool multibyte = !m_password && HasMultibyteText(m_buffer.c_str());
-            if (multibyte)
+            for (std::size_t first = 0; first < m_buffer.size();)
             {
-                SIZE extent{};
-                if (HDC dc = MeasurementDc())
-                    measured = GetTextExtentExPointA(dc, m_buffer.data(), static_cast<int>(m_buffer.size()), 0, nullptr, m_prefixWidths.data() + 1, &extent) != FALSE;
-            }
-            if (!measured)
-            {
-                for (std::size_t first = 0; first < m_buffer.size();)
-                {
-                    const std::size_t next = NextCharacter(m_buffer.c_str(), first);
-                    const int width = m_password  ? m_prefixWidths[first] + passwordSize + 2
-                                      : multibyte ? MeasureText(m_buffer.c_str(), next)
-                                                  : m_prefixWidths[first] + g_font.glyphs[static_cast<unsigned char>(m_buffer[first])].advance;
-                    std::fill(m_prefixWidths.begin() + first + 1, m_prefixWidths.begin() + next + 1, width);
-                    first = next;
-                }
+                std::size_t next = first;
+                const auto character = text::Decode(m_buffer, next);
+                const int width = m_prefixWidths[first] + (m_password ? passwordSize + 2 : GetFontGlyph(character).advance);
+                std::fill(m_prefixWidths.begin() + first + 1, m_prefixWidths.begin() + next + 1, width);
+                first = next;
             }
             m_masked.assign(CharacterCount(m_buffer.c_str(), m_buffer.size()), kPasswordGlyph);
         }
@@ -1683,20 +1590,14 @@ namespace cgui
         ZoneScoped;
         if (!text || !*text)
             return false;
-        BOOL substituted = FALSE;
-        const UINT codePage = GetACP();
-        const DWORD flags = codePage == CP_UTF8 ? WC_ERR_INVALID_CHARS : WC_NO_BEST_FIT_CHARS;
-        BOOL* usedDefault = codePage == CP_UTF8 ? nullptr : &substituted;
-        const int bytes = WideCharToMultiByte(codePage, flags, text, -1, nullptr, 0, nullptr, usedDefault);
-        if (bytes <= 1 || substituted)
+        const auto encoded = text::FromWide(text);
+        if (encoded.empty())
             return false;
-        std::string encoded(static_cast<std::size_t>(bytes), '\0');
-        if (!WideCharToMultiByte(codePage, flags, text, -1, encoded.data(), bytes, nullptr, usedDefault) || substituted)
-            return false;
-        encoded.pop_back();
         // reject the whole commit rather than splitting a multibyte character
-        const std::size_t selected = std::max(m_caret, m_selectionAnchor) - std::min(m_caret, m_selectionAnchor);
-        if (encoded.size() > m_maxLength - (m_buffer.size() - selected))
+        const auto first = std::min(m_caret, m_selectionAnchor);
+        const auto last = std::max(m_caret, m_selectionAnchor);
+        const auto selected = text::Count(std::string_view(m_buffer).substr(first, last - first));
+        if (text::Count(encoded) > m_maxLength - (text::Count(m_buffer) - selected))
             return false;
         DeleteSelection();
         m_buffer.insert(m_caret, encoded);
@@ -1709,16 +1610,15 @@ namespace cgui
     {
         m_buffer = text ? text : "";
         m_firstVisible = 0;
-        if (m_buffer.size() > m_maxLength)
-            m_buffer.resize(CharacterBoundary(m_buffer.c_str(), m_maxLength));
+        m_buffer.resize(text::Prefix(m_buffer, m_maxLength));
+        m_pendingSurrogate = 0;
         m_caret = m_buffer.size();
         m_selectionAnchor = m_caret;
     }
     void EditBox::SetMaxLength(std::size_t length)
     {
         m_maxLength = length;
-        if (m_buffer.size() > length)
-            m_buffer.resize(CharacterBoundary(m_buffer.c_str(), length));
+        m_buffer.resize(text::Prefix(m_buffer, length));
         m_caret = CharacterBoundary(m_buffer.c_str(), std::min(m_caret, m_buffer.size()));
         m_selectionAnchor = CharacterBoundary(m_buffer.c_str(), std::min(m_selectionAnchor, m_buffer.size()));
     }
@@ -1743,7 +1643,7 @@ namespace cgui
             return false;
         const std::size_t first = std::min(m_caret, m_selectionAnchor);
         const int length = static_cast<int>(std::max(m_caret, m_selectionAnchor) - first);
-        const int chars = MultiByteToWideChar(GetACP(), MB_ERR_INVALID_CHARS, m_buffer.data() + first, length, nullptr, 0);
+        const int chars = MultiByteToWideChar(text::CodePage, MB_ERR_INVALID_CHARS, m_buffer.data() + first, length, nullptr, 0);
         if (chars <= 0)
             return false;
         HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, (static_cast<std::size_t>(chars) + 1) * sizeof(wchar_t));
@@ -1755,7 +1655,7 @@ namespace cgui
             GlobalFree(memory);
             return false;
         }
-        const bool converted = MultiByteToWideChar(GetACP(), MB_ERR_INVALID_CHARS, m_buffer.data() + first, length, output, chars) != 0;
+        const bool converted = MultiByteToWideChar(text::CodePage, MB_ERR_INVALID_CHARS, m_buffer.data() + first, length, output, chars) != 0;
         output[chars] = L'\0';
         GlobalUnlock(memory);
         if (!converted || !OpenClipboard(GetActiveWindow()))
@@ -1780,7 +1680,7 @@ namespace cgui
         std::wstring text;
         if (input)
         {
-            const std::size_t limit = std::min<std::size_t>(GlobalSize(memory) / sizeof(wchar_t), m_maxLength + 1);
+            const std::size_t limit = std::min<std::size_t>(GlobalSize(memory) / sizeof(wchar_t), m_maxLength * 2 + 1);
             for (std::size_t i = 0; i < limit && input[i]; ++i)
             {
                 // edit boxes are single-line; clipboard newlines never submit a command
@@ -1795,16 +1695,17 @@ namespace cgui
         if (text.empty())
             return;
         // fit the selection's free space without splitting encoded characters
-        const std::size_t selected = std::max(m_caret, m_selectionAnchor) - std::min(m_caret, m_selectionAnchor);
-        const std::size_t available = m_maxLength - (m_buffer.size() - selected);
+        const auto first = std::min(m_caret, m_selectionAnchor), last = std::max(m_caret, m_selectionAnchor);
+        const auto selected = text::Count(std::string_view(m_buffer).substr(first, last - first));
+        const std::size_t available = m_maxLength - (text::Count(m_buffer) - selected);
+        std::size_t characters = 0;
         std::size_t fit = 0;
         while (fit < text.size())
         {
             std::size_t next = fit + 1;
             if (text[fit] >= 0xD800 && text[fit] <= 0xDBFF && next < text.size() && text[next] >= 0xDC00 && text[next] <= 0xDFFF)
                 ++next;
-            const int bytes = WideCharToMultiByte(GetACP(), 0, text.data(), static_cast<int>(next), nullptr, 0, nullptr, nullptr);
-            if (bytes <= 0 || static_cast<std::size_t>(bytes) > available)
+            if (++characters > available)
                 break;
             fit = next;
         }
@@ -1820,17 +1721,6 @@ namespace cgui
         m_buffer.erase(first, last - first);
         m_caret = first;
         m_selectionAnchor = first;
-    }
-    void EditBox::InsertChar(char value)
-    {
-        ZoneScoped;
-        DeleteSelection();
-        if (m_buffer.size() >= m_maxLength)
-            return;
-        m_buffer.insert(m_buffer.begin() + static_cast<std::ptrdiff_t>(m_caret), value);
-        ++m_caret;
-        m_selectionAnchor = m_caret;
-        SendEvent(EVENT_EDITBOX_CHANGE);
     }
     void EditBox::MoveCaret(int delta, bool selecting)
     {
@@ -1906,28 +1796,8 @@ namespace cgui
             if (IntersectRect(&clipped, &selection, &content))
                 DrawQuad(clipped, m_selectionColor);
         }
-        if (!m_password && HasMultibyteText(m_buffer.c_str()) && g_device)
-        {
-            if ((m_cachedText != m_buffer || m_cachedFace != g_fontFace || m_cachedHeight != g_fontHeight || m_cachedWeight != g_fontWeight || !m_textTexture) &&
-                CreateTextTexture(m_buffer.c_str(), &m_textTexture, m_textExtent))
-            {
-                m_cachedText = m_buffer;
-                m_cachedFace = g_fontFace;
-                m_cachedHeight = g_fontHeight;
-                m_cachedWeight = g_fontWeight;
-            }
-            if (m_textTexture && m_cachedText == m_buffer)
-            {
-                const LONG width = std::min<LONG>(std::max<LONG>(0, m_textExtent.cx - scroll), Width(content));
-                const LONG height = std::min<LONG>(m_textExtent.cy, Height(content));
-                const LONG top = content.top + (Height(content) - height) / 2;
-                const RECT source{scroll, 0, scroll + width, height};
-                DrawQuad(RECT{content.left, top, content.left + width, top + height}, m_enabled ? m_textColor : kDisabledTextColor, m_textTexture, &source);
-            }
-        }
-        else
-            DrawTextRaw(display, content, m_enabled ? m_textColor : kDisabledTextColor, DT_LEFT | DT_VCENTER | DT_SINGLELINE, static_cast<std::size_t>(-1), false, passwordSize,
-                        &content);
+        DrawTextRaw(display, content, m_enabled ? m_textColor : kDisabledTextColor, DT_LEFT | DT_VCENTER | DT_SINGLELINE, static_cast<std::size_t>(-1), false, passwordSize,
+                    &content);
         if (m_focus && m_enabled && !ime::OwnsComposition(this) && ((GetTickCount() / 500) & 1) == 0)
         {
             const int caretX = content.left + TextWidth(m_caret) - scroll;
@@ -2009,9 +1879,20 @@ namespace cgui
                 SendEvent(EVENT_EDITBOX_CHANGE);
                 return true;
             }
-            if (wParam >= 0x20 && wParam <= 0xFF)
+            if (wParam >= 0x20 && wParam <= 0xFFFF)
             {
-                InsertChar(static_cast<char>(wParam));
+                const auto character = static_cast<wchar_t>(wParam);
+                if (character >= 0xD800 && character <= 0xDBFF)
+                    m_pendingSurrogate = character;
+                else
+                {
+                    const wchar_t characters[]{m_pendingSurrogate, character, L'\0'};
+                    if (m_pendingSurrogate && character >= 0xDC00 && character <= 0xDFFF)
+                        InsertText(characters);
+                    else
+                        InsertText(characters + 1);
+                    m_pendingSurrogate = 0;
+                }
                 return true;
             }
         }
@@ -2815,7 +2696,6 @@ namespace cgui
     {
         ZoneScoped;
         ime::Shutdown();
-        ReleaseMeasurement();
         for (Dialog& dialog : g_dialogs)
             dialog.Reset();
         Release(g_cursor);

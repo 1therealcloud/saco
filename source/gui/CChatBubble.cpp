@@ -11,6 +11,7 @@
 #include "main.h"
 
 #include "CChatBubble.h"
+#include "utils/TextEncoding.inl"
 
 #include "gui/CLabel.h"
 #include "net/CNetGame.h"
@@ -24,7 +25,6 @@ namespace
 {
     constexpr int kWrapLength = 36;
     constexpr int kMinimumWordTail = 12;
-    constexpr std::size_t kWrapHardLimit = 512;
 
     D3DCOLOR ToOpaqueD3DColor(D3DCOLOR rgba)
     {
@@ -33,65 +33,34 @@ namespace
         return (rgba >> 8u) | 0xFF000000u;
     }
 
-    int WrapText(char* text, int lineLength, int minimumWordTail)
+    int WrapText(char* value, int lineLength, int minimumWordTail)
     {
-        ZoneScoped;
-        if (!text)
+        if (!value || text::Count(value) > CChatBubble::MAX_TEXT_LENGTH)
             return -1;
-
-        const std::size_t sourceLength = std::strlen(text);
-        if (sourceLength > kWrapHardLimit)
-            return -1;
-
-        if (lineLength <= 0)
-            return 1;
-
-        int remaining = static_cast<int>(sourceLength);
-        int lineStart = 0;
-        int target = lineLength;
+        std::string remaining(value), result;
         int lines = 1;
-
-        while (remaining > lineLength)
+        while (text::Count(remaining) > static_cast<std::size_t>(lineLength))
         {
-            int split = lineLength;
-            if (text[lineStart + split] != ' ')
-            {
-                while (split > 0 && text[lineStart + split] != ' ')
-                    --split;
-            }
-
-            // This is the same branch used by samp.dll+0x17690: when the
-            // closest preceding space is more than 12 chars away from the
-            // 36-char boundary, insert a newline at the boundary instead of
-            // replacing that distant space.
-            if ((lineLength - split) > minimumWordTail)
-            {
-                const std::size_t tailLength = std::strlen(text + target);
-                std::memmove(text + target + 1, text + target, tailLength + 1);
-                text[target] = '\n';
-
-                remaining -= lineLength;
-                lineStart = target + 1;
-                target = lineStart + lineLength;
-            }
-            else
-            {
-                lineStart += split;
-                remaining -= split;
-                text[lineStart] = '\n';
-                target = lineStart + lineLength;
-            }
-
+            const auto limit = text::Prefix(remaining, lineLength);
+            auto split = limit;
+            while (split && remaining[split] != ' ')
+                split = text::Boundary(remaining, split - 1);
+            if (text::Count(std::string_view(remaining).substr(split, limit - split)) > static_cast<std::size_t>(minimumWordTail))
+                split = limit;
+            result.append(remaining, 0, split);
+            result += '\n';
+            remaining.erase(0, split + (remaining[split] == ' ' ? 1 : 0));
             ++lines;
         }
-
+        result += remaining;
+        std::memcpy(value, result.c_str(), result.size() + 1);
         return lines;
     }
+
 }
 
 CChatBubble::CChatBubble()
 {
-    // R5 zeroes the full 0x44A20-byte object in the constructor.
     std::memset(m_player, 0, sizeof(m_player));
 }
 
@@ -110,7 +79,7 @@ void CChatBubble::Add(ID player, const char* text, D3DCOLOR color, float drawDis
     std::memset(&bubble, 0, sizeof(bubble));
 
     const std::size_t length = std::strlen(text);
-    if (length > MAX_TEXT_LENGTH)
+    if (text::Count(text) > MAX_TEXT_LENGTH)
         return;
 
     std::memcpy(bubble.m_szText, text, length + 1);

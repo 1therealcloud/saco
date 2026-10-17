@@ -1421,7 +1421,7 @@ bool game::hooks::InstallWindowHook(HWND window)
     if (!window)
         return false;
 
-    const auto current = reinterpret_cast<WNDPROC>(GetWindowLongA(window, GWL_WNDPROC));
+    const auto current = reinterpret_cast<WNDPROC>(GetWindowLongW(window, GWL_WNDPROC));
     if (!current)
         return false;
 
@@ -1432,7 +1432,7 @@ bool game::hooks::InstallWindowHook(HWND window)
         return false;
 
     SetLastError(ERROR_SUCCESS);
-    if (!SetWindowLongA(window, GWL_WNDPROC, reinterpret_cast<LONG>(game::hooks::WindowProcHook)) && GetLastError() != ERROR_SUCCESS)
+    if (!SetWindowLongW(window, GWL_WNDPROC, reinterpret_cast<LONG>(game::hooks::WindowProcHook)) && GetLastError() != ERROR_SUCCESS)
         return false;
 
     g_originalWndProc = current;
@@ -1443,9 +1443,9 @@ void game::hooks::RemoveWindowHook()
 {
     if (g_window && g_originalWndProc)
     {
-        const auto current = reinterpret_cast<WNDPROC>(GetWindowLongA(g_window, GWL_WNDPROC));
+        const auto current = reinterpret_cast<WNDPROC>(GetWindowLongW(g_window, GWL_WNDPROC));
         if (current == game::hooks::WindowProcHook)
-            SetWindowLongA(g_window, GWL_WNDPROC, reinterpret_cast<LONG>(g_originalWndProc));
+            SetWindowLongW(g_window, GWL_WNDPROC, reinterpret_cast<LONG>(g_originalWndProc));
     }
 
     g_originalWndProc = nullptr;
@@ -1454,9 +1454,9 @@ void game::hooks::RemoveWindowHook()
 LRESULT game::hooks::ForwardWindowMessage(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
     if (!g_originalWndProc)
-        return DefWindowProcA(window, message, wParam, lParam);
+        return DefWindowProcW(window, message, wParam, lParam);
 
-    return CallWindowProcA(g_originalWndProc, window, message, wParam, lParam);
+    return CallWindowProcW(g_originalWndProc, window, message, wParam, lParam);
 }
 
 namespace game::patch::vehicle::detail

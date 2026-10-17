@@ -14,6 +14,7 @@
 #include "config/CConfig.h"
 #include "render/CFonts.h"
 #include "CGui.h"
+#include "utils/TextEncoding.inl"
 
 #include <ctime>
 
@@ -43,8 +44,9 @@ namespace
         if (!source)
             return;
 
-        std::strncpy(destination, source, destinationSize - 1);
-        destination[destinationSize - 1] = '\0';
+        const auto length = text::Boundary(source, destinationSize - 1);
+        std::memcpy(destination, source, length);
+        destination[length] = '\0';
     }
 }
 
@@ -407,23 +409,15 @@ void CChat::Render()
     Draw();
 }
 
-std::size_t CChat::FindSplitPosition(const char* text)
+std::size_t CChat::FindSplitPosition(const char* value)
 {
-    ZoneScoped;
-    if (!text)
-        return CHAT_SPLIT_LENGTH;
-
-    std::size_t split = CHAT_SPLIT_LENGTH;
-    if (text[split] == ' ')
-        return split;
-
-    while (split != 0 && text[split - 1] != ' ')
-        --split;
-
-    if (CHAT_SPLIT_LENGTH - split > CHAT_SPLIT_BACKTRACK)
-        return CHAT_SPLIT_LENGTH;
-
-    return split;
+    if (!value)
+        return 0;
+    const auto limit = text::Prefix(value, CHAT_SPLIT_LENGTH);
+    auto split = limit;
+    while (split && value[split] != ' ')
+        split = text::Boundary(value, split - 1);
+    return text::Count(std::string_view(value + split, limit - split)) > CHAT_SPLIT_BACKTRACK ? limit : split;
 }
 
 void CChat::CopyCount(char* destination, const char* source, std::size_t count)
@@ -431,7 +425,9 @@ void CChat::CopyCount(char* destination, const char* source, std::size_t count)
     if (!destination || !source || count == 0)
         return;
 
-    std::strncpy(destination, source, count);
+    const auto length = text::Boundary(source, count);
+    std::memcpy(destination, source, length);
+    std::memset(destination + length, 0, count - length);
 }
 
 void CChat::AddEntry(int type, const char* text, const char* prefix, D3DCOLOR textColor, D3DCOLOR prefixColor)
@@ -462,15 +458,15 @@ void CChat::AddEntry(int type, const char* text, const char* prefix, D3DCOLOR te
 
     Log(type, text, prefix);
 
-    if (type == ENTRY_TYPE_CHAT && std::strlen(text) > CHAT_SPLIT_LENGTH)
+    if (type == ENTRY_TYPE_CHAT && text::Count(text) > CHAT_SPLIT_LENGTH)
     {
         const std::size_t split = FindSplitPosition(text);
-        const bool splitOnSpace = split != CHAT_SPLIT_LENGTH || text[CHAT_SPLIT_LENGTH] == ' ';
+        const bool splitOnSpace = text[split] == ' ';
 
         if (!splitOnSpace)
         {
-            CopyCount(entry.m_szText, text, CHAT_SPLIT_LENGTH);
-            entry.m_szText[CHAT_SPLIT_LENGTH] = '\0';
+            CopyCount(entry.m_szText, text, split);
+            entry.m_szText[split] = '\0';
 
             PushBack();
 
@@ -479,7 +475,7 @@ void CChat::AddEntry(int type, const char* text, const char* prefix, D3DCOLOR te
             continuation.m_textColor = textColor;
             continuation.m_prefixColor = prefixColor;
             continuation.m_szPrefix[0] = '\0';
-            CopyCString(continuation.m_szText, sizeof(continuation.m_szText), text + CHAT_SPLIT_LENGTH);
+            CopyCString(continuation.m_szText, sizeof(continuation.m_szText), text + split);
         }
         else
         {
@@ -500,10 +496,7 @@ void CChat::AddEntry(int type, const char* text, const char* prefix, D3DCOLOR te
         return;
     }
 
-    // R5 copies 144 bytes and writes the terminator at text[144], which is the
-    // first byte of the 64-byte unused area. Preserve that quirk.
-    CopyCount(entry.m_szText, text, MAX_TEXT_LENGTH);
-    entry.unused[0] = '\0';
+    CopyCString(entry.m_szText, sizeof(entry.m_szText), text);
     m_bRedraw = TRUE;
 }
 
@@ -515,8 +508,6 @@ void CChat::DrawEntry(const ChatEntry& entry, long& left, long top, long bottom)
 
     RECT rect{left, top, kChatRight, bottom};
 
-    // R5 permits all 144 text bytes and terminates in unused[0]. Give CFonts
-    // a separate terminated string rather than reading past the text array.
     auto& layout = g_layouts[this][static_cast<std::size_t>(&entry - m_entry)];
     if (layout.dirty)
     {
@@ -758,7 +749,7 @@ void CChat::AddChatMessage(const char* prefix, D3DCOLOR prefixColor, const char*
 
     // Convenience overload for literals. The original API takes a writable text
     // buffer and sanitizes it in place.
-    char buffer[512]{};
+    char buffer[MAX_TEXT_LENGTH + 1]{};
     CopyCString(buffer, sizeof(buffer), text);
     AddChatMessage(prefix, prefixColor, buffer);
 }
@@ -776,13 +767,14 @@ void CChat::ExpandControlKeyTokens(char* text, std::size_t capacity)
         return;
 
     char expanded[2052]{};
-    CopyCString(expanded, sizeof(expanded), text);
+    const auto encoded = text::ToServer(text);
+    std::memcpy(expanded, encoded.c_str(), std::min(encoded.size(), sizeof(expanded) - 1));
 
     CGame::ExpandControlKeys(expanded);
 
-    const std::size_t length = std::strlen(expanded);
-    if (length < capacity)
-        std::strcpy(text, expanded);
+    const auto decoded = text::FromServer(expanded);
+    if (decoded.size() < capacity)
+        std::memcpy(text, decoded.c_str(), decoded.size() + 1);
 }
 
 void CChat::AddMessage(D3DCOLOR color, char* text)
@@ -795,7 +787,7 @@ void CChat::AddMessage(D3DCOLOR color, char* text)
         return;
 
     FilterOutInvalidChars(text);
-    char buffer[0x100]{};
+    char buffer[MAX_TEXT_LENGTH + 1]{};
     CopyCString(buffer, sizeof(buffer), text);
     ExpandControlKeyTokens(buffer, sizeof(buffer));
     FilterOutInvalidChars(buffer);
@@ -808,7 +800,7 @@ void CChat::AddMessage(D3DCOLOR color, const char* text)
     if (!text)
         return;
 
-    char buffer[0x100]{};
+    char buffer[MAX_TEXT_LENGTH + 1]{};
     CopyCString(buffer, sizeof(buffer), text);
     AddMessage(color, buffer);
 }
@@ -819,7 +811,7 @@ void CChat::PrintV(int type, D3DCOLOR color, const char* format, va_list args)
     if (!format)
         return;
 
-    char buffer[512]{};
+    char buffer[MAX_TEXT_LENGTH + 1]{};
     if (vsnprintf_s(buffer, sizeof(buffer), _TRUNCATE, format, args) < 0 && !buffer[0])
         return;
     FilterOutInvalidChars(buffer);

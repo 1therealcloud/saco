@@ -49,7 +49,7 @@ public:
     {
         MAX_MESSAGES = 100,
         MAX_PREFIX_LENGTH = 24,
-        MAX_TEXT_LENGTH = 144,
+        MAX_TEXT_LENGTH = 144 * 4,
         CHAT_SPLIT_LENGTH = 72,
         CHAT_SPLIT_BACKTRACK = 12
     };
@@ -58,7 +58,7 @@ public:
     {
         std::int32_t m_timestamp;
         char m_szPrefix[28];
-        char m_szText[144];
+        char m_szText[MAX_TEXT_LENGTH + 1];
         char unused[64];
         std::int32_t m_nType;
         D3DCOLOR m_textColor;
@@ -66,7 +66,7 @@ public:
     };
 
 public:
-    // r5 layout. keep these fields in this exact order.
+    // chat state; text buffers hold UTF-8.
     unsigned int m_nPageSize;
     char* m_szLastMessage;
     int m_nMode;

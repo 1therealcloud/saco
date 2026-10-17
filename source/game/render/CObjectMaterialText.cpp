@@ -214,7 +214,7 @@ IDirect3DTexture9* CObjectMaterialText::Create(const char* text, const char* fon
     // R5's D3DXCreateFontA call uses MipLevels=1, DEFAULT_CHARSET and
     // Quality=DEFAULT_QUALITY. The accompanying CFonts patch adds the final
     // quality argument while preserving every existing caller's default.
-    CFont textFont(m_pDevice, fontSize, 0, weight, font, CP_ACP, DEFAULT_CHARSET, DEFAULT_QUALITY);
+    CFont textFont(m_pDevice, fontSize, 0, weight, font, text::CodePage, DEFAULT_CHARSET, DEFAULT_QUALITY);
 
     if (!textFont.IsValid())
     {

@@ -7,6 +7,7 @@
  */
 
 #include <stdafx.h>
+#include "utils/TextEncoding.inl"
 
 #include "main.h"
 #include "config/CSettings.h"
@@ -132,7 +133,7 @@ namespace
             auto* compressor = StringCompressor::Instance();
             if (!compressor || !compressor->DecodeString(text, static_cast<int>(sizeof(text)), &bs))
                 return false;
-            material.text = text;
+            material.text = text::FromServer(text);
             return true;
         }
         return false;
@@ -228,7 +229,7 @@ void RPCHandlers::Create3DTextLabel(RPCParameters* pParams)
     if (!compressor || !compressor->DecodeString(text, static_cast<int>(sizeof(text)), &bs))
         return;
 
-    g_netGame->m_pPools->m_pLabel->Create(labelId, text, color, position, drawDistance, testLos != 0, attachedPlayerId, attachedVehicleId);
+    g_netGame->m_pPools->m_pLabel->Create(labelId, text::FromServer(text).c_str(), color, position, drawDistance, testLos != 0, attachedPlayerId, attachedVehicleId);
 }
 
 // -----------------------------------------------------------------------------
@@ -277,7 +278,7 @@ void RPCHandlers::ChatBubble(RPCParameters* pParams)
     if (textLength != 0 && !bs.Read(text.data(), textLength))
         return;
 
-    g_chatBubble->Add(playerId, text.c_str(), color, drawDistance,
+    g_chatBubble->Add(playerId, text::FromServer(text).c_str(), color, drawDistance,
                       static_cast<int>(std::min<std::uint32_t>(expireTime, static_cast<std::uint32_t>(std::numeric_limits<int>::max()))));
 }
 
@@ -334,7 +335,7 @@ void RPCHandlers::ShowDialog(RPCParameters* pParams)
     if (!compressor || !compressor->DecodeString(info, static_cast<int>(sizeof(info)), &bs))
         return;
 
-    g_dialog->Show(dialogId, style, title.c_str(), info, button1.c_str(), button2.c_str(), TRUE);
+    g_dialog->Show(dialogId, style, text::FromServer(title).c_str(), text::FromServer(info).c_str(), text::FromServer(button1).c_str(), text::FromServer(button2).c_str(), TRUE);
 }
 
 // -----------------------------------------------------------------------------
@@ -596,7 +597,7 @@ void RPCHandlers::SendClientMessage(RPCParameters* pParams)
         return;
 
     if (g_chat)
-        g_chat->AddMessage(color, message.c_str());
+        g_chat->AddMessage(color, text::FromServer(message).c_str());
 }
 
 // -----------------------------------------------------------------------------
@@ -1586,7 +1587,7 @@ void RPCHandlers::InitGame(RPCParameters* pParams)
         weaponRate, multiplier, lagCompMode);
 #endif // _DEBUG
 
-    g_chat->PrintDebug("Connected to {B9C9BF}%.64s", hostName.c_str());
+    g_chat->PrintDebug("Connected to {B9C9BF}%s", text::FromServer(hostName).c_str());
 
     if (auto* players = g_netGame->GetPlayerPool())
     {
@@ -1633,12 +1634,12 @@ void RPCHandlers::ChatMessage(RPCParameters* pParams)
         auto* local = players->GetLocalPlayer();
         const char* name = players->GetLocalPlayerName();
         if (local && name)
-            g_chat->AddChatMessage(name, local->GetColorAsARGB(), text.c_str());
+            g_chat->AddChatMessage(name, local->GetColorAsARGB(), text::FromServer(text).c_str());
         return;
     }
 
     if (auto* remote = players->GetPlayer(playerId))
-        remote->Chat(text.c_str());
+        remote->Chat(text::FromServer(text).c_str());
 }
 
 // -----------------------------------------------------------------------------

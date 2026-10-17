@@ -387,23 +387,17 @@ namespace cgui
         bool CopySelection();
         void PasteText();
         void DeleteSelection();
-        void InsertChar(char value);
         void MoveCaret(int delta, bool selecting);
         std::size_t WordBoundary(int direction) const;
         int TextWidth(std::size_t bytes) const;
         void UpdateScroll() const;
+        wchar_t m_pendingSurrogate = 0;
         mutable std::size_t m_firstVisible = 0;
         mutable std::string m_widthText;
         mutable std::string m_masked;
         mutable std::vector<int> m_prefixWidths;
         mutable unsigned int m_widthRevision = 0;
         mutable int m_widthPasswordSize = -1;
-        IDirect3DTexture9* m_textTexture = nullptr;
-        std::string m_cachedText;
-        std::string m_cachedFace;
-        int m_cachedHeight = 0;
-        int m_cachedWeight = 0;
-        SIZE m_textExtent{};
 
         std::string m_buffer;
         std::size_t m_maxLength = 128;

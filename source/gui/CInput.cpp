@@ -14,6 +14,7 @@
 #include "render/render.h"
 #include "CChat.h"
 #include "CGui.h"
+#include "utils/TextEncoding.inl"
 
 #include "net/CNetGame.h"
 #ifdef _DEBUG
@@ -239,18 +240,17 @@ BOOL CInput::MsgProc(UINT message, WPARAM wParam, LPARAM lParam)
         {
             const std::size_t length = std::strlen(m_szInput);
             if (length)
-                m_szInput[length - 1] = '\0';
+                m_szInput[text::Boundary(m_szInput, length - 1)] = '\0';
             return TRUE;
         }
 
-        if (wParam >= 0x20 && wParam <= 0xFF)
+        if (wParam >= 0x20 && wParam <= 0xFFFF)
         {
+            const wchar_t character = static_cast<wchar_t>(wParam);
+            const auto encoded = text::FromWide(std::wstring_view(&character, 1));
             const std::size_t length = std::strlen(m_szInput);
-            if (length < MAX_INPUT_LENGTH)
-            {
-                m_szInput[length] = static_cast<char>(wParam);
-                m_szInput[length + 1] = '\0';
-            }
+            if (text::Count(m_szInput) < MAX_INPUT_CHARACTERS && length + encoded.size() <= MAX_INPUT_LENGTH)
+                std::memcpy(m_szInput + length, encoded.c_str(), encoded.size() + 1);
             return TRUE;
         }
     }
@@ -273,7 +273,7 @@ void CInput::ResetDialogControls(cgui::Dialog* gameUI)
     if (!gameUI)
         return;
     m_pEditbox = gameUI->AddEditBox(1, m_szInput, 10, 175, 570, 40);
-    m_pEditbox->SetMaxLength(MAX_INPUT_LENGTH);
+    m_pEditbox->SetMaxLength(MAX_INPUT_CHARACTERS);
     m_pEditbox->SetTextColor(0xFFFFFFFFu);
     m_pEditbox->SetSelectionColor(0xFFB92228u);
     m_pEditbox->SetCaretColor(0xFF969696u);
@@ -297,7 +297,7 @@ void CInput::ProcessInput()
     ZoneScoped;
     if (m_pEditbox)
         Copy128(m_szInput, m_pEditbox->GetText());
-    // Original obtains up to 128 bytes from CDXUTEditBox into m_szInput first.
+    // UTF-8 needs up to four bytes per input character.
     m_szInput[MAX_INPUT_LENGTH] = '\0';
 
     if (m_szInput[0] != '\0')
@@ -392,6 +392,7 @@ void CInput::Copy128(char* destination, const char* source)
         return;
     }
 
-    std::strncpy(destination, source, MAX_INPUT_LENGTH);
-    destination[MAX_INPUT_LENGTH] = '\0';
+    const auto length = text::Prefix(source, MAX_INPUT_CHARACTERS);
+    std::memcpy(destination, source, length);
+    destination[length] = '\0';
 }

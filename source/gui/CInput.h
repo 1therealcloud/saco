@@ -29,12 +29,13 @@ public:
     {
         MAX_CLIENT_CMDS = 144,
         MAX_CMD_LENGTH = 32,
-        MAX_INPUT_LENGTH = 128,
+        MAX_INPUT_CHARACTERS = 128,
+        MAX_INPUT_LENGTH = MAX_INPUT_CHARACTERS * 4,
         RECALL_COUNT = 10
     };
 
 public:
-    // SA-MP 0.3.7-R5 layout.
+    // UTF-8 input and recall buffers.
     IDirect3DDevice9* m_pDevice;
     cgui::Dialog* m_pGameUI;
     cgui::EditBox* m_pEditbox;

@@ -9,6 +9,7 @@
 #include <stdafx.h>
 
 #include "CDialog.h"
+#include "utils/TextEncoding.inl"
 
 #include "CGui.h"
 #include "render/CFonts.h"
@@ -67,8 +68,9 @@ namespace
         if (!source)
             return;
 
-        std::strncpy(destination, source, destinationSize - 1);
-        destination[destinationSize - 1] = '\0';
+        const auto length = text::Boundary(source, destinationSize - 1);
+        std::memcpy(destination, source, length);
+        destination[length] = '\0';
     }
 
     std::string StripColors(const char* text)
@@ -512,8 +514,7 @@ void CDialog::Close(char processButton)
             break;
     }
 
-    if (inputText.size() > MAX_INPUT_TEXT)
-        inputText.resize(MAX_INPUT_TEXT);
+    inputText.resize(text::Prefix(inputText, MAX_INPUT_TEXT));
 
     const bool serverSide = m_bServerside != FALSE;
     const auto dialogId = static_cast<std::uint16_t>(m_nId);

@@ -17,6 +17,7 @@
 
 #include <Windows.h>
 #include <d3d9.h>
+#include "utils/TextEncoding.inl"
 
 #include <array>
 #include <cstddef>
@@ -29,7 +30,7 @@
 class CFont
 {
 public:
-    CFont(IDirect3DDevice9* device, int height, int width, int weight, const char* face, UINT codePage = CP_ACP, BYTE charSet = DEFAULT_CHARSET,
+    CFont(IDirect3DDevice9* device, int height, int width, int weight, const char* face, UINT codePage = text::CodePage, BYTE charSet = DEFAULT_CHARSET,
           DWORD quality = ANTIALIASED_QUALITY);
 
     ~CFont();
@@ -105,7 +106,7 @@ private:
 
     struct StyledChar
     {
-        unsigned char value = 0;
+        char32_t value = 0;
         D3DCOLOR color = 0;
     };
 
@@ -169,7 +170,7 @@ private:
     bool EnsureIndexBuffer();
 
     wchar_t ByteToWide(unsigned char value) const;
-    int GetKerning(unsigned char left, unsigned char right) const;
+    int GetKerning(char32_t left, char32_t right) const;
 
     void BuildStyledText(const char* text, int count, D3DCOLOR baseColor, bool useColorTags, std::vector<StyledChar>& output) const;
 
@@ -214,7 +215,7 @@ private:
     HFONT m_font = nullptr;
     HGDIOBJ m_oldFont = nullptr;
 
-    UINT m_codePage = CP_ACP;
+    UINT m_codePage = text::CodePage;
     BYTE m_charSet = DEFAULT_CHARSET;
     int m_requestedHeight = 0;
     int m_requestedWidth = 0;
@@ -239,7 +240,10 @@ private:
     std::vector<Vertex> m_textVertices;
     mutable std::vector<StyledChar> m_styledText;
     mutable std::vector<Line> m_lines;
-    std::array<Glyph, 256> m_glyphs{};
+    void EnsureGlyphs(const char* text, int count);
+    const Glyph& GetGlyph(char32_t value) const;
+    std::vector<char32_t> m_characters;
+    std::unordered_map<char32_t, Glyph> m_glyphs;
     std::unordered_map<std::uint32_t, int> m_kerning;
 };
 
