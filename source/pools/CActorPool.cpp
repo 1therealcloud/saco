@@ -88,8 +88,8 @@ BOOL CActorPool::Create(const ActorInfo* info)
     if (DoesExist(id))
         Delete(id);
 
-    auto actor = std::unique_ptr<CActor>(new (std::nothrow) CActor(info->m_nModel, info->m_position, info->m_fRotation));
-    if (!actor || !actor->GetNativePedHandle())
+    auto actor = std::unique_ptr<CActor>(new (std::nothrow) CActor(info->m_nModel, info->m_position, info->m_fRotation, info->m_nCustomModel));
+    if (!actor || (!actor->GetNativePedHandle() && !actor->IsPending()))
         return FALSE;
 
     actor->SetHealth(info->m_fHealth);
@@ -101,4 +101,24 @@ BOOL CActorPool::Create(const ActorInfo* info)
     pad_3e84[id] = 0;
     UpdateLargestId();
     return TRUE;
+}
+
+void CActorPool::Process()
+{
+    ZoneScoped;
+    unsigned budget = 4;
+    for (int id = 0; id <= m_nLargestId && budget; ++id)
+    {
+        auto* actor = Get(static_cast<ID>(id));
+        if (!actor || !actor->IsPending())
+            continue;
+        actor->ProcessStreaming();
+        m_pGameObject[id] = actor->GetNativePedHandle();
+        if (!actor->IsPending())
+        {
+            --budget;
+            if (!m_pGameObject[id])
+                Delete(static_cast<ID>(id));
+        }
+    }
 }

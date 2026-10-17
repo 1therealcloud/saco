@@ -1048,6 +1048,7 @@ void CRemotePlayer::Process()
         return;
     const TICK now = GetTickCount();
     auto& runtime = Runtime(this);
+    m_pPed->ProcessStreaming();
     m_pPed->ProcessAnimation();
     if (runtime.enteringVehicle || runtime.exitingVehicle)
     {

@@ -17,9 +17,108 @@
 #include "utils/TextEncoding.inl"
 
 #include <ctime>
+#include <atomic>
+#include <condition_variable>
+#include <memory>
+#include <thread>
 
 namespace
 {
+    class ChatLog
+    {
+    public:
+        explicit ChatLog(std::string path)
+            : m_worker([this, path = std::move(path)] {
+                  Run(path);
+              })
+        {}
+        ~ChatLog()
+        {
+            {
+                std::lock_guard lock(m_mutex);
+                m_stopping = true;
+            }
+            m_ready.notify_one();
+            m_worker.join();
+        }
+
+        void Write(std::string line)
+        {
+            std::lock_guard lock(m_mutex);
+            if (m_failed.load(std::memory_order_relaxed))
+                return;
+            if (m_bytes + line.size() > 4 * 1024 * 1024)
+            {
+#if defined(_DEBUG)
+                if (!m_reportedOverflow)
+                    ::Log("[chat] log queue is full");
+#endif // _DEBUG
+                m_reportedOverflow = true;
+                return;
+            }
+            m_bytes += line.size();
+            m_pending.push_back(std::move(line));
+            m_ready.notify_one();
+        }
+
+    private:
+        void Run(const std::string& path)
+        {
+            FILE* file = nullptr;
+            if (fopen_s(&file, path.c_str(), "w") != 0 || !file)
+            {
+                m_failed.store(true, std::memory_order_relaxed);
+#if defined(_DEBUG)
+                ::Log("[chat] failed to open log file: %s", path.c_str());
+#endif // _DEBUG
+                return;
+            }
+            for (;;)
+            {
+                std::vector<std::string> lines;
+                {
+                    std::unique_lock lock(m_mutex);
+                    m_ready.wait(lock, [this] {
+                        return m_stopping || !m_pending.empty();
+                    });
+                    lines.swap(m_pending);
+                    m_bytes = 0;
+                    if (lines.empty() && m_stopping)
+                        break;
+                }
+                ZoneScopedN("Chat log write");
+                bool failed = false;
+                for (const auto& line : lines)
+                    if (std::fwrite(line.data(), 1, line.size(), file) != line.size())
+                    {
+                        failed = true;
+                        break;
+                    }
+                if (std::fflush(file) != 0)
+                    failed = true;
+                if (failed)
+                {
+                    m_failed.store(true, std::memory_order_relaxed);
+#if defined(_DEBUG)
+                    ::Log("[chat] failed to write log file: %s", path.c_str());
+#endif // _DEBUG
+                    break;
+                }
+            }
+            std::fclose(file);
+        }
+
+        std::mutex m_mutex;
+        std::condition_variable m_ready;
+        std::vector<std::string> m_pending;
+        std::size_t m_bytes = 0;
+        bool m_stopping = false;
+        bool m_reportedOverflow = false;
+        std::atomic<bool> m_failed{false};
+        std::thread m_worker;
+    };
+    std::unordered_map<const CChat*, std::unique_ptr<ChatLog>> g_chatLogs;
+
     std::unordered_map<const CChat*, ui::Appearance> g_appearances;
     struct LineLayout
     {
@@ -64,6 +163,7 @@ CChat::CChat(IDirect3DDevice9* device, CFonts* fontRenderer, const char* logPath
 
 CChat::~CChat()
 {
+    g_chatLogs.erase(this);
     g_appearances.erase(this);
     g_layouts.erase(this);
     OnLostDevice();
@@ -75,6 +175,7 @@ void CChat::Initialize(IDirect3DDevice9* device, CFonts* fontRenderer, const cha
     // Match the R5 object state. The original creates D3DX sprites here; this
     // replacement keeps those ABI slots null and renders through CFonts.
     g_layouts.erase(this);
+    g_chatLogs.erase(this);
     std::memset(this, 0, sizeof(*this));
 
     m_pFontRenderer = fontRenderer;
@@ -95,11 +196,16 @@ void CChat::Initialize(IDirect3DDevice9* device, CFonts* fontRenderer, const cha
         std::strncpy(m_szLogPath, logPath, MAX_PATH);
         m_szLogPath[MAX_PATH] = '\0';
 
-        FILE* file = nullptr;
-        if (fopen_s(&file, m_szLogPath, "w") == 0 && file)
+        try
         {
+            g_chatLogs.emplace(this, std::make_unique<ChatLog>(m_szLogPath));
             m_bDoesLogExist = TRUE;
-            std::fclose(file);
+        }
+        catch (const std::system_error&)
+        {
+#if defined(_DEBUG)
+            ::Log("[chat] failed to start log writer");
+#endif // _DEBUG
         }
     }
 
@@ -363,24 +469,26 @@ void CChat::Log(int type, const char* text, const char* prefix)
     if (!m_bDoesLogExist || !m_szLogPath[0] || !text)
         return;
 
-    FILE* file = nullptr;
-    if (fopen_s(&file, m_szLogPath, "a") != 0 || !file)
+    const auto writer = g_chatLogs.find(this);
+    if (writer == g_chatLogs.end())
+        return;
+    if ((type != ENTRY_TYPE_CHAT && type != ENTRY_TYPE_INFO && type != ENTRY_TYPE_DEBUG) || (type == ENTRY_TYPE_CHAT && !prefix))
         return;
 
     char timestamp[64]{};
     FormatTimestamp(GetCurrentTimestamp(), timestamp);
-
+    std::string line = timestamp;
     if (type == ENTRY_TYPE_CHAT)
     {
-        if (prefix)
-            std::fprintf(file, "%s <%s> %s\n", timestamp, prefix, text);
+        line += " <";
+        line += prefix;
+        line += "> ";
     }
-    else if (type == ENTRY_TYPE_INFO || type == ENTRY_TYPE_DEBUG)
-    {
-        std::fprintf(file, "%s %s\n", timestamp, text);
-    }
-
-    std::fclose(file);
+    else
+        line += ' ';
+    line += text;
+    line += '\n';
+    writer->second->Write(std::move(line));
 }
 
 void CChat::ResetDialogControls(cgui::Dialog* gameUi)

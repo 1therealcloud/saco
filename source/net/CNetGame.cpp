@@ -1558,6 +1558,9 @@ void CNetGame::Process()
     if (m_pPools->m_pPlayer)
         m_pPools->m_pPlayer->Process();
 
+    if (m_pPools->m_pActor)
+        m_pPools->m_pActor->Process();
+
     if (m_pPools->m_pPickup)
         m_pPools->m_pPickup->Process();
 

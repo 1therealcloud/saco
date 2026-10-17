@@ -234,34 +234,10 @@ void CEntity::SetModelIndex(int model)
     if (!IsValid() || !g_game || !ModelInfo::Valid(model) || ((model < 0 || model >= ModelInfo::MAX_MODELS) && !ModelInfo::IsOwnedClone(model)))
         return;
 
-    if (!g_game->IsModelAvailable(model))
+    if (!ModelInfo::IsReady(model))
     {
-        // r5's 0xb45a0 reads the rw object at modelinfo +0x1c.
-        const auto* info = ModelInfo::GetRelocated(model);
-        if (!info)
-            return;
-
-        if (!Read<void*>(info, 0x1C))
-        {
-            g_game->RequestModel(model, 2);
-            g_game->LoadRequestedModels();
-
-            if (!g_game->IsModelAvailable(model))
-            {
-                int attempts = 0;
-                do
-                {
-                    Sleep(1);
-                    if (++attempts > 200)
-                    {
-                        if (g_chat)
-                            g_chat->PrintDebug("Warning: Model %u wouldn't load in time!", static_cast<unsigned>(model));
-                        return;
-                    }
-                }
-                while (!g_game->IsModelAvailable(model));
-            }
-        }
+        g_game->RequestModel(model, 2);
+        return;
     }
 
     Virtual<void(__thiscall*)(void*)>(m_pGameEntity, 0x20)(m_pGameEntity);

@@ -7,6 +7,8 @@
  */
 
 #pragma once
+
+#include <deque>
 #include <cstring>
 
 #include <Windows.h>
@@ -242,6 +244,7 @@ public:
     void LoadShoppingDataSubsection(const char* name);
 
     void CreateArrow(int color);
+    void SetSkin(int base, std::uint32_t custom);
     void SetModelIndex(int model); // 0xAFF50
     void Destroy();
 
@@ -256,6 +259,8 @@ public:
     void AddAccessory(int slot, const Accessory* info); // 0xB0B10
     CObject* GetAccessory(int slot) const;
     void ProcessAccessories();
+    void ProcessStreaming();
+    static void BeginStreamingFrame();
     bool GetAccessoryMatrix(int slot, CMatrix* matrix) const;
     bool UpdateAccessory(int slot, const Accessory& info);
     static bool BuildAccessoryMatrix(const CMatrix& bone, const Accessory& info, CMatrix* matrix)
@@ -287,6 +292,30 @@ public:
     void GetBonePosition(unsigned int boneId, CVector* outPosition) const;
 
 private:
+    struct PendingWeapon
+    {
+        int weapon, ammo;
+        bool give;
+        DWORD requested;
+    };
+    std::deque<PendingWeapon> m_pendingWeapons;
+    int m_pendingArmedWeapon = -1;
+    void ApplyArmedWeapon(int weapon);
+    int m_pendingCustomSkin = 0;
+    DWORD m_customSkinRequested = 0;
+    int m_pendingStuff = 0;
+    DWORD m_stuffRequested = 0;
+    int m_pendingModel = -1;
+    DWORD m_modelRequested = 0;
+    bool m_hiddenWhileLoading = false;
+    struct PendingAccessory
+    {
+        Accessory info;
+        DWORD requested = 0;
+        bool active = false;
+    };
+    std::array<PendingAccessory, MAX_ACCESSORIES> m_pendingAccessories{};
+
     int m_pinnedCustomModel{};
     void ReleaseCustomModel();
     std::uint16_t m_lastScriptAnimationId{};

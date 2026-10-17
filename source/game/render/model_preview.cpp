@@ -249,17 +249,14 @@ namespace game::render::model_preview
         auto* world = *reinterpret_cast<RpWorld**>(0xC17038);
         if (!info || !world)
             return {};
+        if (!Read<void*>(info, 0x1C))
+        {
+            reinterpret_cast<void(__cdecl*)(int, int)>(0x4087E0)(model, 0);
+            return {};
+        }
         DeviceState deviceState(*reinterpret_cast<IDirect3DDevice9**>(0xC97C28));
         if (!deviceState.valid)
             return {};
-        if (!Read<void*>(info, 0x1C))
-        {
-            // request without persistent game/mission flags; the native streaming call is bounded
-            reinterpret_cast<void(__cdecl*)(int, int)>(0x4087E0)(model, 0);
-            reinterpret_cast<void(__cdecl*)(bool)>(0x40EA10)(false);
-            if (!Read<void*>(info, 0x1C))
-                return {};
-        }
 
         Instance instance(info);
         reinterpret_cast<void(__thiscall*)(void*)>(0x4C4BA0)(info);

@@ -35,12 +35,18 @@ public:
     bool m_bNeedsToCreateMarker = false; // 0x54
     bool m_bInvulnerable = false;        // 0x55
 
-    CActor(int model, CVector position, float rotation); // 0x9C2B0
-    ~CActor() override;                                  // 0x9C750
+    CActor(int model, CVector position, float rotation, std::uint32_t custom = 0); // 0x9C2B0
+    ~CActor() override;                                                            // 0x9C750
 
     void Destroy();                                                                                                                         // 0x9C400
     void PerformAnimation(const char* animation, const char* file, float frameDelta, int lockA, int lockX, int lockY, int lockF, int time); // 0x9C460
     static void ProcessAnimations();
+    void ProcessStreaming();
+    bool IsPending() const
+    {
+        return m_pendingModel >= 0;
+    }
+    void Teleport(CVector position);
     void ClearAnimations();        // 0x9C550
     void SetRotation(float angle); // 0x9C570
 
@@ -56,5 +62,11 @@ public:
     BOOL IsOnGround() const;           // 0x9C6E0
     void SetInvulnerable(bool enable); // 0x9C700
 private:
+    int m_pendingCustomModel = 0;
+    int m_pendingModel = -1;
+    CVector m_pendingPosition{};
+    float m_pendingRotation = 0;
+    float m_pendingHealth = 100;
+    DWORD m_modelRequested = 0;
     int m_pinnedCustomModel{};
 };

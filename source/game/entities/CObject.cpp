@@ -129,9 +129,11 @@ namespace
         bool rotate = false;
         bool customLighting = false;
         bool poolManaged = false;
+        bool accessory = false;
         int pinnedModel = 0;
         unsigned char hourOn = 0, hourOff = 0;
         unsigned int outsideFrames = 0;
+        DWORD materialRetryAt = 0;
         AttachmentKind attachment = AttachmentKind::None;
         void* attachedNative = nullptr;
         std::uint32_t attachedHandle = 0;
@@ -249,9 +251,10 @@ namespace
         const auto table = Read<std::uintptr_t>(info, 0);
         return table == 0x85BBF0 || table == 0x85BC30 || table == 0x85BC70 || table == 0x85BCB0 || table == 0x85BCF0;
     }
-    bool EnsureModelLoaded(int model, int attempts = 250)
+    bool EnsureModelLoaded(int model)
     {
-        ZoneScoped;
+        ZoneScopedN("Object model readiness");
+        ZoneValue(model);
         auto* info = ModelInfo::GetRelocated(model);
         if (!info)
             return false;
@@ -260,13 +263,6 @@ namespace
         if (ModelInfo::IsOwnedClone(model))
             return false;
         reinterpret_cast<void(__cdecl*)(int, int)>(0x4087E0)(model, 2);
-        for (int i = 0; i < attempts; ++i)
-        {
-            reinterpret_cast<void(__cdecl*)(bool)>(0x40EA10)(false);
-            if (Read<void*>(info, 0x1C))
-                return true;
-            Sleep(2);
-        }
         return false;
     }
     void* ObjectFromHandle(std::uint32_t handle)
@@ -446,7 +442,8 @@ namespace game::objects::detail
         {
             auto* object = found->second;
             const auto& runtime = g_objects.at(object);
-            const bool nativeStreaming = runtime.poolManaged && !object->m_bHasCustomMaterial && object->m_fDrawDistance <= 300.0f && !runtime.hourOn && !runtime.hourOff;
+            const bool nativeStreaming =
+                runtime.poolManaged && !runtime.accessory && !object->m_bHasCustomMaterial && object->m_fDrawDistance <= 300.0f && !runtime.hourOn && !runtime.hourOff;
             if (runtime.poolManaged && !nativeStreaming && g_explicitRenderObject != object)
                 return;
             if (!nativeStreaming && object->m_fDrawDistance > 0.0f && object->GetDistanceToCamera() > object->m_fDrawDistance)
@@ -826,7 +823,7 @@ void CObject::Process(float elapsedSeconds)
     auto& runtime = g_objects.at(this);
     m_fDistanceToCamera = GetDistanceToCamera();
     const bool timed = runtime.hourOn != 0 || runtime.hourOff != 0;
-    const bool fullStreaming = m_bHasCustomMaterial || m_fDrawDistance > 300.0f || timed;
+    const bool fullStreaming = runtime.accessory || m_bHasCustomMaterial || m_fDrawDistance > 300.0f || timed;
     const bool inRange = m_fDistanceToCamera <= m_fDrawDistance;
     auto* game = g_game.get();
 
@@ -1091,12 +1088,16 @@ bool CObject::GetMaterialSize(int size, int* width, int* height)
     *height = sizes[size / 10 - 1][1];
     return true;
 }
-void CObject::ConstructMaterialText()
+void CObject::ConstructMaterialText(unsigned& budget)
 {
     ZoneScoped;
-    if (!g_objectMaterialText)
+    if (!g_objectMaterialText || !budget)
         return;
-    for (int i = 0; i < MAX_MATERIALS; ++i)
+    auto& runtime = g_objects.at(this);
+    const DWORD now = GetTickCount();
+    if (runtime.materialRetryAt && static_cast<LONG>(now - runtime.materialRetryAt) < 0)
+        return;
+    for (int i = 0; i < MAX_MATERIALS && budget; ++i)
     {
         if (m_material.m_nType[i] != MATERIAL_TYPE_TEXT || m_material.m_bTextureWasCreated[i] || !m_material.m_szText[i])
             continue;
@@ -1104,10 +1105,18 @@ void CObject::ConstructMaterialText()
         if (!GetMaterialSize(static_cast<std::uint8_t>(m_material.m_textInfo[i].m_nMaterialSize), &width, &height))
             continue;
         const auto& info = m_material.m_textInfo[i];
+        --budget;
+        bool cacheHit = false;
         auto* texture = g_objectMaterialText->CreateRwTexture(m_material.m_szText[i], info.m_szFont, static_cast<unsigned char>(info.m_nFontSize), width, height, info.m_fontColor,
-                                                              info.m_backgroundColor, info.m_bBold, info.m_align);
+                                                              info.m_backgroundColor, info.m_bBold, info.m_align, &cacheHit);
         if (!texture)
-            continue;
+        {
+            runtime.materialRetryAt = now + 1000;
+            return;
+        }
+        if (cacheHit)
+            ++budget;
+        runtime.materialRetryAt = 0;
         m_material.m_pTextBackground[i] = texture;
         m_material.m_bTextureWasCreated[i] = TRUE;
     }
@@ -1142,6 +1151,15 @@ void CObject::Draw()
     if (m_fDrawDistance <= 0.0f || GetDistanceToCamera() <= m_fDrawDistance)
         Render();
 }
+void CObject::SetAccessory()
+{
+    auto& runtime = g_objects.at(this);
+    runtime.accessory = true;
+    runtime.poolManaged = true;
+    // the bone matrix moves every frame; world sectors still describe the spawn position
+    Remove();
+}
+
 void CObject::SetPoolManaged(bool managed)
 {
     g_objects.at(this).poolManaged = managed;
@@ -1154,9 +1172,9 @@ void CObject::ProcessAll(float elapsedSeconds)
         if (!runtime.poolManaged)
             object->Process(elapsedSeconds);
 }
-void CObject::ConstructAllMaterialText()
+void CObject::ConstructAllMaterialText(unsigned& budget)
 {
     for (auto& [object, runtime] : g_objects)
         if (!runtime.poolManaged)
-            object->ConstructMaterialText();
+            object->ConstructMaterialText(budget);
 }

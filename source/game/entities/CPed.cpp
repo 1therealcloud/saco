@@ -12,6 +12,7 @@
 #include "game/CGame.h"
 #include "game/AnimationNames.h"
 #include "main.h"
+#include "net/CNetGame.h"
 #include "game/PlayerSlots.h"
 #include "game/patch/hooks.h"
 #include "sync/ControllerState.h"
@@ -31,6 +32,9 @@
 namespace
 {
     std::array<char, 32> g_shopName{};
+    unsigned g_streamingBudget = 4;
+    constexpr int kWeaponModels[] = {0,   331, 333, 334, 335, 336, 337, 338, 339, 341, 321, 322, 323, 324, 325, 326, 342, 343, 344, -1,  -1,  -1,  346, 347,
+                                     348, 349, 350, 351, 352, 353, 355, 356, 372, 357, 358, 359, 360, 361, 362, 363, 364, 365, 366, 367, 368, 369, 371};
 
     constexpr float RADIANS = 0.017453292f;
     constexpr float DEGREES = 57.295776f;
@@ -219,10 +223,15 @@ CPed::CPed(int playerNumber, int model, CVector position, float rotation)
     NotifyPlayerPed(this);
 
     SetModelIndex(model);
-    if (!HasCurrentNativePed() || GetModelIndex() != model)
+    if (!HasCurrentNativePed() || (GetModelIndex() != model && m_pendingModel < 0))
     {
         Destroy();
         return;
+    }
+    if (m_pendingModel >= 0)
+    {
+        Write(m_pGamePed, 0x1C, Read<std::uint32_t>(m_pGamePed, 0x1C) & ~0x80u);
+        m_hiddenWhileLoading = true;
     }
     ForceRotation(rotation);
 
@@ -238,6 +247,8 @@ CPed::CPed(int playerNumber, int model, CVector position, float rotation)
 
 CPed::~CPed()
 {
+    m_pendingWeapons.clear();
+    m_pendingAccessories = {};
     DropStuff();
     DeleteAllAccessories();
     DeleteArrow();
@@ -916,6 +927,7 @@ int CPed::GetStuff()
 void CPed::DropStuff()
 {
     ZoneScoped;
+    m_pendingStuff = 0;
     if (!m_stuff.m_object && !m_stuff.m_nType)
         return;
 
@@ -942,9 +954,10 @@ void CPed::GiveStuff(int type)
     if (!g_game->IsModelAvailable(model))
     {
         g_game->RequestModel(model, 2);
-        g_game->LoadRequestedModels();
-        if (!g_game->IsModelAvailable(model))
-            return;
+        if (m_pendingStuff != type)
+            m_stuffRequested = GetTickCount();
+        m_pendingStuff = type;
+        return;
     }
 
     DropStuff();
@@ -1496,9 +1509,22 @@ void CPed::CreateArrow(int color)
     scm::ProcessCommand(&SET_MARKER_MODE, m_arrow, 2);
 }
 
+void CPed::SetSkin(int base, std::uint32_t custom)
+{
+    m_pendingCustomSkin = 0;
+    if (GetModelIndex() != base || m_pendingModel >= 0)
+        SetModelIndex(base);
+    if (g_DLClient && g_netGame && custom >= 20001 && custom <= 30000 && g_netGame->GetCustomModels().IsSkinModel(static_cast<int>(custom)))
+    {
+        m_pendingCustomSkin = static_cast<int>(custom);
+        m_customSkinRequested = GetTickCount();
+    }
+}
+
 void CPed::SetModelIndex(int model)
 {
     ZoneScoped;
+    m_pendingCustomSkin = 0;
     if (!HasCurrentNativePed())
         return;
     auto* info = ModelInfo::GetRelocated(model);
@@ -1507,18 +1533,15 @@ void CPed::SetModelIndex(int model)
 
     if (!g_game || !ModelInfo::GetRelocated(model))
         return;
-    if (!g_game->IsModelAvailable(model))
+    if (!ModelInfo::IsReady(model))
     {
+        if (m_pendingModel != model)
+            m_modelRequested = GetTickCount();
+        m_pendingModel = model;
         g_game->RequestModel(model, 2);
-        g_game->LoadRequestedModels();
-        for (int attempt = 0; attempt < 200 && !g_game->IsModelAvailable(model); ++attempt)
-            Sleep(1);
-        if (!g_game->IsModelAvailable(model))
-            return;
-    }
-    if (!HasCurrentNativePed())
         return;
-
+    }
+    m_pendingModel = -1;
     // keep the assembled CJ template resident even while all players use other skins
     reinterpret_cast<void(__cdecl*)(int, int)>(0x4087E0)(0, 2);
     // r5 disables clothes rebuilding before changing player skins: it replaces
@@ -1542,6 +1565,11 @@ void CPed::SetModelIndex(int model)
                 m_pinnedCustomModel = model;
         }
     }
+    if (m_hiddenWhileLoading && HasCurrentNativePed())
+    {
+        Write(m_pGamePed, 0x1C, Read<std::uint32_t>(m_pGamePed, 0x1C) | 0x80u);
+        m_hiddenWhileLoading = false;
+    }
 }
 
 BOOL CPed::CopyAppearanceFrom(const CPed& source)
@@ -1563,6 +1591,10 @@ BOOL CPed::CopyAppearanceFrom(const CPed& source)
 void CPed::Destroy()
 {
     ZoneScoped;
+    m_pendingWeapons.clear();
+    m_pendingArmedWeapon = -1;
+    m_pendingModel = -1;
+    m_pendingAccessories = {};
     m_pendingAnimation.active = false;
     if (!m_handle && !m_pGamePed)
     {
@@ -1629,6 +1661,7 @@ void CPed::DeleteAccessory(int slot)
     ZoneScoped;
     if (!ValidAccessorySlot(slot))
         return;
+    m_pendingAccessories[slot].active = false;
     auto* object = m_accessories.m_pObject[slot];
     m_accessories.m_pObject[slot] = nullptr;
     m_accessories.m_info[slot] = {};
@@ -1653,11 +1686,27 @@ void CPed::AddAccessory(int slot, const Accessory* info)
     if (!HasCurrentNativePed() || !info || !ValidAccessorySlot(slot) || info->m_nBone <= 0 || info->m_nBone > 18)
         return;
 
-    const Accessory value = *info;
+    Accessory value = *info;
     CMatrix validated = CMatrix::Unity();
     if (!BuildAccessoryMatrix(validated, value, &validated))
         return;
 
+    if (value.m_nModel < 0 && g_DLClient && g_netGame && g_netGame->GetCustomModels().IsObjectModel(value.m_nModel) && !g_netGame->GetCustomModels().LoadObject(value.m_nModel))
+    {
+        DeleteAccessory(slot);
+        m_pendingAccessories[slot] = {value, GetTickCount(), true};
+        return;
+    }
+    if (!ModelInfo::GetRelocated(value.m_nModel))
+        value.m_nModel = 18631;
+    if (!ModelInfo::IsReady(value.m_nModel))
+    {
+        DeleteAccessory(slot);
+        m_pendingAccessories[slot] = {value, GetTickCount(), true};
+        if (g_game)
+            g_game->RequestModel(value.m_nModel, 2);
+        return;
+    }
     CMatrix matrix = CMatrix::Unity();
     GetMatrix(&matrix);
     auto* object = new (std::nothrow) CObject(value.m_nModel, matrix.GetPosition(), value.m_rotation, 200.0f, 1, 0, 0);
@@ -1674,7 +1723,7 @@ void CPed::AddAccessory(int slot, const Accessory* info)
     if (value.m_secondMaterialColor)
         object->SetMaterial(-1, 1, "", "", value.m_secondMaterialColor);
     object->SetCollisionFlag(FALSE);
-    object->SetPoolManaged(true);
+    object->SetAccessory();
 
     DeleteAccessory(slot);
     m_accessories.m_info[slot] = value;
@@ -1726,6 +1775,136 @@ bool CPed::UpdateAccessory(int slot, const Accessory& info)
     return true;
 }
 
+void CPed::BeginStreamingFrame()
+{
+    g_streamingBudget = 4;
+}
+
+void CPed::ProcessStreaming()
+{
+    ZoneScopedN("Deferred ped assets");
+    if (!m_pendingCustomSkin && !m_pendingStuff && m_pendingModel < 0 && m_pendingWeapons.empty() &&
+        std::none_of(
+            m_pendingAccessories.begin(), m_pendingAccessories.end(),
+            [](const PendingAccessory& value) {
+                return value.active;
+            }))
+        return;
+    if (!HasCurrentNativePed() || !g_game)
+        return;
+    const DWORD now = GetTickCount();
+    if (m_pendingCustomSkin && g_netGame)
+    {
+        auto& models = g_netGame->GetCustomModels();
+        if (!models.IsCacheReady())
+            m_customSkinRequested = now;
+        else if (now - m_customSkinRequested >= 10000)
+            m_pendingCustomSkin = 0;
+        else if (g_streamingBudget && models.LoadSkin(m_pendingCustomSkin))
+        {
+            --g_streamingBudget;
+            SetModelIndex(m_pendingCustomSkin);
+        }
+    }
+    if (m_pendingStuff)
+    {
+        constexpr int models[]{0, 1543, 1486, 1546, 1485};
+        if (IsInVehicle() || now - m_stuffRequested >= 10000)
+            m_pendingStuff = 0;
+        else if (g_streamingBudget && ModelInfo::IsReady(models[m_pendingStuff]))
+        {
+            --g_streamingBudget;
+            GiveStuff(m_pendingStuff);
+        }
+    }
+    if (m_pendingModel >= 0)
+    {
+        if (ModelInfo::IsReady(m_pendingModel) && g_streamingBudget)
+        {
+            --g_streamingBudget;
+            const int custom = m_pendingCustomSkin;
+            SetModelIndex(m_pendingModel);
+            m_pendingCustomSkin = custom;
+        }
+        else if (now - m_modelRequested >= 10000)
+        {
+#if defined(_DEBUG)
+            Log("[ped] skin load timed out: model=%d", m_pendingModel);
+#endif // _DEBUG
+            m_pendingModel = -1;
+            if (m_hiddenWhileLoading)
+            {
+                Write(m_pGamePed, 0x1C, Read<std::uint32_t>(m_pGamePed, 0x1C) | 0x80u);
+                m_hiddenWhileLoading = false;
+            }
+        }
+    }
+    while (g_streamingBudget && !m_pendingWeapons.empty())
+    {
+        const auto command = m_pendingWeapons.front();
+        if (command.give && kWeaponModels[command.weapon] > 0 && !ModelInfo::IsReady(kWeaponModels[command.weapon]))
+        {
+            if (now - command.requested < 10000)
+                break;
+#if defined(_DEBUG)
+            Log("[ped] weapon load timed out: weapon=%d", command.weapon);
+#endif // _DEBUG
+            m_pendingWeapons.pop_front();
+            --g_streamingBudget;
+            continue;
+        }
+        m_pendingWeapons.pop_front();
+        --g_streamingBudget;
+        if (command.give)
+        {
+            constexpr scm::OpcodeInfo give{0x01B2, "iii"};
+            scm::ProcessCommand(&give, m_handle, command.weapon, command.ammo);
+            ApplyArmedWeapon(command.weapon);
+        }
+        else
+        {
+            // apply this ammo command without queuing it behind later commands
+            for (int slot = 0; slot < 13; ++slot)
+            {
+                auto* entry = static_cast<std::uint8_t*>(m_pGamePed) + 0x5A0 + slot * 0x1C;
+                if (Read<int>(entry, 0) == command.weapon)
+                {
+                    Write(entry, 0x0C, command.ammo);
+                    if (Read<int>(entry, 0x08) > command.ammo)
+                        Write(entry, 0x08, command.ammo);
+                    break;
+                }
+            }
+        }
+    }
+    if (m_pendingWeapons.empty() && m_pendingArmedWeapon >= 0)
+    {
+        const int weapon = m_pendingArmedWeapon;
+        SetArmedWeapon(weapon);
+        m_pendingArmedWeapon = -1;
+    }
+    for (int slot = 0; slot < static_cast<int>(MAX_ACCESSORIES) && g_streamingBudget; ++slot)
+    {
+        auto& pending = m_pendingAccessories[slot];
+        if (!pending.active)
+            continue;
+        if (ModelInfo::IsReady(pending.info.m_nModel) || (pending.info.m_nModel < 0 && g_DLClient && g_netGame && g_netGame->GetCustomModels().LoadObject(pending.info.m_nModel)))
+        {
+            const auto info = pending.info;
+            pending.active = false;
+            AddAccessory(slot, &info);
+            --g_streamingBudget;
+        }
+        else if (now - pending.requested >= 10000)
+        {
+#if defined(_DEBUG)
+            Log("[ped] accessory load timed out: model=%d", pending.info.m_nModel);
+#endif // _DEBUG
+            pending.active = false;
+        }
+    }
+}
+
 void CPed::ProcessAccessories()
 {
     ZoneScoped;
@@ -1763,6 +1942,8 @@ void CPed::GetBonePosition(unsigned int boneId, CVector* outPosition) const
 
 void CPed::ClearWeapons()
 {
+    m_pendingWeapons.clear();
+    m_pendingArmedWeapon = -1;
     if (HasCurrentNativePed())
         reinterpret_cast<void(__thiscall*)(void*)>(0x5E6320)(m_pGamePed);
 }
@@ -1770,16 +1951,27 @@ void CPed::ClearWeapons()
 void CPed::GiveWeapon(int weapon, int ammo)
 {
     ZoneScoped;
-    static constexpr int models[] = {0,   331, 333, 334, 335, 336, 337, 338, 339, 341, 321, 322, 323, 324, 325, 326, 342, 343, 344, -1,  -1,  -1,  346, 347,
-                                     348, 349, 350, 351, 352, 353, 355, 356, 372, 357, 358, 359, 360, 361, 362, 363, 364, 365, 366, 367, 368, 369, 371};
-    if (!HasCurrentNativePed() || !g_game || weapon < 0 || weapon >= 47 || models[weapon] < 0 || ammo < 0)
+    if (!HasCurrentNativePed() || !g_game || weapon < 0 || weapon >= 47 || kWeaponModels[weapon] < 0 || ammo < 0)
         return;
-    if (models[weapon] > 0)
+    if (!m_pendingWeapons.empty() || (kWeaponModels[weapon] > 0 && !ModelInfo::IsReady(kWeaponModels[weapon])))
     {
-        g_game->RequestModel(models[weapon]);
-        g_game->LoadRequestedModels();
-        if (!g_game->IsModelAvailable(models[weapon]))
+        m_pendingArmedWeapon = weapon;
+        if (m_nPlayerNumber != 0)
+        {
+            for (auto& pending : m_pendingWeapons)
+                if (pending.give && pending.weapon == weapon)
+                {
+                    pending.ammo = ammo;
+                    return;
+                }
+            m_pendingWeapons.clear();
+        }
+        if (m_pendingWeapons.size() >= 128)
             return;
+        m_pendingWeapons.push_back({weapon, ammo, true, GetTickCount()});
+        if (kWeaponModels[weapon] > 0)
+            g_game->RequestModel(kWeaponModels[weapon], 2);
+        return;
     }
     constexpr scm::OpcodeInfo give{0x01B2, "iii"};
     scm::ProcessCommand(&give, m_handle, weapon, ammo);
@@ -1791,6 +1983,12 @@ void CPed::SetWeaponAmmo(int weapon, int ammo)
     ZoneScoped;
     if (!HasCurrentNativePed() || weapon < 0 || weapon > 46 || ammo < 0)
         return;
+    if (!m_pendingWeapons.empty())
+    {
+        if (m_pendingWeapons.size() < 128)
+            m_pendingWeapons.push_back({weapon, ammo, false, GetTickCount()});
+        return;
+    }
     for (int slot = 0; slot < 13; ++slot)
     {
         auto* entry = static_cast<std::uint8_t*>(m_pGamePed) + 0x5A0 + slot * 0x1C;
@@ -1808,6 +2006,17 @@ void CPed::SetArmedWeapon(int weapon)
     ZoneScoped;
     if (!HasCurrentNativePed() || weapon < 0 || weapon > 46)
         return;
+    if (!m_pendingWeapons.empty())
+    {
+        m_pendingArmedWeapon = weapon;
+        return;
+    }
+    m_pendingArmedWeapon = -1;
+    ApplyArmedWeapon(weapon);
+}
+
+void CPed::ApplyArmedWeapon(int weapon)
+{
     if (InVehicle(m_pGamePed))
     {
         // R5 uses the native setter in vehicles; SCM can leave the weapon model hidden.

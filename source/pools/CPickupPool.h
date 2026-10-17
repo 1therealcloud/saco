@@ -10,6 +10,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <unordered_map>
 
 #include "utils/math/CVector.h"
 
@@ -66,4 +67,16 @@ public:
     int GetIndex(int id) const;
     void SendNotification(int id);
     void Process();
+
+private:
+    struct PendingPickup
+    {
+        Pickup data;
+        WeaponPickup weapon;
+        int ammo;
+        std::uint32_t requested;
+        std::uint32_t queued;
+    };
+    std::unordered_map<int, PendingPickup> m_pending;
+    void Queue(int id, Pickup data, WeaponPickup weapon = {}, int ammo = 0);
 };

@@ -46,9 +46,9 @@ public:
     int GetId(const void* gameObject);                                                     // 0x12A10
     void Process();                                                                        // 0x12A50
     void Process(float elapsedSeconds);
-    void ConstructMaterials(); // 0x12B10
-    void ShutdownMaterials();  // 0x12B50
-    void Draw();               // 0x12B90
-    void DrawLast();           // 0x12BD0
-    CObject* Get(ID id);       // 0x2DE0
+    void ConstructMaterials(unsigned& budget); // 0x12B10
+    void ShutdownMaterials();                  // 0x12B50
+    void Draw();                               // 0x12B90
+    void DrawLast();                           // 0x12BD0
+    CObject* Get(ID id);                       // 0x2DE0
 };

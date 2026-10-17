@@ -122,14 +122,15 @@ public:
     static bool GetMaterialSize(int size, int* width, int* height);                                                                                                     // 0xA8C80
     void Render();                                                                                                                                                      // 0xA8F60
     void Process(float elapsedSeconds);                                                                                                                                 // 0xA9650
-    void ConstructMaterialText();                                                                                                                                       // 0xA9EE0
+    void ConstructMaterialText(unsigned& budget);                                                                                                                       // 0xA9EE0
     void ShutdownMaterialText();                                                                                                                                        // 0xA8ED0
     void Draw();                                                                                                                                                        // 0xA9F90
+    void SetAccessory();
     void SetPoolManaged(bool managed);
     float MoveTo(CVector position, float speed, CVector rotation = {-1000.0f, -1000.0f, -1000.0f}); // 0xA9BD0 (R5 movement setup; saco return value)
     void Detach();
     static void ProcessAll(float elapsedSeconds);
-    static void ConstructAllMaterialText();
+    static void ConstructAllMaterialText(unsigned& budget);
 
 private:
     void ClearMaterial(int index);

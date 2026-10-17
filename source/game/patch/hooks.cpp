@@ -748,6 +748,7 @@ __declspec(naked) void Opcode09D3()
 
 void* __cdecl LoadObjectInstanceHook(void* instance, const char* name)
 {
+    ZoneScopedN("GTA world instance load");
     auto* entity = game::hooks::originalLoad(instance, name);
     BuildingRemoval::detail::QueueLoadedInstance(entity, instance);
     return entity;

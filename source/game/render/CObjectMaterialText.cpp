@@ -10,11 +10,96 @@
 
 #include "CObjectMaterialText.h"
 #include "render/CFonts.h"
+#include "textures.h"
 
 #include "game/RenderWare/RenderWare.h"
+#include <condition_variable>
+#include <thread>
 
 namespace
 {
+    struct MaterialFont
+    {
+        std::string face;
+        int size;
+        bool bold;
+        std::unique_ptr<CFont> font;
+    };
+
+    class MaterialFontCache
+    {
+    public:
+        MaterialFontCache()
+            : m_worker([this] {
+                  Run();
+              })
+        {}
+        ~MaterialFontCache()
+        {
+            Clear();
+            {
+                std::lock_guard lock(m_mutex);
+                m_stopping = true;
+            }
+            m_ready.notify_one();
+            m_worker.join();
+        }
+
+        void Retire(std::unique_ptr<CFont> font)
+        {
+            font->ReleaseDeviceObjects();
+            {
+                std::lock_guard lock(m_mutex);
+                m_retired.push_back(std::move(font));
+            }
+            m_ready.notify_one();
+        }
+
+        void Clear()
+        {
+            for (auto& entry : fonts)
+                Retire(std::move(entry.font));
+            fonts.clear();
+        }
+
+        std::vector<MaterialFont> fonts;
+
+    private:
+        void Run()
+        {
+            for (;;)
+            {
+                std::vector<std::unique_ptr<CFont>> retired;
+                {
+                    std::unique_lock lock(m_mutex);
+                    m_ready.wait(lock, [this] {
+                        return m_stopping || !m_retired.empty();
+                    });
+                    retired.swap(m_retired);
+                    if (retired.empty() && m_stopping)
+                        return;
+                }
+                ZoneScopedN("Material font cleanup");
+                retired.clear();
+            }
+        }
+
+        std::mutex m_mutex;
+        std::condition_variable m_ready;
+        std::vector<std::unique_ptr<CFont>> m_retired;
+        bool m_stopping = false;
+        std::thread m_worker;
+    };
+    std::unordered_map<const CObjectMaterialText*, std::unique_ptr<MaterialFontCache>> g_materialFonts;
+
+    struct MaterialTexture
+    {
+        std::string key;
+        game::render::textures::Texture texture;
+        std::size_t bytes;
+    };
+    std::unordered_map<const CObjectMaterialText*, std::vector<MaterialTexture>> g_materialTextures;
+
     template <typename T>
     void SafeRelease(T*& object)
     {
@@ -142,10 +227,19 @@ CObjectMaterialText::~CObjectMaterialText()
 {
     // +0x708A0 is only a jump to +0x70830.
     DeleteDeviceObjects();
+    g_materialFonts.erase(this);
+}
+
+void CObjectMaterialText::ClearCache()
+{
+    g_materialTextures.erase(this);
+    if (const auto it = g_materialFonts.find(this); it != g_materialFonts.end())
+        it->second->Clear();
 }
 
 void CObjectMaterialText::DeleteDeviceObjects()
 {
+    ClearCache();
     // Original +0x70830 releases +0x08 first, then +0x04. The D3DX-free
     // implementation never creates either object, but preserve the state/order.
     m_pSprite = nullptr;
@@ -214,7 +308,50 @@ IDirect3DTexture9* CObjectMaterialText::Create(const char* text, const char* fon
     // R5's D3DXCreateFontA call uses MipLevels=1, DEFAULT_CHARSET and
     // Quality=DEFAULT_QUALITY. The accompanying CFonts patch adds the final
     // quality argument while preserving every existing caller's default.
-    CFont textFont(m_pDevice, fontSize, 0, weight, font, text::CodePage, DEFAULT_CHARSET, DEFAULT_QUALITY);
+    auto& cache = g_materialFonts[this];
+    if (!cache)
+    {
+        try
+        {
+            cache = std::make_unique<MaterialFontCache>();
+        }
+        catch (const std::system_error&)
+        {
+#if defined(_DEBUG)
+            Log("[material] failed to start font cleanup worker");
+#endif // _DEBUG
+            g_materialFonts.erase(this);
+            return nullptr;
+        }
+    }
+    auto& fonts = cache->fonts;
+    auto found = std::find_if(fonts.begin(), fonts.end(), [font, fontSize, bold](const MaterialFont& entry) {
+        return entry.face == font && entry.size == fontSize && entry.bold == bold;
+    });
+    if (found == fonts.end())
+    {
+        ZoneScopedN("Material font cache miss");
+        ZoneText(font, std::strlen(font));
+        ZoneValue(fontSize);
+        auto created = std::make_unique<CFont>(m_pDevice, fontSize, 0, weight, font, text::CodePage, DEFAULT_CHARSET, DEFAULT_QUALITY, text);
+        if (!created->IsValid())
+        {
+#if defined(_DEBUG)
+            Log("SignText: Can't create font %s", font);
+#endif // _DEBUG
+            return nullptr;
+        }
+        if (fonts.size() >= 32)
+        {
+            cache->Retire(std::move(fonts.front().font));
+            fonts.erase(fonts.begin());
+        }
+        fonts.push_back({font, fontSize, bold, std::move(created)});
+        found = std::prev(fonts.end());
+    }
+    if (std::next(found) != fonts.end())
+        std::rotate(found, std::next(found), fonts.end());
+    CFont& textFont = *fonts.back().font;
 
     if (!textFont.IsValid())
     {
@@ -258,9 +395,33 @@ IDirect3DTexture9* CObjectMaterialText::Create(const char* text, const char* fon
 }
 
 RwTexture* CObjectMaterialText::CreateRwTexture(const char* text, const char* font, int fontSize, int width, int height, D3DCOLOR fontColor, D3DCOLOR backgroundColor, bool bold,
-                                                std::uint8_t align)
+                                                std::uint8_t align, bool* cacheHit)
 {
     ZoneScoped;
+    if (cacheHit)
+        *cacheHit = false;
+    if (!text || !font || width <= 0 || height <= 0)
+        return nullptr;
+    std::string key(text);
+    key.push_back('\0');
+    key.append(font);
+    key.push_back('\0');
+    const std::array<std::uint32_t, 7> parameters{
+        static_cast<std::uint32_t>(fontSize), static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height), fontColor, backgroundColor, bold ? 1u : 0u, align};
+    key.append(reinterpret_cast<const char*>(parameters.data()), sizeof(parameters));
+    auto& cache = g_materialTextures[this];
+    auto found = std::find_if(cache.begin(), cache.end(), [&key](const MaterialTexture& entry) {
+        return entry.key == key;
+    });
+    if (found != cache.end())
+    {
+        ZoneScopedN("Material texture cache hit");
+        if (cacheHit)
+            *cacheHit = true;
+        if (std::next(found) != cache.end())
+            std::rotate(found, std::next(found), cache.end());
+        return RwTextureAddRef(cache.back().texture.get());
+    }
     TextureResources resources;
     resources.texture = Create(text, font, fontSize, width, height, fontColor, backgroundColor, bold, align);
     if (!resources.texture || FAILED(resources.texture->GetSurfaceLevel(0, &resources.surface)))
@@ -271,7 +432,11 @@ RwTexture* CObjectMaterialText::CreateRwTexture(const char* text, const char* fo
     IDirect3DSurface9* pixels = nullptr;
     if (FAILED(m_pDevice->CreateOffscreenPlainSurface(description.Width, description.Height, description.Format, D3DPOOL_SYSTEMMEM, &pixels, nullptr)))
         return nullptr;
-    const HRESULT copied = m_pDevice->GetRenderTargetData(resources.surface, pixels);
+    HRESULT copied;
+    {
+        ZoneScopedN("Material GPU readback");
+        copied = m_pDevice->GetRenderTargetData(resources.surface, pixels);
+    }
     if (FAILED(copied))
     {
         SafeRelease(pixels);
@@ -308,6 +473,22 @@ RwTexture* CObjectMaterialText::CreateRwTexture(const char* text, const char* fo
     if (!texture)
         RwRasterDestroy(raster);
     else
+    {
         RwTextureSetFilterMode(texture, rwFILTERLINEAR);
+        constexpr std::size_t budget = 32 * 1024 * 1024;
+        const auto bytes = static_cast<std::uint64_t>(width) * height * 4;
+        if (bytes <= budget)
+        {
+            std::size_t used = 0;
+            for (const auto& entry : cache)
+                used += entry.bytes;
+            while (!cache.empty() && (cache.size() >= 128 || used + bytes > budget))
+            {
+                used -= cache.front().bytes;
+                cache.erase(cache.begin());
+            }
+            cache.push_back({std::move(key), game::render::textures::Texture(RwTextureAddRef(texture)), static_cast<std::size_t>(bytes)});
+        }
+    }
     return texture;
 }

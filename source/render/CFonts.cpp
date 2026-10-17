@@ -75,20 +75,9 @@ namespace
         return value == ' ' || value == '\t';
     }
 
-    struct RasterGlyph
-    {
-        bool valid = false;
-        int width = 0;
-        int height = 0;
-        int originX = 0;
-        int originY = 0;
-        int advance = 0;
-        UINT pitch = 0;
-        std::vector<std::uint8_t> bitmap;
-    };
 }
 
-CFont::CFont(IDirect3DDevice9* device, int height, int width, int weight, const char* face, UINT codePage, BYTE charSet, DWORD quality)
+CFont::CFont(IDirect3DDevice9* device, int height, int width, int weight, const char* face, UINT codePage, BYTE charSet, DWORD quality, const char* initialText)
     : m_device(device), m_codePage(codePage), m_charSet(charSet), m_requestedHeight(height), m_requestedWidth(width), m_weight(weight), m_quality(quality),
       m_face(face && *face ? face : "Arial")
 {
@@ -98,11 +87,33 @@ CFont::CFont(IDirect3DDevice9* device, int height, int width, int weight, const 
 
     if (m_codePage == CP_UTF8 && m_charSet != SYMBOL_CHARSET)
     {
-        for (char32_t c = 0; c < 128; ++c)
-            m_characters.push_back(c);
-        for (char32_t c = 0x400; c < 0x500; ++c)
-            m_characters.push_back(c);
+        m_characters.push_back(L' ');
         m_characters.push_back(0xFFFD);
+        if (initialText)
+        {
+            const std::string_view input(initialText);
+            for (std::size_t i = 0; i < input.size() && m_characters.size() < 4096;)
+                m_characters.push_back(text::Decode(input, i));
+            std::sort(m_characters.begin(), m_characters.end());
+            m_characters.erase(std::unique(m_characters.begin(), m_characters.end()), m_characters.end());
+        }
+        else
+        {
+            m_characters.clear();
+            for (char32_t c = 0; c < 128; ++c)
+                m_characters.push_back(c);
+            for (char32_t c = 0x400; c < 0x500; ++c)
+                m_characters.push_back(c);
+            m_characters.push_back(0xFFFD);
+        }
+    }
+    else if (initialText)
+    {
+        m_characters.push_back(ByteToWide(' '));
+        for (const unsigned char c : std::string_view(initialText))
+            m_characters.push_back(ByteToWide(c));
+        std::sort(m_characters.begin(), m_characters.end());
+        m_characters.erase(std::unique(m_characters.begin(), m_characters.end()), m_characters.end());
     }
     else
         for (unsigned c = 0; c < 256; ++c)
@@ -116,9 +127,14 @@ CFont::CFont(IDirect3DDevice9* device, int height, int width, int weight, const 
 
 CFont::~CFont()
 {
+    ReleaseDeviceObjects();
+    ReleaseFontObject();
+}
+
+void CFont::ReleaseDeviceObjects()
+{
     ReleaseVertexBuffer();
     ReleaseAtlas();
-    ReleaseFontObject();
     SafeRelease(m_device);
 }
 
@@ -203,6 +219,55 @@ wchar_t CFont::ByteToWide(unsigned char value) const
     return static_cast<wchar_t>(value);
 }
 
+CFont::RasterGlyph CFont::RasterizeGlyph(char32_t value, FontFallback& fallback) const
+{
+    ZoneScopedN("Rasterize new font glyph");
+    RasterGlyph raster;
+    MAT2 matrix{};
+    matrix.eM11.value = 1;
+    matrix.eM22.value = 1;
+    const wchar_t character = static_cast<wchar_t>(value <= 0xFFFF ? value : 0xFFFD);
+    wchar_t rasterCharacter = character;
+    HDC glyphDc = fallback.GetDC(character);
+
+    GLYPHMETRICS metrics{};
+    DWORD size = GetGlyphOutlineW(glyphDc, rasterCharacter, GGO_GRAY8_BITMAP, &metrics, 0, nullptr, &matrix);
+
+    if (size == GDI_ERROR && rasterCharacter != L'?')
+    {
+        rasterCharacter = L'?';
+        size = GetGlyphOutlineW(glyphDc, rasterCharacter, GGO_GRAY8_BITMAP, &metrics, 0, nullptr, &matrix);
+    }
+
+    if (size == GDI_ERROR)
+        return raster;
+
+    raster.valid = true;
+    raster.width = static_cast<int>(metrics.gmBlackBoxX);
+    raster.height = static_cast<int>(metrics.gmBlackBoxY);
+    raster.originX = metrics.gmptGlyphOrigin.x;
+    raster.originY = metrics.gmptGlyphOrigin.y;
+    raster.advance = static_cast<int>(metrics.gmCellIncX);
+
+    if (raster.advance <= 0)
+        raster.advance = m_spaceAdvance;
+
+    if (raster.width <= 0 || raster.height <= 0 || size == 0)
+        return raster;
+
+    raster.pitch = (static_cast<UINT>(raster.width) + 3u) & ~3u;
+    raster.bitmap.resize(size);
+
+    if (GetGlyphOutlineW(glyphDc, rasterCharacter, GGO_GRAY8_BITMAP, &metrics, size, raster.bitmap.data(), &matrix) == GDI_ERROR)
+    {
+        raster.bitmap.clear();
+        raster.width = 0;
+        raster.height = 0;
+        return raster;
+    }
+    return raster;
+}
+
 bool CFont::CreateAtlas()
 {
     ZoneScoped;
@@ -212,58 +277,21 @@ bool CFont::CreateAtlas()
     if (!m_dc || !m_font || !m_device)
         return false;
 
-    std::vector<RasterGlyph> rasters(m_characters.size());
+    std::vector<const RasterGlyph*> rasters(m_characters.size());
     FontFallback fallback(m_dc);
-
-    MAT2 matrix{};
-    matrix.eM11.value = 1;
-    matrix.eM22.value = 1;
 
     UINT largestGlyphWidth = 1;
     UINT totalArea = 1;
 
     for (unsigned i = 0; i < rasters.size(); ++i)
     {
-        RasterGlyph& raster = rasters[i];
-        const wchar_t character = static_cast<wchar_t>(m_characters[i] <= 0xFFFF ? m_characters[i] : 0xFFFD);
-        wchar_t rasterCharacter = character;
-        HDC glyphDc = fallback.GetDC(character);
-
-        GLYPHMETRICS metrics{};
-        DWORD size = GetGlyphOutlineW(glyphDc, rasterCharacter, GGO_GRAY8_BITMAP, &metrics, 0, nullptr, &matrix);
-
-        if (size == GDI_ERROR && rasterCharacter != L'?')
-        {
-            rasterCharacter = L'?';
-            size = GetGlyphOutlineW(glyphDc, rasterCharacter, GGO_GRAY8_BITMAP, &metrics, 0, nullptr, &matrix);
-        }
-
-        if (size == GDI_ERROR)
+        auto cached = m_rasters.find(m_characters[i]);
+        if (cached == m_rasters.end())
+            cached = m_rasters.emplace(m_characters[i], RasterizeGlyph(m_characters[i], fallback)).first;
+        const RasterGlyph& raster = cached->second;
+        rasters[i] = &raster;
+        if (!raster.valid || raster.bitmap.empty())
             continue;
-
-        raster.valid = true;
-        raster.width = static_cast<int>(metrics.gmBlackBoxX);
-        raster.height = static_cast<int>(metrics.gmBlackBoxY);
-        raster.originX = metrics.gmptGlyphOrigin.x;
-        raster.originY = metrics.gmptGlyphOrigin.y;
-        raster.advance = static_cast<int>(metrics.gmCellIncX);
-
-        if (raster.advance <= 0)
-            raster.advance = m_spaceAdvance;
-
-        if (raster.width <= 0 || raster.height <= 0 || size == 0)
-            continue;
-
-        raster.pitch = (static_cast<UINT>(raster.width) + 3u) & ~3u;
-        raster.bitmap.resize(size);
-
-        if (GetGlyphOutlineW(glyphDc, rasterCharacter, GGO_GRAY8_BITMAP, &metrics, size, raster.bitmap.data(), &matrix) == GDI_ERROR)
-        {
-            raster.bitmap.clear();
-            raster.width = 0;
-            raster.height = 0;
-            continue;
-        }
 
         const UINT paddedWidth = static_cast<UINT>(raster.width + kGlyphPadding * 2);
         const UINT paddedHeight = static_cast<UINT>(raster.height + kGlyphPadding * 2);
@@ -297,7 +325,7 @@ bool CFont::CreateAtlas()
 
     for (unsigned i = 0; i < rasters.size(); ++i)
     {
-        const RasterGlyph& raster = rasters[i];
+        const RasterGlyph& raster = *rasters[i];
         if (!raster.valid || raster.width <= 0 || raster.height <= 0)
             continue;
 
@@ -348,7 +376,7 @@ bool CFont::CreateAtlas()
 
     for (unsigned i = 0; i < rasters.size(); ++i)
     {
-        const RasterGlyph& raster = rasters[i];
+        const RasterGlyph& raster = *rasters[i];
         Glyph& glyph = m_glyphs[m_characters[i]];
 
         glyph = {};
@@ -390,7 +418,8 @@ bool CFont::CreateAtlas()
     m_atlasWidth = atlasWidth;
     m_atlasHeight = atlasHeight;
 
-    const DWORD kerningCount = GetKerningPairsW(m_dc, 0, nullptr);
+    const DWORD kerningCount = m_kerningLoaded ? 0 : GetKerningPairsW(m_dc, 0, nullptr);
+    m_kerningLoaded = true;
     if (kerningCount)
     {
         std::vector<KERNINGPAIR> pairs(kerningCount);
@@ -1313,12 +1342,14 @@ void CFont::ReleaseAtlas()
     m_atlasWidth = 0;
     m_atlasHeight = 0;
     m_glyphs = {};
-    m_kerning.clear();
 }
 
 void CFont::ReleaseFontObject()
 {
     ZoneScoped;
+    m_rasters.clear();
+    m_kerning.clear();
+    m_kerningLoaded = false;
     if (m_dc && m_oldFont && m_oldFont != HGDI_ERROR)
     {
         SelectObject(m_dc, m_oldFont);

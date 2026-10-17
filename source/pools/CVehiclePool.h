@@ -27,7 +27,7 @@ public:
     enum
     {
         MAX_VEHICLES = 2000,
-        WAITING_LIST_SIZE = 100
+        WAITING_LIST_SIZE = MAX_VEHICLES
     };
 
     static constexpr ID INVALID_ID = 0xFFFF;
@@ -102,6 +102,9 @@ public:
     void QueuePaintjob(ID id, unsigned char paintjob);
     void QueueColors(ID id, unsigned char primary, unsigned char secondary);
     void QueueComponent(ID id, std::uint16_t component, bool install);
+    void QueuePlayerWarp(ID id, std::uint8_t seat);
+    void ClearPlayerWarp();
+    void QueueWarpVelocity(CVector velocity, bool turn);
     void QueueTrailer(ID tractor, ID trailer);
     void ClearQueuedTrailer(ID tractor);
     void AddToWaitingList(const VehicleInfo* info);

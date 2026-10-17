@@ -293,4 +293,7 @@ namespace RPCHandlers
     void ModelFile(RPCParameters* pParams);              // 183
     void SrcFinishedDownloading(RPCParameters* pParams); // 185
 
+    void ProcessObjectCommands();
+    void ClearObjectCommands();
+
 }

@@ -15,6 +15,7 @@
 #include "game/Scripting.h"
 #include "game/render/CLicensePlate.h"
 #include "main.h"
+#include <deque>
 
 namespace game::patch::vehicle::detail
 {
@@ -63,6 +64,14 @@ namespace
         RwTexture* replacement = nullptr;
     };
     std::unordered_map<CVehicle*, PlateTextures> g_vehiclePlates;
+    struct ComponentUpdate
+    {
+        unsigned short id;
+        bool install;
+        DWORD queuedAt;
+        DWORD requestedAt;
+    };
+    std::unordered_map<CVehicle*, std::deque<ComponentUpdate>> g_componentUpdates;
     void* g_lastTrainVehicle = nullptr;
 
     CVehicle* VehicleWrapperFromPointer(void* vehicle);
@@ -161,7 +170,6 @@ namespace
             return true;
 
         reinterpret_cast<void(__cdecl*)(int, int)>(0x4087E0)(model, 2);
-        reinterpret_cast<void(__cdecl*)(bool)>(0x40EA10)(false);
         return IsModelLoaded(model);
     }
 
@@ -302,13 +310,15 @@ CVehicle::CVehicle(int model, CVector position, float rotation, BOOL keepModelLo
         for (int trainModel : trainModels)
             if (!ModelInfo::GetRelocated(trainModel))
                 return;
+        bool requested = false;
         for (int trainModel : trainModels)
             if (!IsModelLoaded(trainModel))
+            {
                 reinterpret_cast<void(__cdecl*)(int, int)>(0x4087E0)(trainModel, 2);
-        reinterpret_cast<void(__cdecl*)(bool)>(0x40EA10)(false);
-        for (int trainModel : trainModels)
-            if (!IsModelLoaded(trainModel))
-                return;
+                requested = true;
+            }
+        if (requested)
+            return;
 
         scm::ProcessCommand(&CREATE_TRAIN, trainType, static_cast<double>(position.x), static_cast<double>(position.y), static_cast<double>(position.z), direction, &m_handle);
         m_pGameVehicle = VehicleFromHandle(m_handle);
@@ -338,6 +348,7 @@ CVehicle::CVehicle(int model, CVector position, float rotation, BOOL keepModelLo
 CVehicle::~CVehicle()
 {
     ZoneScoped;
+    g_componentUpdates.erase(this);
     const void* original = m_pGameVehicle;
     m_pGameVehicle = VehicleFromHandle(m_handle) == original ? m_pGameVehicle : nullptr;
     m_pGameEntity = m_pGameVehicle;
@@ -994,32 +1005,73 @@ void CVehicle::RemovePassengers()
 BOOL CVehicle::AddComponent(unsigned short id)
 {
     ZoneScoped;
-    if (!HasNativeVehicle() || GetSubtype() != 1)
+    if (!HasNativeVehicle() || GetSubtype() != 1 || id < 1000 || id > 1193)
         return FALSE;
-
-    if (!scm::ProcessCommand(&IS_CAR_COMPONENT_AVAILABLE, static_cast<int>(id)))
-    {
-        reinterpret_cast<void(__cdecl*)(int, int)>(0x4087E0)(static_cast<int>(id), 2);
-        reinterpret_cast<void(__cdecl*)(bool)>(0x40EA10)(false);
-        scm::ProcessCommand(&REQUEST_CAR_COMPONENT, static_cast<int>(id));
-        for (int i = 0; i < 20 && !scm::ProcessCommand(&IS_CAR_COMPONENT_AVAILABLE, static_cast<int>(id)); ++i)
-            ::Sleep(1);
-    }
-
-    if (!scm::ProcessCommand(&IS_CAR_COMPONENT_AVAILABLE, static_cast<int>(id)))
+    auto& queue = g_componentUpdates[this];
+    if (queue.size() >= 256)
         return FALSE;
-
-    int component = 0;
-    scm::ProcessCommand(&ADD_CAR_COMPONENT, m_handle, static_cast<int>(id), &component);
+    const DWORD now = GetTickCount();
+    queue.push_back({id, true, now, now});
+    scm::ProcessCommand(&REQUEST_CAR_COMPONENT, static_cast<int>(id));
     return TRUE;
 }
 
 BOOL CVehicle::RemoveComponent(unsigned short id)
 {
-    if (!HasNativeVehicle())
+    if (!HasNativeVehicle() || id < 1000 || id > 1193)
         return FALSE;
-    scm::ProcessCommand(&REMOVE_CAR_COMPONENT, m_handle, static_cast<int>(id));
+    if (auto pending = g_componentUpdates.find(this); pending != g_componentUpdates.end() && !pending->second.empty())
+    {
+        if (pending->second.size() >= 256)
+            return FALSE;
+        pending->second.push_back({id, false, GetTickCount(), 0});
+    }
+    else
+        scm::ProcessCommand(&REMOVE_CAR_COMPONENT, m_handle, static_cast<int>(id));
     return TRUE;
+}
+
+void CVehicle::ProcessComponents(unsigned& budget)
+{
+    ZoneScopedN("Deferred vehicle components");
+    auto pending = g_componentUpdates.find(this);
+    if (!HasNativeVehicle() || pending == g_componentUpdates.end())
+        return;
+    auto& queue = pending->second;
+    const DWORD now = GetTickCount();
+    while (budget && !queue.empty())
+    {
+        const auto update = queue.front();
+        if (update.install && !scm::ProcessCommand(&IS_CAR_COMPONENT_AVAILABLE, static_cast<int>(update.id)))
+        {
+            if (now - update.queuedAt >= 10000)
+            {
+#if defined(_DEBUG)
+                Log("[vehicles] component load timed out: id=%u", update.id);
+#endif // _DEBUG
+                queue.pop_front();
+                --budget;
+                continue;
+            }
+            if (now - update.requestedAt >= 1000)
+            {
+                scm::ProcessCommand(&REQUEST_CAR_COMPONENT, static_cast<int>(update.id));
+                queue.front().requestedAt = now;
+            }
+            break;
+        }
+        if (update.install)
+        {
+            int component = 0;
+            scm::ProcessCommand(&ADD_CAR_COMPONENT, m_handle, static_cast<int>(update.id), &component);
+        }
+        else
+            scm::ProcessCommand(&REMOVE_CAR_COMPONENT, m_handle, static_cast<int>(update.id));
+        queue.pop_front();
+        --budget;
+    }
+    if (queue.empty())
+        g_componentUpdates.erase(pending);
 }
 
 void CVehicle::SetPaintjob(unsigned char id)

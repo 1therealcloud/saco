@@ -46,6 +46,8 @@
 #include <StringCompressor.h>
 
 #include <cmath>
+#include <chrono>
+#include <deque>
 
 // RakNet namespace
 using namespace RakNet;
@@ -57,6 +59,77 @@ using namespace RakNet;
 
 namespace
 {
+    enum class ObjectCommand
+    {
+        Create,
+        Position,
+        Rotation,
+        Move,
+        Stop,
+        AttachPlayer,
+        AttachCamera,
+        Material,
+        Edit
+    };
+    struct PendingObjectCommand
+    {
+        ObjectCommand command;
+        std::uint16_t id;
+        RPCParameters parameters;
+        std::vector<unsigned char> payload;
+        std::vector<int> models;
+        DWORD queuedAt;
+    };
+    std::deque<PendingObjectCommand> g_objectCommands;
+    std::size_t g_objectCommandBytes = 0;
+    std::array<unsigned, CObjectPool::MAX_OBJECTS> g_objectCommandCounts{};
+    bool g_replayingObjectCommand = false;
+
+    void CancelObjectCommands(std::uint16_t id)
+    {
+        if (id >= g_objectCommandCounts.size() || !g_objectCommandCounts[id])
+            return;
+        g_objectCommandCounts[id] = 0;
+        std::erase_if(g_objectCommands, [id](const auto& command) {
+            if (command.id != id)
+                return false;
+            g_objectCommandBytes -= command.payload.size();
+            return true;
+        });
+    }
+
+    bool DeferObjectCommand(ObjectCommand command, std::uint16_t id, RPCParameters* parameters, std::vector<int> models = {})
+    {
+        if (g_replayingObjectCommand || id >= CObjectPool::MAX_OBJECTS || !g_netGame || !g_netGame->GetObjectPool())
+            return false;
+        if (command != ObjectCommand::Create && command != ObjectCommand::Material && !g_objectCommandCounts[id])
+            return false;
+        const auto bytes = BITS_TO_BYTES(parameters->numberOfBitsOfData);
+        if (bytes > 128 * 1024 || g_objectCommands.size() >= 8192 || g_objectCommandBytes + bytes > 8 * 1024 * 1024)
+        {
+#if defined(_DEBUG)
+            Log("[objects] pending command limit exceeded: id=%u", id);
+#endif // _DEBUG
+            CancelObjectCommands(id);
+            return true;
+        }
+        std::erase_if(models, [](int model) {
+            return model == 0 || model == -1 || model >= ModelInfo::MAX_MODELS || (model < 0 && !(g_DLClient && g_netGame->GetCustomModels().IsObjectModel(model)));
+        });
+        std::sort(models.begin(), models.end());
+        models.erase(std::unique(models.begin(), models.end()), models.end());
+        for (int model : models)
+            if (g_game && ModelInfo::GetRelocated(model) && !g_game->IsModelAvailable(model))
+                g_game->RequestModel(model, 2);
+        PendingObjectCommand pending{command, id, *parameters, {}, std::move(models), GetTickCount()};
+        pending.parameters.input = nullptr;
+        pending.payload.assign(parameters->input, parameters->input + bytes);
+        g_objectCommandBytes += bytes;
+        g_objectCommands.push_back(std::move(pending));
+        ++g_objectCommandCounts[id];
+        return true;
+    }
+
     CVehiclePool* NetworkVehicles()
     {
         return g_netGame ? g_netGame->GetVehiclePool() : nullptr;
@@ -969,10 +1042,11 @@ void RPCHandlers::WorldPlayerAdd(RPCParameters* pParams)
         return;
 
     CVector position{x, y, z};
-    const int skin = g_DLClient ? g_netGame->GetCustomModels().ResolveSkin(static_cast<int>(baseSkinId), customSkinId) : static_cast<int>(baseSkinId);
+    const int skin = static_cast<int>(baseSkinId);
     if (!player->Spawn(0, skin, 0, &position, facingAngle, color, static_cast<char>(fightingStyle)))
         return;
 
+    player->m_pPed->SetSkin(skin, customSkinId);
     playerPool->SetTeam(playerId, team);
 
     for (std::size_t skill = 0; skill < skillLevels.size(); ++skill)
@@ -1144,8 +1218,7 @@ void RPCHandlers::WorldVehicleAdd(RPCParameters* pParams)
     pool->Delete(vehicleId);
     pool->SetSpawnAppearance(vehicleId, mods, paintJob);
     pool->SetSpawnBodyColors(vehicleId, bodyColor1, bodyColor2);
-    if (!pool->CreateWithTrainConsist(info))
-        pool->AddToWaitingList(&info);
+    pool->AddToWaitingList(&info);
 }
 
 // -----------------------------------------------------------------------------
@@ -1804,6 +1877,8 @@ void RPCHandlers::EditObject(RPCParameters* pParams)
     if (!bs.Read(objectId))
         return;
 
+    if (DeferObjectCommand(ObjectCommand::Edit, objectId, pParams))
+        return;
     if (g_objectEdit)
         g_objectEdit->EnterEditObject(objectId, playerObject);
 }
@@ -1962,7 +2037,8 @@ void RPCHandlers::ShowActor(RPCParameters* pParams)
 
     ActorInfo info{};
     info.m_nId = actorId;
-    info.m_nModel = g_DLClient ? g_netGame->GetCustomModels().ResolveSkin(static_cast<int>(baseSkinId), customSkinId) : static_cast<int>(baseSkinId);
+    info.m_nModel = static_cast<int>(baseSkinId);
+    info.m_nCustomModel = g_DLClient ? customSkinId : 0;
     info.m_position = CVector{x, y, z};
     info.m_fRotation = angle;
     info.m_fHealth = health;
@@ -2319,6 +2395,21 @@ void RPCHandlers::CreateObject(RPCParameters* pParams)
         }
     }
 
+    if (objectId >= CObjectPool::MAX_OBJECTS || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) || !std::isfinite(rotX) || !std::isfinite(rotY) ||
+        !std::isfinite(rotZ) || !std::isfinite(drawDistance) || drawDistance < 0)
+        return;
+    if (!g_replayingObjectCommand)
+    {
+        CancelObjectCommands(objectId);
+        pool->Delete(objectId);
+    }
+    std::vector<int> requiredModels{::ModelInfo::GetRelocated(modelId) || (g_DLClient && g_netGame->GetCustomModels().IsObjectModel(modelId)) ? modelId : 18631};
+    for (const auto& material : materials)
+        if (material.type == 1)
+            requiredModels.push_back(material.model);
+    if (DeferObjectCommand(ObjectCommand::Create, objectId, pParams, std::move(requiredModels)))
+        return;
+
     const CVector position{x, y, z};
     const CVector rotation{rotX, rotY, rotZ};
     if (!pool->Create(objectId, modelId, position, rotation, drawDistance))
@@ -2367,6 +2458,8 @@ void RPCHandlers::SetObjectPos(RPCParameters* pParams)
     if (!bs.Read(z))
         return;
 
+    if (DeferObjectCommand(ObjectCommand::Position, objectId, pParams))
+        return;
     if (auto* object = NetworkObject(objectId))
     {
         const CVector position{x, y, z};
@@ -2404,6 +2497,8 @@ void RPCHandlers::SetObjectRotation(RPCParameters* pParams)
     if (!bs.Read(rotZ))
         return;
 
+    if (DeferObjectCommand(ObjectCommand::Rotation, objectId, pParams))
+        return;
     if (auto* object = NetworkObject(objectId))
     {
         const CVector rotation{rotX, rotY, rotZ};
@@ -2428,6 +2523,7 @@ void RPCHandlers::DestroyObject(RPCParameters* pParams)
     if (!bs.Read(objectId))
         return;
 
+    CancelObjectCommands(objectId);
     if (auto* pool = g_netGame ? g_netGame->GetObjectPool() : nullptr)
         pool->Delete(objectId);
 }
@@ -2551,6 +2647,8 @@ void RPCHandlers::MoveObject(RPCParameters* pParams)
     if (!bs.Read(rotZ))
         return;
 
+    if (DeferObjectCommand(ObjectCommand::Move, objectId, pParams))
+        return;
     if (auto* object = NetworkObject(objectId))
     {
         const CVector origin{fromX, fromY, fromZ};
@@ -2577,6 +2675,8 @@ void RPCHandlers::StopObject(RPCParameters* pParams)
     if (!bs.Read(objectId))
         return;
 
+    if (DeferObjectCommand(ObjectCommand::Stop, objectId, pParams))
+        return;
     if (auto* object = NetworkObject(objectId))
         object->Stop();
 }
@@ -2645,6 +2745,8 @@ void RPCHandlers::SetVehicleNumberPlate(RPCParameters* pParams)
 void RPCHandlers::TogglePlayerSpectating(RPCParameters* pParams)
 {
     ZoneScoped;
+    if (auto* vehicles = NetworkVehicles())
+        vehicles->ClearPlayerWarp();
     BitStream bs(pParams->input, BITS_TO_BYTES(pParams->numberOfBitsOfData), false);
 
     std::uint32_t spectating{};
@@ -2822,6 +2924,8 @@ void RPCHandlers::AttachObjectToPlayer(RPCParameters* pParams)
     if (!bs.Read(rotZ))
         return;
 
+    if (DeferObjectCommand(ObjectCommand::AttachPlayer, objectId, pParams))
+        return;
     auto* object = NetworkObject(objectId);
     auto* players = g_netGame ? g_netGame->GetPlayerPool() : nullptr;
     if (!object || !players)
@@ -3279,8 +3383,13 @@ void RPCHandlers::SetVehicleVelocity(RPCParameters* pParams)
     auto* local = players ? players->GetLocalPlayer() : nullptr;
     auto* ped = local ? local->GetPed() : nullptr;
     auto* pool = NetworkVehicles();
-    if (!ped || !pool || !ped->GetVehicle())
+    if (!ped || !pool)
         return;
+    if (!ped->GetVehicle())
+    {
+        pool->QueueWarpVelocity(velocity, turn != 0);
+        return;
+    }
 
     const auto vehicleId = pool->Find(ped->GetVehicle());
     auto* vehicle = vehicleId != CVehiclePool::INVALID_ID ? pool->Get(vehicleId) : nullptr;
@@ -3523,7 +3632,7 @@ void RPCHandlers::SetPlayerSkin(RPCParameters* pParams)
     if (!ped || !ped->IsValid())
         return;
 
-    ped->SetModelIndex(g_DLClient ? g_netGame->GetCustomModels().ResolveSkin(static_cast<int>(baseSkinId), customSkinId) : static_cast<int>(baseSkinId));
+    ped->SetSkin(static_cast<int>(baseSkinId), customSkinId);
 }
 
 // -----------------------------------------------------------------------------
@@ -3562,6 +3671,8 @@ void RPCHandlers::SetPlayerName(RPCParameters* pParams)
 void RPCHandlers::SetPlayerPos(RPCParameters* pParams)
 {
     ZoneScoped;
+    if (auto* vehicles = NetworkVehicles())
+        vehicles->ClearPlayerWarp();
 
     float x{};
     float y{};
@@ -3596,6 +3707,8 @@ void RPCHandlers::SetPlayerPos(RPCParameters* pParams)
 void RPCHandlers::SetPlayerPosFindZ(RPCParameters* pParams)
 {
     ZoneScoped;
+    if (auto* vehicles = NetworkVehicles())
+        vehicles->ClearPlayerWarp();
 
     CVector position{};
 
@@ -3667,6 +3780,15 @@ void RPCHandlers::PutPlayerInVehicle(RPCParameters* pParams)
         return;
 
     auto* pool = NetworkVehicles();
+    if (pool)
+    {
+        pool->ClearPlayerWarp();
+        if (pool->IsPending(vehicleId))
+        {
+            pool->QueuePlayerWarp(vehicleId, seatId);
+            return;
+        }
+    }
     auto* players = g_netGame ? g_netGame->GetPlayerPool() : nullptr;
     auto* local = players ? players->GetLocalPlayer() : nullptr;
     auto* ped = local ? local->GetPed() : nullptr;
@@ -3688,6 +3810,8 @@ void RPCHandlers::PutPlayerInVehicle(RPCParameters* pParams)
 void RPCHandlers::RemovePlayerFromVehicle(RPCParameters* pParams)
 {
     ZoneScoped;
+    if (auto* vehicles = NetworkVehicles())
+        vehicles->ClearPlayerWarp();
     if (!pParams)
         return;
 
@@ -4382,8 +4506,6 @@ void RPCHandlers::SetPlayerAttachedObject(RPCParameters* pParams)
         !bs.Read(info.m_firstMaterialColor) || !bs.Read(info.m_secondMaterialColor))
         return;
 
-    if (g_DLClient && info.m_nModel < 0)
-        info.m_nModel = g_netGame->GetCustomModels().ResolveObject(info.m_nModel);
     ped->AddAccessory(static_cast<int>(index), &info);
 }
 
@@ -4498,6 +4620,8 @@ void RPCHandlers::AttachCameraToObject(RPCParameters* pParams)
     if (!g_game || !g_netGame)
         return;
 
+    if (DeferObjectCommand(ObjectCommand::AttachCamera, objectId, pParams))
+        return;
     auto* pool = g_netGame->GetObjectPool();
     auto* object = pool ? pool->Get(objectId) : nullptr;
     auto* camera = g_game->GetCamera();
@@ -4630,6 +4754,8 @@ void RPCHandlers::SetPlayerObjectMaterial(RPCParameters* pParams)
         return;
     ObjectMaterialData material{};
     if (!ReadObjectMaterial(bs, material))
+        return;
+    if (DeferObjectCommand(ObjectCommand::Material, objectId, pParams, {material.type == 1 ? material.model : 0}))
         return;
     ApplyObjectMaterial(NetworkObject(objectId), material);
 }
@@ -5003,4 +5129,101 @@ void RPCHandlers::SrcFinishedDownloading(RPCParameters* pParams)
 {
     if (g_DLClient && g_netGame && pParams)
         g_netGame->GetCustomModels().ConfirmDownloads();
+}
+
+void RPCHandlers::ClearObjectCommands()
+{
+    g_objectCommands.clear();
+    g_objectCommandBytes = 0;
+    g_objectCommandCounts.fill(0);
+}
+
+void RPCHandlers::ProcessObjectCommands()
+{
+    ZoneScopedN("Deferred object RPCs");
+    TracyPlot("Pending object RPCs", static_cast<std::int64_t>(g_objectCommands.size()));
+    TracyPlot("Pending object RPC bytes", static_cast<std::int64_t>(g_objectCommandBytes));
+    if (!g_game || g_objectCommands.empty())
+        return;
+    const auto start = std::chrono::steady_clock::now();
+    // wait independently per object while preserving its command order
+    std::array<bool, CObjectPool::MAX_OBJECTS> blocked{};
+    unsigned processed = 0;
+    for (auto it = g_objectCommands.begin(); it != g_objectCommands.end();)
+    {
+        if (processed >= 8 || std::chrono::steady_clock::now() - start >= std::chrono::milliseconds(2))
+            break;
+        if (blocked[it->id])
+        {
+            ++it;
+            continue;
+        }
+        bool ready = true;
+        for (int model : it->models)
+        {
+            if (model < 0)
+            {
+                if (!g_netGame || !g_netGame->GetCustomModels().LoadObject(model))
+                    ready = false;
+                continue;
+            }
+            if (ModelInfo::GetRelocated(model) && !g_game->IsModelAvailable(model))
+            {
+                g_game->RequestModel(model, 2);
+                ready = false;
+            }
+        }
+        if (!ready)
+        {
+            if (GetTickCount() - it->queuedAt >= 10000)
+            {
+#if defined(_DEBUG)
+                Log("[objects] model load timed out: id=%u", it->id);
+#endif // _DEBUG
+                CancelObjectCommands(it->id);
+                return;
+            }
+            blocked[it->id] = true;
+            ++it;
+            continue;
+        }
+        auto pending = std::move(*it);
+        g_objectCommandBytes -= pending.payload.size();
+        --g_objectCommandCounts[pending.id];
+        it = g_objectCommands.erase(it);
+        pending.parameters.input = pending.payload.data();
+        g_replayingObjectCommand = true;
+        switch (pending.command)
+        {
+            case ObjectCommand::Create:
+                CreateObject(&pending.parameters);
+                break;
+            case ObjectCommand::Position:
+                SetObjectPos(&pending.parameters);
+                break;
+            case ObjectCommand::Rotation:
+                SetObjectRotation(&pending.parameters);
+                break;
+            case ObjectCommand::Move:
+                MoveObject(&pending.parameters);
+                break;
+            case ObjectCommand::Stop:
+                StopObject(&pending.parameters);
+                break;
+            case ObjectCommand::AttachPlayer:
+                AttachObjectToPlayer(&pending.parameters);
+                break;
+            case ObjectCommand::AttachCamera:
+                AttachCameraToObject(&pending.parameters);
+                break;
+            case ObjectCommand::Material:
+                SetPlayerObjectMaterial(&pending.parameters);
+                break;
+            case ObjectCommand::Edit:
+                EditObject(&pending.parameters);
+                break;
+        }
+        g_replayingObjectCommand = false;
+        ++processed;
+    }
 }

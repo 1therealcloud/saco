@@ -473,9 +473,10 @@ namespace render
         auto* playerPool = pools ? pools->m_pPlayer : nullptr;
 
         {
+            unsigned materialBudget = 1;
             if (objectPool)
-                objectPool->ConstructMaterials();
-            CObject::ConstructAllMaterialText();
+                objectPool->ConstructMaterials(materialBudget);
+            CObject::ConstructAllMaterialText(materialBudget);
             if (vehiclePool)
                 vehiclePool->ConstructLicensePlates();
         }

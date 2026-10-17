@@ -376,7 +376,6 @@ namespace game::render::models
             if (!ModelInfo::IsReady(baseModel))
             {
                 reinterpret_cast<void(__cdecl*)(int, int)>(0x4087E0)(baseModel, 0);
-                reinterpret_cast<void(__cdecl*)(bool)>(0x40EA10)(false);
             }
             if (!ModelInfo::IsReady(baseModel))
             {

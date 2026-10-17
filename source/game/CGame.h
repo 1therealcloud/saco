@@ -96,7 +96,6 @@ public:
     BOOL IsMenuVisible();                                // 0xA0920
     BOOL IsStarted();                                    // 0xA0930
     void RequestModel(int model, int loadingStream = 0); // 0xA0940
-    void LoadRequestedModels();                          // 0xA0960
     BOOL IsModelAvailable(int model);                    // 0xA0970
     void ReleaseModel(int model, bool gameFunc = true);  // 0xA09A0
     void SetWorldTime(char hour, char minute);           // 0xA0AB0
@@ -136,14 +135,14 @@ public:
     void SetNumberOfIntroTextLinesThisFrame(unsigned short value); // 0xA1430
     void DrawGangZone(float* position, std::uint32_t color);       // 0xA1440
     void DisableEnterExits();
-    void EnableZoneDisplaying(bool enable);                        // 0xA1520
-    void EnableStuntBonus(bool enable);                            // 0xA1540
-    void LoadScene(const char* file);                              // 0xA15B0
-    int GetUsedMemory();                                           // 0xA15D0
-    int GetStreamingMemory();                                      // 0xA15E0
-    void SetRequiredVehicleModels(unsigned char* modelCount);      // 0xA1610
-    int GetTimer();                                                // 0xA1770
-    void SetTimer(int value);                                      // 0xA1750
+    void EnableZoneDisplaying(bool enable);                   // 0xA1520
+    void EnableStuntBonus(bool enable);                       // 0xA1540
+    void LoadScene(const char* file);                         // 0xA15B0
+    int GetUsedMemory();                                      // 0xA15D0
+    int GetStreamingMemory();                                 // 0xA15E0
+    void SetRequiredVehicleModels(unsigned char* modelCount); // 0xA1610
+    int GetTimer();                                           // 0xA1770
+    void SetTimer(int value);                                 // 0xA1750
     void SetMapIcon(std::uint8_t id, CVector position, int icon, int color, int type);
     void RemoveMapIcon(std::uint8_t id);
     void ResetMapIcons();

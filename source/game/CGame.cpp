@@ -46,7 +46,6 @@ namespace
     float g_farClippingPlane = 1250.0f;
 
     constexpr scm::OpcodeInfo REQUEST_MODEL{0x0247, "i"};
-    constexpr scm::OpcodeInfo LOAD_REQUESTED_MODELS{0x038B, ""};
     constexpr scm::OpcodeInfo MODEL_AVAILABLE{0x0248, "i"};
     constexpr scm::OpcodeInfo RELEASE_MODEL{0x0249, "i"};
     constexpr scm::OpcodeInfo TOGGLE_WIDESCREEN{0x02A3, "i"};
@@ -253,11 +252,6 @@ void CGame::RequestModel(int model, int)
 {
     if (!ModelInfo::IsOwnedClone(model))
         scm::ProcessCommand(&REQUEST_MODEL, model);
-}
-
-void CGame::LoadRequestedModels()
-{
-    scm::ProcessCommand(&LOAD_REQUESTED_MODELS);
 }
 
 BOOL CGame::IsModelAvailable(int model)
@@ -655,10 +649,7 @@ GTAREF CGame::CreateWeaponPickup(int model, int ammo, CVector position)
     if (!IsModelAvailable(model))
     {
         RequestModel(model);
-        LoadRequestedModels();
-
-        if (!IsModelAvailable(model))
-            return 0;
+        return 0;
     }
 
     // Type 4 is the one-shot weapon pickup used by SA-MP for dropped weapons.
@@ -688,10 +679,7 @@ GTAREF CGame::CreatePickup(int model, int type, CVector position, GTAREF* handle
     if (model >= 0 && model < ModelInfo::MAX_MODELS && !IsModelAvailable(model))
     {
         RequestModel(model);
-        LoadRequestedModels();
-
-        if (!IsModelAvailable(model))
-            return 0;
+        return 0;
     }
 
     GTAREF rawHandle = 0;
@@ -831,7 +819,6 @@ void CGame::SetRequiredVehicleModels(unsigned char* modelCount)
             continue;
         const int model = models[i];
         RequestModel(model);
-        LoadRequestedModels();
         m_aKeepLoadedVehicleModels[model - kFirstVehicleModel] = true;
     }
 }
@@ -878,13 +865,11 @@ void CGame::LoadAnimationsAndModels()
     if (!IsPlaying())
         return;
 
-    bool requested = false;
     for (const char* animation : kRequiredAnimations)
     {
         if (!IsAnimationLoaded(animation))
         {
             RequestAnimation(animation);
-            requested = true;
         }
     }
 
@@ -894,12 +879,8 @@ void CGame::LoadAnimationsAndModels()
         if (ModelInfo::GetRelocated(model) && !IsModelAvailable(model))
         {
             RequestModel(model);
-            requested = true;
         }
     }
-
-    if (requested)
-        LoadRequestedModels();
 }
 
 void CGame::LoadCollisionFile(const char* file)
@@ -1146,9 +1127,6 @@ CPed* CGame::CreatePed(int model, CVector position, float rotation, int, int)
     if (!IsModelAvailable(model))
     {
         RequestModel(model);
-        LoadRequestedModels();
-        if (!IsModelAvailable(model))
-            return nullptr;
     }
     const int slot = game::players::AcquireSlot();
     if (slot < 0)

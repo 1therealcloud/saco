@@ -165,9 +165,6 @@ void CPlayerTags::DrawLabelAt(LONG x, LONG y, const char* text, D3DCOLOR color, 
     if (!drawStatus || status != 2 || !g_deathWindow)
         return;
 
-    if (!g_deathWindow->m_bAuxFontInitialized)
-        g_deathWindow->InitializeAuxFonts();
-
     CFont* aux1 = g_deathWindow->m_pAuxFont1;
     CFont* aux2 = g_deathWindow->m_pAuxFont2;
     if (!aux1 || !aux2)

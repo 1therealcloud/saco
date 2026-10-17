@@ -27,13 +27,16 @@
 #include <unordered_map>
 #include <vector>
 
+class FontFallback;
+
 class CFont
 {
 public:
     CFont(IDirect3DDevice9* device, int height, int width, int weight, const char* face, UINT codePage = text::CodePage, BYTE charSet = DEFAULT_CHARSET,
-          DWORD quality = ANTIALIASED_QUALITY);
+          DWORD quality = ANTIALIASED_QUALITY, const char* initialText = nullptr);
 
     ~CFont();
+    void ReleaseDeviceObjects();
 
     CFont(const CFont&) = delete;
     CFont& operator=(const CFont&) = delete;
@@ -79,6 +82,16 @@ public:
     static void StripColorTags(std::string& text);
 
 private:
+    struct RasterGlyph
+    {
+        bool valid = false;
+        int width = 0, height = 0, originX = 0, originY = 0, advance = 0;
+        UINT pitch = 0;
+        std::vector<std::uint8_t> bitmap;
+    };
+    std::unordered_map<char32_t, RasterGlyph> m_rasters;
+    bool m_kerningLoaded = false;
+
     struct Glyph
     {
         bool valid = false;
@@ -166,6 +179,7 @@ private:
 private:
     bool CreateFontObject();
     bool CreateAtlas();
+    RasterGlyph RasterizeGlyph(char32_t character, FontFallback& fallback) const;
     bool EnsureVertexBuffer(std::size_t vertexCount);
     bool EnsureIndexBuffer();
 

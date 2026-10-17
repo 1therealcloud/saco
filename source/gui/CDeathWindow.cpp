@@ -127,8 +127,8 @@ void CDeathWindow::InitializeAuxFonts()
     if (!m_pDevice || m_bAuxFontInitialized || !g_auxFontLoaded)
         return;
 
-    m_pAuxFont1 = new CFont(m_pDevice, 20, 0, FW_NORMAL, kAuxFontFace, CP_ACP, SYMBOL_CHARSET);
-    m_pAuxFont2 = new CFont(m_pDevice, 22, 0, FW_NORMAL, kAuxFontFace, CP_ACP, SYMBOL_CHARSET);
+    m_pAuxFont1 = new CFont(m_pDevice, 20, 0, FW_NORMAL, kAuxFontFace, CP_ACP, SYMBOL_CHARSET, ANTIALIASED_QUALITY, "CE");
+    m_pAuxFont2 = new CFont(m_pDevice, 22, 0, FW_NORMAL, kAuxFontFace, CP_ACP, SYMBOL_CHARSET, ANTIALIASED_QUALITY, "CE");
 
     if (!m_pAuxFont1->IsValid() || !m_pAuxFont2->IsValid())
     {
@@ -292,6 +292,7 @@ const char* CDeathWindow::GetWeaponSpriteId(char weapon)
 void CDeathWindow::ResetFonts()
 {
     ZoneScoped;
+    InitializeAuxFonts();
     if (!m_pDevice || !g_weaponFontLoaded)
         return;
 

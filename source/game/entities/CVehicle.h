@@ -128,21 +128,22 @@ public:
     BOOL IsRC();                                              // 0xB7E00
     void EnableLights(bool enable);                           // 0xB7E50
     void RemovePassengers();                                  // 0xB7EE0
-    BOOL AddComponent(unsigned short id);                     // 0xB7FC0
-    BOOL RemoveComponent(unsigned short id);                  // 0xB80B0
-    void SetPaintjob(unsigned char id);                       // 0xB80F0
-    BOOL DoesExist();                                         // 0xB8140
-    void SetLicensePlateText(const char* text);               // 0xB8150
-    void SetRotation(float value);                            // 0xB8170
-    void ConstructLicensePlate();                             // 0xB81A0
-    void ShutdownLicensePlate();                              // 0xB81F0
-    void SetEngineOn(BOOL state);                             // 0xB8210
-    BOOL GetEngineOn() const;                                 // 0xB8220
-    void SetLightsOn(BOOL state);                             // 0xB8230
-    BOOL GetLightsOn() const;                                 // 0xB8240
-    void OpenDoor(int component, int door, float ratio);      // 0xB8250
-    BOOL HasSiren();                                          // 0xB8330
-    char GetMaxPassengers();                                  // 0xB8340
+    void ProcessComponents(unsigned& budget);
+    BOOL AddComponent(unsigned short id);                // 0xB7FC0
+    BOOL RemoveComponent(unsigned short id);             // 0xB80B0
+    void SetPaintjob(unsigned char id);                  // 0xB80F0
+    BOOL DoesExist();                                    // 0xB8140
+    void SetLicensePlateText(const char* text);          // 0xB8150
+    void SetRotation(float value);                       // 0xB8170
+    void ConstructLicensePlate();                        // 0xB81A0
+    void ShutdownLicensePlate();                         // 0xB81F0
+    void SetEngineOn(BOOL state);                        // 0xB8210
+    BOOL GetEngineOn() const;                            // 0xB8220
+    void SetLightsOn(BOOL state);                        // 0xB8230
+    BOOL GetLightsOn() const;                            // 0xB8240
+    void OpenDoor(int component, int door, float ratio); // 0xB8250
+    BOOL HasSiren();                                     // 0xB8330
+    char GetMaxPassengers();                             // 0xB8340
     void SetDoorOpenState(unsigned char doorId, bool open);
     void SetWindowOpenFlag(unsigned char component);   // 0xB8370
     void ClearWindowOpenFlag(unsigned char component); // 0xB83A0

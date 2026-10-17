@@ -20,6 +20,7 @@ struct ActorInfo
     float m_fRotation = 0;
     float m_fHealth = 100.0f;
     bool m_bInvulnerable = false;
+    std::uint32_t m_nCustomModel = 0;
 };
 
 class CActorPool
@@ -46,5 +47,6 @@ public:
     void UpdateLargestId();             // 0x1660
     BOOL Delete(ID id);                 // 0x16F0
     ID Find(const void* gamePed) const; // 0x18B0
+    void Process();
     BOOL Create(const ActorInfo* info); // 0x1900
 };

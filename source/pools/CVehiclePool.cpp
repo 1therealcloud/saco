@@ -13,6 +13,10 @@
 
 #include "game/Scripting.h"
 #include "game/CGame.h"
+#include "game/ModelInfo.h"
+#include "game/entities/CPed.h"
+#include "pools/CPlayerPool.h"
+#include <chrono>
 #include "game/render/CLicensePlate.h"
 #include "main.h"
 
@@ -25,6 +29,7 @@ namespace
     constexpr int TRAIN_STREAK_LOCO = 537;
     constexpr int TRAIN_FREIGHT_LOCO = 538;
     constexpr int TRAIN_STREAK = 569;
+    constexpr int TRAIN_TRAM = 449;
     constexpr int TRAIN_FREIGHT = 570;
 
     constexpr float NEAREST_LOCAL_MAX_DISTANCE = 10000.0f;
@@ -55,24 +60,20 @@ namespace
         std::optional<std::pair<bool, bool>> simpleParams;
         std::optional<std::pair<unsigned char, unsigned char>> colors;
         std::vector<std::pair<unsigned short, bool>> componentUpdates;
+        std::optional<std::uint8_t> playerSeat;
+        std::optional<CVector> warpSpeed, warpTurnSpeed;
     };
     std::unordered_map<CVehiclePool*, std::unordered_map<CVehiclePool::ID, SpawnAppearance>> g_spawnAppearances;
     std::unordered_map<CVehiclePool*, std::unordered_map<CVehiclePool::ID, CVehiclePool::ID>> g_trailerQueue;
     std::unordered_map<CVehiclePool*, std::unordered_map<CVehiclePool::ID, std::array<CVehiclePool::ID, 3>>> g_trainConsists;
     std::unordered_map<CVehiclePool*, std::array<DWORD, CVehiclePool::WAITING_LIST_SIZE>> g_failedSpawnAttempts;
+    std::unordered_map<CVehiclePool*, unsigned> g_waitingCursors;
 
     bool IsModelAvailable(int model)
     {
-        ZoneScoped;
-        // CGame::IsModelAvailable in R5 returns true for values outside [0, 20000]
-        // and uses GTA opcode 0248 for normal model ids.
-        if (model < 0 || model > 20000)
-            return true;
-
-        // Опкод 0x0248 (has_model_loaded): перевіряє, чи завантажена модель у пам'ять
-        constexpr scm::OpcodeInfo opHasModelLoaded{0x0248, "i"};
-        return scm::ProcessCommand(&opHasModelLoaded, model) != 0;
+        return ModelInfo::IsReady(model);
     }
+
 }
 
 CVehiclePool::CVehiclePool()
@@ -97,6 +98,7 @@ CVehiclePool::~CVehiclePool()
     g_trailerQueue.erase(this);
     g_trainConsists.erase(this);
     g_failedSpawnAttempts.erase(this);
+    g_waitingCursors.erase(this);
 }
 
 void CVehiclePool::UpdateCount()
@@ -480,6 +482,32 @@ void CVehiclePool::QueueComponent(ID id, std::uint16_t component, bool install)
     updates.emplace_back(component, install);
 }
 
+void CVehiclePool::ClearPlayerWarp()
+{
+    if (auto pool = g_spawnAppearances.find(this); pool != g_spawnAppearances.end())
+        for (auto& [id, state] : pool->second)
+        {
+            state.playerSeat.reset();
+            state.warpSpeed.reset();
+            state.warpTurnSpeed.reset();
+        }
+}
+
+void CVehiclePool::QueuePlayerWarp(ID id, std::uint8_t seat)
+{
+    ClearPlayerWarp();
+    if (IsPending(id))
+        g_spawnAppearances[this][id].playerSeat = seat;
+}
+
+void CVehiclePool::QueueWarpVelocity(CVector velocity, bool turn)
+{
+    if (auto pool = g_spawnAppearances.find(this); pool != g_spawnAppearances.end())
+        for (auto& [id, state] : pool->second)
+            if (state.playerSeat)
+                (turn ? state.warpTurnSpeed : state.warpSpeed) = velocity;
+}
+
 void CVehiclePool::QueueTrailer(ID tractor, ID trailer)
 {
     if (tractor >= MAX_VEHICLES || trailer >= MAX_VEHICLES || tractor == trailer)
@@ -705,6 +733,24 @@ BOOL CVehiclePool::Create(VehicleInfo* info)
                         vehicle->ClearWindowOpenFlag(windowComponents[door]);
                 }
             }
+            if (state.playerSeat)
+            {
+                auto* players = g_netGame ? g_netGame->GetPlayerPool() : nullptr;
+                auto* local = players ? players->GetLocalPlayer() : nullptr;
+                auto* ped = local ? local->GetPed() : nullptr;
+                if (ped && ped->HasNativePed() && *state.playerSeat <= vehicle->GetMaxPassengers())
+                {
+                    ped->PutIntoVehicle(vehicle->m_handle, *state.playerSeat);
+                    if (ped->GetVehicle() == vehicle->GetNativeVehicleHandle())
+                    {
+                        local->OnServerVehicleWarp(id);
+                        if (state.warpSpeed)
+                            vehicle->SetSpeed(*state.warpSpeed);
+                        if (state.warpTurnSpeed)
+                            vehicle->SetTurnSpeed(*state.warpTurnSpeed);
+                    }
+                }
+            }
             appearance->second.erase(entry);
         }
     }
@@ -790,8 +836,14 @@ void CVehiclePool::ProcessWaitingList()
     // samp.dll + 0x1F300
     const DWORD now = ::GetTickCount();
     auto& attempts = g_failedSpawnAttempts[this];
-    for (int slot = 0; slot < WAITING_LIST_SIZE; ++slot)
+    auto& cursor = g_waitingCursors[this];
+    const auto started = std::chrono::steady_clock::now();
+    for (int checked = 0; checked < WAITING_LIST_SIZE; ++checked)
     {
+        if (std::chrono::steady_clock::now() - started >= std::chrono::milliseconds(1))
+            break;
+        const unsigned slot = cursor;
+        cursor = (cursor + 1) % WAITING_LIST_SIZE;
         if (!m_waitingList.m_bNotEmpty[slot])
             continue;
         if (attempts[slot] && now - attempts[slot] < 250)
@@ -809,6 +861,20 @@ void CVehiclePool::ProcessWaitingList()
             continue;
         }
 
+        if (info.m_nType == TRAIN_STREAK_LOCO || info.m_nType == TRAIN_FREIGHT_LOCO || info.m_nType == TRAIN_TRAM)
+        {
+            bool ready = true;
+            for (int model : {TRAIN_FREIGHT_LOCO, TRAIN_FREIGHT, TRAIN_STREAK_LOCO, TRAIN_STREAK, TRAIN_TRAM})
+                if (!IsModelAvailable(model))
+                {
+                    if (g_game)
+                        g_game->RequestModel(model, 2);
+                    ready = false;
+                }
+            if (!ready)
+                continue;
+        }
+        ZoneScopedN("Deferred vehicle spawn");
         // hide this entry while Create may call Delete, then restore on failure
         m_waitingList.m_bNotEmpty[slot] = FALSE;
         if (CreateWithTrainConsist(info))
@@ -820,6 +886,7 @@ void CVehiclePool::ProcessWaitingList()
             m_waitingList.m_bNotEmpty[slot] = TRUE;
             attempts[slot] = now;
         }
+        break;
     }
 }
 
@@ -830,6 +897,7 @@ void CVehiclePool::Process()
     // samp.dll + 0x1F3C0
     const DWORD now = ::GetTickCount();
     int unoccupiedSyncsSent = 0;
+    unsigned componentBudget = 4;
     auto* netGame = g_netGame.get();
     auto* playerPool = netGame ? netGame->GetPlayerPool() : nullptr;
     auto* localPlayer = playerPool ? playerPool->GetLocalPlayer() : nullptr;
@@ -875,6 +943,7 @@ void CVehiclePool::Process()
             continue;
         }
 
+        vehicle->ProcessComponents(componentBudget);
         vehicle->SetInvulnerable(vehicle->DriverIsPlayerPed() ? FALSE : TRUE);
 
         if (vehicle->GetHealth() == 0.0f)

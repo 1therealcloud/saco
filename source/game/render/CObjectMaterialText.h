@@ -36,6 +36,7 @@ public:
 
     // samp.dll 0.3.7-R5 + 0x70830
     void DeleteDeviceObjects();
+    void ClearCache();
 
     // samp.dll 0.3.7-R5 + 0x70860
     void RestoreDeviceObjects();
@@ -56,8 +57,8 @@ public:
     IDirect3DTexture9* Create(const char* text, const char* font, int fontSize, int width, int height, D3DCOLOR fontColor, D3DCOLOR backgroundColor, bool bold, std::uint8_t align);
 
     // adapts the generated d3d texture to our owned renderware material texture
-    RwTexture* CreateRwTexture(const char* text, const char* font, int fontSize, int width, int height, D3DCOLOR fontColor, D3DCOLOR backgroundColor, bool bold,
-                               std::uint8_t align);
+    RwTexture* CreateRwTexture(const char* text, const char* font, int fontSize, int width, int height, D3DCOLOR fontColor, D3DCOLOR backgroundColor, bool bold, std::uint8_t align,
+                               bool* cacheHit = nullptr);
 
 private:
     // Exact x86 R5 object layout. R5 stores two ID3DXSprite* values at +0x04

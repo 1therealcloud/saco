@@ -866,6 +866,13 @@ namespace
 }
 bool CCustomModels::LoadModel(std::int32_t base, std::int32_t id, std::uint32_t dffCrc, std::uint32_t txdCrc)
 {
+    if (!ModelInfo::IsReady(base))
+    {
+        if (ModelInfo::GetRelocated(base))
+            reinterpret_cast<void(__cdecl*)(int, int)>(0x4087E0)(base, 0);
+        return false;
+    }
+
     if (const auto it = m_failedLoads.find(id); it != m_failedLoads.end() && GetTickCount() - it->second < 1000)
         return false;
     const auto dff = GetCachedFilePath(DownloadedFileType::Dff, dffCrc), txd = GetCachedFilePath(DownloadedFileType::Txd, txdCrc);
@@ -886,6 +893,13 @@ bool CCustomModels::LoadModel(std::int32_t base, std::int32_t id, std::uint32_t 
 }
 bool CCustomModels::LoadObjectModel(std::int32_t base, std::int32_t id, std::uint32_t dffCrc, std::uint32_t txdCrc)
 {
+    if (!ModelInfo::IsReady(base))
+    {
+        if (ModelInfo::GetRelocated(base))
+            reinterpret_cast<void(__cdecl*)(int, int)>(0x4087E0)(base, 0);
+        return false;
+    }
+
     if (const auto it = m_failedLoads.find(id); it != m_failedLoads.end() && GetTickCount() - it->second < 1000)
         return false;
     const auto dff = GetCachedFilePath(DownloadedFileType::Dff, dffCrc), txd = GetCachedFilePath(DownloadedFileType::Txd, txdCrc);

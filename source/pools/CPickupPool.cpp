@@ -13,6 +13,7 @@
 #include "CPickupPool.h"
 
 #include "game/CGame.h"
+#include "game/ModelInfo.h"
 #include "net/CNetGame.h"
 #include "game/Scripting.h"
 #include <cmath>
@@ -57,16 +58,7 @@ void CPickupPool::Create(Pickup* data, int id)
         return;
     const Pickup value = *data;
     Delete(id);
-    GTAREF nativeIndex = 0;
-    const auto handle = game->CreatePickup(value.m_nModel, value.m_nType, value.m_position, &nativeIndex);
-    if (!handle)
-        return;
-    m_object[id] = value;
-    m_weapon[id] = {};
-    m_handle[id] = handle;
-    m_nId[id] = static_cast<int>(nativeIndex);
-    m_nTimer[id] = 0;
-    ++m_nCount;
+    Queue(id, value);
 }
 
 void CPickupPool::CreateWeapon(int model, CVector position, int ammo, ID exOwner)
@@ -83,7 +75,7 @@ void CPickupPool::CreateWeapon(int model, CVector position, int ammo, ID exOwner
     int slot = INVALID_INDEX;
     for (int i = MAX_PICKUPS - 1; i >= 0; --i)
     {
-        if (!m_handle[i])
+        if (!m_handle[i] && !m_pending.contains(i))
         {
             slot = i;
             break;
@@ -92,21 +84,13 @@ void CPickupPool::CreateWeapon(int model, CVector position, int ammo, ID exOwner
     if (slot == INVALID_INDEX)
         return;
 
-    const auto handle = game->CreateWeaponPickup(model, ammo, position);
-    if (!handle)
-        return;
-
-    m_object[slot] = {model, 4, position};
-    m_weapon[slot] = {true, exOwner};
-    m_handle[slot] = handle;
-    m_nId[slot] = -1;
-    m_nTimer[slot] = 0;
-    ++m_nCount;
+    Queue(slot, Pickup{model, 4, position}, WeaponPickup{true, exOwner}, ammo);
 }
 
 void CPickupPool::Delete(int id)
 {
     ZoneScoped;
+    m_pending.erase(id);
     if (m_nCount <= 0)
         return;
 
@@ -129,6 +113,9 @@ void CPickupPool::Delete(int id)
 
 void CPickupPool::DeleteWeapon(ID exOwner)
 {
+    std::erase_if(m_pending, [exOwner](const auto& entry) {
+        return entry.second.weapon.m_bExists && entry.second.weapon.m_nExOwner == exOwner;
+    });
     // One player can leave several dropped weapons, so do not stop at the first match.
     for (int i = 0; i < MAX_PICKUPS; ++i)
     {
@@ -176,6 +163,45 @@ void CPickupPool::SendNotification(int id)
 void CPickupPool::Process()
 {
     ZoneScoped;
+    const auto now = GetTickCount();
+    unsigned budget = 4;
+    for (auto it = m_pending.begin(); g_game && it != m_pending.end() && budget;)
+    {
+        auto& pending = it->second;
+        if (now - pending.queued >= 10000)
+        {
+#if defined(_DEBUG)
+            Log("[pickup] model load timed out: model=%d", pending.data.m_nModel);
+#endif // _DEBUG
+            it = m_pending.erase(it);
+            continue;
+        }
+        if (!ModelInfo::IsReady(pending.data.m_nModel))
+        {
+            if (now - pending.requested >= 1000)
+            {
+                g_game->RequestModel(pending.data.m_nModel);
+                pending.requested = now;
+            }
+            ++it;
+            continue;
+        }
+        --budget;
+        const int id = it->first;
+        const auto value = pending;
+        GTAREF nativeIndex = 0;
+        const auto handle = value.weapon.m_bExists ? g_game->CreateWeaponPickup(value.data.m_nModel, value.ammo, value.data.m_position)
+                                                   : g_game->CreatePickup(value.data.m_nModel, value.data.m_nType, value.data.m_position, &nativeIndex);
+        it = m_pending.erase(it);
+        if (!handle)
+            continue;
+        m_object[id] = value.data;
+        m_weapon[id] = value.weapon;
+        m_handle[id] = handle;
+        m_nId[id] = value.weapon.m_bExists ? -1 : static_cast<int>(nativeIndex);
+        m_nTimer[id] = 0;
+        ++m_nCount;
+    }
 
     if (m_nCount <= 0)
         return;
@@ -209,4 +235,16 @@ void CPickupPool::Process()
         if (auto* netGame = g_netGame.get())
             netGame->PickedUpPickup(static_cast<std::uint32_t>(i), CNetGame::PickupSendMode::Process);
     }
+}
+
+void CPickupPool::Queue(int id, Pickup data, WeaponPickup weapon, int ammo)
+{
+    if (!g_game || data.m_nModel < 0 || data.m_nModel >= ModelInfo::MAX_MODELS)
+        return;
+    if (!ModelInfo::GetRelocated(data.m_nModel))
+        data.m_nModel = 18631;
+    const auto now = GetTickCount();
+    m_pending.insert_or_assign(id, PendingPickup{data, weapon, ammo, now, now});
+    if (!ModelInfo::IsReady(data.m_nModel))
+        g_game->RequestModel(data.m_nModel);
 }

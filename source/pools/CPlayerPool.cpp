@@ -7,6 +7,7 @@
  */
 
 #include <stdafx.h>
+#include "game/entities/CPed.h"
 
 #include "CPlayerPool.h"
 #include "players/CRemotePlayer.h"
@@ -53,6 +54,7 @@ void CPlayerPool::UpdateLargestId()
 void CPlayerPool::Process()
 {
     ZoneScoped;
+    CPed::BeginStreamingFrame();
     {
         ZoneScopedN("Player pool: remote players");
         for (int id = 0; id <= m_nLargestId && id < MAX_PLAYERS; ++id)

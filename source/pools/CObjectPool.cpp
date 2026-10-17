@@ -14,7 +14,9 @@
 
 #include "game/CCamera.h"
 #include "game/CGame.h"
+#include "game/render/CObjectMaterialText.h"
 #include "net/CNetGame.h"
+#include "net/RPCHandlers.h"
 
 #include <cmath>
 
@@ -45,9 +47,12 @@ CObjectPool::CObjectPool() : m_nLargestId(0), m_bNotEmpty{}, m_pObject{}
 
 CObjectPool::~CObjectPool()
 {
+    RPCHandlers::ClearObjectCommands();
     // R5 walks every slot and lets Delete() decide whether it exists.
     for (ID id = 0; id < MAX_OBJECTS; ++id)
         Delete(id);
+    if (g_objectMaterialText)
+        g_objectMaterialText->ClearCache();
 }
 
 void CObjectPool::UpdateLargestId()
@@ -179,18 +184,19 @@ void CObjectPool::Process(float elapsedSeconds)
 
     if (!std::isfinite(elapsedSeconds) || elapsedSeconds < 0)
         return;
+    RPCHandlers::ProcessObjectCommands();
     for (int id = 0; id <= m_nLargestId && id < MAX_OBJECTS; ++id)
         if (m_bNotEmpty[id] && m_pObject[id])
             m_pObject[id]->Process(elapsedSeconds);
 }
 
-void CObjectPool::ConstructMaterials()
+void CObjectPool::ConstructMaterials(unsigned& budget)
 {
     for (int id = 0; id <= m_nLargestId && id < MAX_OBJECTS; ++id)
     {
         CObject* object = m_pObject[id];
         if (m_bNotEmpty[id] && object && object->m_bHasCustomMaterial)
-            object->ConstructMaterialText();
+            object->ConstructMaterialText(budget);
     }
 }
 

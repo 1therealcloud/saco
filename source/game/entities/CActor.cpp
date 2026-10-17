@@ -10,6 +10,8 @@
 
 #include "CActor.h"
 #include "CPed.h"
+#include "main.h"
+#include "net/CNetGame.h"
 
 #include "game/Scripting.h"
 #include "game/ModelInfo.h"
@@ -18,7 +20,6 @@
 namespace
 {
     constexpr scm::OpcodeInfo REQUEST_MODEL{0x0247, "i"};
-    constexpr scm::OpcodeInfo LOAD_REQUESTED_MODELS{0x038B, ""};
     constexpr scm::OpcodeInfo IS_MODEL_AVAILABLE{0x0248, "i"};
 
     constexpr scm::OpcodeInfo CREATE_ACTOR{0x009A, "iifffv"};
@@ -108,7 +109,7 @@ void CActor::GetBonePosition(CVector& position, unsigned int bone, bool update) 
     CPed::GetNativeBonePosition(m_pGamePed, &position, bone, update);
 }
 
-CActor::CActor(int model, CVector position, float rotation)
+CActor::CActor(int model, CVector position, float rotation, std::uint32_t custom)
 {
     ZoneScoped;
     m_pGamePed = nullptr;
@@ -119,21 +120,45 @@ CActor::CActor(int model, CVector position, float rotation)
     if (model < 0 || (model >= ModelInfo::MAX_MODELS && !ModelInfo::IsOwnedClone(model)))
         return;
 
+    m_pendingModel = model;
+    if (g_DLClient && g_netGame && custom >= 20001 && custom <= 30000 && g_netGame->GetCustomModels().IsSkinModel(static_cast<int>(custom)))
+        m_pendingCustomModel = static_cast<int>(custom);
+    m_pendingPosition = position;
+    m_pendingRotation = rotation;
+    m_modelRequested = GetTickCount();
     if (!IsModelAvailable(model))
-    {
         scm::ProcessCommand(&REQUEST_MODEL, model);
-        scm::ProcessCommand(&LOAD_REQUESTED_MODELS);
+}
 
-        // r5 waits forever; use a bounded retry here.
-        constexpr unsigned MAX_MODEL_LOAD_CHECKS = 2000;
-        unsigned checks = 0;
-        while (!IsModelAvailable(model) && checks++ < MAX_MODEL_LOAD_CHECKS)
-            Sleep(1);
-
-        if (!IsModelAvailable(model))
-            return;
+void CActor::ProcessStreaming()
+{
+    ZoneScopedN("Deferred actor spawn");
+    if (m_pendingModel < 0)
+        return;
+    if (m_pendingCustomModel && g_netGame && !g_netGame->GetCustomModels().IsCacheReady())
+        m_modelRequested = GetTickCount();
+    if (GetTickCount() - m_modelRequested >= 10000)
+    {
+#if defined(_DEBUG)
+        Log("[actor] model load timed out: model=%d", m_pendingModel);
+#endif // _DEBUG
+        m_pendingModel = -1;
+        g_pendingAnimations.erase(this);
+        return;
     }
-
+    if (!IsModelAvailable(m_pendingModel))
+        return;
+    int model = m_pendingModel;
+    if (m_pendingCustomModel && g_netGame)
+    {
+        if (!g_netGame->GetCustomModels().LoadSkin(m_pendingCustomModel))
+            return;
+        model = m_pendingCustomModel;
+        m_pendingCustomModel = 0;
+    }
+    const auto position = m_pendingPosition;
+    const float rotation = m_pendingRotation;
+    m_pendingModel = -1;
     std::uint32_t handle = 0;
     scm::ProcessCommand(&CREATE_ACTOR, 5, ModelInfo::GetBaseModel(model), static_cast<double>(position.x), static_cast<double>(position.y), static_cast<double>(position.z - 1.0f),
                         &handle);
@@ -164,6 +189,14 @@ CActor::CActor(int model, CVector position, float rotation)
     scm::ProcessCommand(&SET_ACTOR_ROTATION, handle, static_cast<double>(rotation));
     scm::ProcessCommand(&SET_ACTOR_PROPERTY_0446, handle, 0);
     scm::ProcessCommand(&SET_ACTOR_DECISION_MAKER, handle, 0x10006);
+    SetInvulnerable(m_bInvulnerable);
+    SetHealth(m_pendingHealth);
+    if (auto it = g_pendingAnimations.find(this); it != g_pendingAnimations.end())
+    {
+        it->second.ped = m_pGamePed;
+        it->second.handle = m_handle;
+        it->second.requested = GetTickCount();
+    }
 }
 
 CActor::~CActor()
@@ -174,6 +207,7 @@ CActor::~CActor()
 void CActor::Destroy()
 {
     ZoneScoped;
+    m_pendingModel = -1;
     g_pendingAnimations.erase(this);
     if (IsCurrentPed(this))
     {
@@ -197,10 +231,10 @@ void CActor::Destroy()
 void CActor::PerformAnimation(const char* animation, const char* file, float frameDelta, int lockA, int lockX, int lockY, int lockF, int time)
 {
     ZoneScoped;
-    if (!IsCurrentPed(this) || !animation || !*animation || !file || !*file || !std::isfinite(frameDelta) || std::strlen(animation) >= 64 || std::strlen(file) >= 64 ||
-        _stricmp(file, "SEX") == 0)
+    if ((!IsCurrentPed(this) && !IsPending()) || !animation || !*animation || !file || !*file || !std::isfinite(frameDelta) || std::strlen(animation) >= 64 ||
+        std::strlen(file) >= 64 || _stricmp(file, "SEX") == 0)
         return;
-    if (IsAnimationLoaded(file))
+    if (!IsPending() && IsAnimationLoaded(file))
     {
         g_pendingAnimations.erase(this);
         scm::ProcessCommand(&PERFORM_ANIMATION, m_handle, animation, file, static_cast<double>(frameDelta), lockA, lockX, lockY, lockF, time);
@@ -210,7 +244,7 @@ void CActor::PerformAnimation(const char* animation, const char* file, float fra
     const bool sameLibrary = previous != g_pendingAnimations.end() && previous->second.library == file;
     const auto requested = sameLibrary ? previous->second.requested : GetTickCount();
     g_pendingAnimations.insert_or_assign(this, PendingAnimation{animation, file, m_pGamePed, m_handle, requested, frameDelta, lockA, lockX, lockY, lockF, time});
-    if (!sameLibrary)
+    if (!sameLibrary && !IsAnimationLoaded(file))
         scm::ProcessCommand(&REQUEST_ANIMATION, file);
 }
 
@@ -222,6 +256,11 @@ void CActor::ProcessAnimations()
     {
         auto* actor = it->first;
         const auto& animation = it->second;
+        if (actor->IsPending())
+        {
+            ++it;
+            continue;
+        }
         if (!IsCurrentPed(actor) || actor->m_pGamePed != animation.ped || actor->m_handle != animation.handle || now - animation.requested >= 5000 || actor->GetState() == 54 ||
             actor->GetState() == 55)
         {
@@ -254,17 +293,23 @@ void CActor::ClearAnimations()
 
 void CActor::SetRotation(float angle)
 {
+    if (!std::isfinite(angle))
+        return;
+    m_pendingRotation = angle;
     if (IsCurrentPed(this))
         Write(m_pGamePed, 0x55C, HeadingToRadians(angle));
 }
 
 float CActor::GetHealth() const
 {
-    return IsCurrentPed(this) ? Read<float>(m_pGamePed, 0x540) : 0.0f;
+    return IsCurrentPed(this) ? Read<float>(m_pGamePed, 0x540) : m_pendingHealth;
 }
 
 void CActor::SetHealth(float value)
 {
+    if (!std::isfinite(value))
+        return;
+    m_pendingHealth = value;
     if (!IsCurrentPed(this))
         return;
 
@@ -323,12 +368,23 @@ BOOL CActor::IsOnGround() const
 void CActor::SetInvulnerable(bool enable)
 {
     ZoneScoped;
+    m_bInvulnerable = enable;
     if (!IsCurrentPed(this))
         return;
 
-    m_bInvulnerable = enable;
     if (enable)
         scm::ProcessCommand(&SET_ACTOR_IMMUNITIES, m_handle, 1, 1, 1, 1, 1);
     else
         scm::ProcessCommand(&SET_ACTOR_IMMUNITIES, m_handle, 0, 0, 0, 1, 0);
+}
+
+void CActor::Teleport(CVector position)
+{
+    if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z))
+        return;
+    m_pendingPosition = position;
+    if (IsPending())
+        m_pendingPosition.z += 1.0f;
+    if (!IsPending())
+        CEntity::Teleport(position);
 }
