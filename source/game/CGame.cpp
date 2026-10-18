@@ -163,7 +163,7 @@ void CGame::SetCursorMode(int mode, BOOL immediatelyHideCursor)
 
     m_nCursorMode = mode;
     m_nInputEnableWaitFrames = 0;
-    game::cursor::SetMode(mode);
+    game::cursor::SetMode(IsMenuVisible() ? CURSOR_NONE : mode);
 }
 
 bool CGame::InitGame()
@@ -1189,6 +1189,16 @@ CObject* CGame::CreateObject(int model, CVector position, CVector rotation, floa
 void CGame::ProcessInputEnabling()
 {
     ZoneScoped;
+    static bool menuWasVisible = false;
+    const bool menuVisible = IsMenuVisible() != FALSE;
+    if (menuVisible != menuWasVisible)
+    {
+        game::cursor::SetMode(menuVisible ? CURSOR_NONE : m_nCursorMode);
+        menuWasVisible = menuVisible;
+    }
+    if (menuVisible)
+        return;
+
     if (m_nCursorMode != CURSOR_NONE)
         return;
 

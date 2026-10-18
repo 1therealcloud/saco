@@ -16,7 +16,8 @@
 namespace
 {
     constexpr std::uintptr_t kReadKeysCall = 0x541DF5;
-    constexpr std::uintptr_t kReadMouseCall = 0x541DD7;
+    constexpr std::uintptr_t kReadMouseCall = 0x53F417;
+    constexpr std::uintptr_t kMouseResultBranch = 0x53F41F;
     constexpr std::uintptr_t kSetMousePosition = 0x6194A0;
     constexpr std::uintptr_t kUpdateMouse = 0x53F3C0;
     constexpr std::uintptr_t kMouseStates = 0xB73404;
@@ -40,6 +41,8 @@ namespace game::cursor
         constexpr std::array<std::uint8_t, 5> disabledInput{0x90, 0x90, 0x90, 0x90, 0x90};
         constexpr std::uint8_t ret = 0xC3;
         static std::array<std::uint8_t, 5> readMouse{};
+        static std::array<std::uint8_t, 4> mouseResultBranch{};
+        constexpr std::array<std::uint8_t, 4> skipMouseResult{0x33, 0xC0, 0x0F, 0x84};
         static std::uint8_t setMousePos = 0;
         static bool initialized = false;
         static bool keysBlocked = false;
@@ -47,7 +50,9 @@ namespace game::cursor
 
         if (!initialized)
         {
-            if (!patch::read(kReadMouseCall, readMouse.data(), readMouse.size()) || !patch::read(kSetMousePosition, &setMousePos, sizeof(setMousePos)))
+            if (!patch::read(kReadMouseCall, readMouse.data(), readMouse.size()) ||
+                !patch::read(kMouseResultBranch, mouseResultBranch.data(), mouseResultBranch.size()) ||
+                !patch::read(kSetMousePosition, &setMousePos, sizeof(setMousePos)))
             {
 #if defined(_DEBUG)
                 Log("failed to save game mouse instructions!");
@@ -56,17 +61,14 @@ namespace game::cursor
             }
         }
 
-        if (!blockMouse && mouseBlocked)
-        {
-            // consume movement accumulated while mouse input was disabled
-            using UpdateMouseFn = void(__thiscall*)(CPad*);
-            reinterpret_cast<UpdateMouseFn>(kUpdateMouse)(KeyStuff::GetInternalKeys());
-        }
-
+        const bool releasingMouse = !blockMouse && mouseBlocked;
         if (!initialized || blockMouse != mouseBlocked)
         {
             const auto& mouseBytes = blockMouse ? disabledInput : readMouse;
-            if (!patch::write(kReadMouseCall, mouseBytes.data(), mouseBytes.size()) || !patch::write<std::uint8_t>(kSetMousePosition, blockMouse ? ret : setMousePos))
+            const auto& resultBytes = blockMouse ? skipMouseResult : mouseResultBranch;
+            if (!patch::write(kReadMouseCall, mouseBytes.data(), mouseBytes.size()) ||
+                !patch::write(kMouseResultBranch, resultBytes.data(), resultBytes.size()) ||
+                !patch::write<std::uint8_t>(kSetMousePosition, blockMouse ? ret : setMousePos))
             {
 #if defined(_DEBUG)
                 Log("failed to change game mouse state!");
@@ -74,6 +76,13 @@ namespace game::cursor
                 ExitProcess(1);
             }
             mouseBlocked = blockMouse;
+        }
+
+        if (releasingMouse)
+        {
+            // read pending movement only after restoring the native polling path.
+            using UpdateMouseFn = void(__thiscall*)(CPad*);
+            reinterpret_cast<UpdateMouseFn>(kUpdateMouse)(KeyStuff::GetInternalKeys());
         }
 
         std::memset(reinterpret_cast<void*>(kMouseStates), 0, kMouseStatesSize);

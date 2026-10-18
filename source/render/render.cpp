@@ -405,6 +405,8 @@ namespace render
     static void RenderCursor(IDirect3DDevice9* device)
     {
         ZoneScoped;
+        if (g_game && g_game->IsMenuVisible())
+            return;
         const bool active = (g_input && g_input->IsEnabled()) || (g_dialog && g_dialog->IsActive()) || (g_scoreboard && g_scoreboard->m_bIsEnabled) ||
                             (g_objectEdit && g_objectEdit->m_bEnabled) || (g_objectSelection && g_objectSelection->m_bIsActive) ||
                             (g_textDrawSelection && g_textDrawSelection->m_bIsActive) || (g_downloadWindow && g_downloadWindow->IsActive()) || g_classSelectionVisible;
