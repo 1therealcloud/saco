@@ -54,25 +54,19 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path build/nightly -Force | Out-Null
           foreach ($config in @('Release', 'RelWithDebInfo', 'Debug')) {
-            $package = "build/package/$config"
+            $package = "build/zip/$config"
             New-Item -ItemType Directory -Path "$package/tools" -Force | Out-Null
-            Copy-Item -Path assets/payload/* -Destination $package -Recurse -Force
-            Copy-Item -LiteralPath assets/samp.exe -Destination $package -Force
-            foreach ($file in @('samp.dll', 'bass.dll')) {
-              Copy-Item -LiteralPath "build/$config/$file" -Destination $package -Force
-            }
-            Copy-Item -LiteralPath "build/tools/launcher/$config/samp_debug.exe" -Destination $package -Force
-            Copy-Item -LiteralPath "build/tools/rcon/$config/rcon.exe" -Destination $package -Force
-            foreach ($tool in @('img', 'saa')) {
-              Copy-Item -LiteralPath "build/tools/$tool/$config/$tool.exe" -Destination "$package/tools" -Force
+            Copy-Item -LiteralPath assets/samp.exe, assets/payload/samp-license.txt -Destination $package -Force
+            Copy-Item -LiteralPath "build/$config/samp.dll" -Destination $package -Force
+            foreach ($tool in @('img', 'rcon', 'saa', 'launcher')) {
+              $name = if ($tool -eq 'launcher') { 'samp_debug' } else { $tool }
+              Copy-Item -LiteralPath "build/tools/$tool/$config/$name.exe" -Destination "$package/tools" -Force
+              if ($config -ne 'Release') {
+                Copy-Item -LiteralPath "build/tools/$tool/$config/$name.pdb" -Destination "$package/tools" -Force
+              }
             }
             if ($config -ne 'Release') {
               Copy-Item -LiteralPath "build/$config/samp.pdb" -Destination $package -Force
-              Copy-Item -LiteralPath "build/tools/launcher/$config/samp_debug.pdb" -Destination $package -Force
-              Copy-Item -LiteralPath "build/tools/rcon/$config/rcon.pdb" -Destination $package -Force
-              foreach ($tool in @('img', 'saa')) {
-                Copy-Item -LiteralPath "build/tools/$tool/$config/$tool.pdb" -Destination "$package/tools" -Force
-              }
             }
             Compress-Archive -Path "$package/*" -DestinationPath "build/nightly/$config.zip" -Force
           }
