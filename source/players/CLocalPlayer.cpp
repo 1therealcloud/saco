@@ -660,7 +660,6 @@ BOOL CLocalPlayer::Spawn()
         return FALSE;
 
     g_game->DisableTrainTraffic();
-    ped->LinkToInterior(m_nCurrentInterior, TRUE);
     ped->Teleport(CVector{position.x, position.y, position.z + 0.5f});
     ped->SetRotation(rotation);
 
@@ -753,7 +752,7 @@ void CLocalPlayer::PrepareForClassSelection()
 {
     ZoneScoped;
     m_bClearedToSpawn = FALSE;
-    m_classSelection.m_bIsActive = TRUE;
+    m_classSelection.m_bIsActive = FALSE;
     m_classSelection.m_bWaitingForSpawnRequestReply = FALSE;
     if (m_pPed)
     {
@@ -817,7 +816,6 @@ void CLocalPlayer::EnableSpectating(BOOL enable)
         {
             m_classSelection.m_bEnableAfterDeath = FALSE;
             g_netGame->SpawnScreen();
-            RequestClass(m_classSelection.m_nSelected);
         }
         return;
     }
@@ -1385,6 +1383,17 @@ void CLocalPlayer::PrevClass()
 void CLocalPlayer::ProcessClassSelection()
 {
     ZoneScoped;
+    if (!m_classSelection.m_bIsActive)
+    {
+        if (!g_netGame || g_netGame->GetState() != CNetGame::GAME_MODE_CONNECTED || m_bDoesSpectating)
+            return;
+        m_classSelection.m_bIsActive = TRUE;
+        render::ShowClassSelection(true);
+        RequestClass(m_classSelection.m_nSelected);
+        CaptureSelectionKeys(this, true);
+        return;
+    }
+
     if (g_DLClient && g_netGame && m_classSelection.m_bIsActive && m_bHasSpawnInfo && m_spawnInfo.m_nCustomSkin && m_pPed && m_pPed->GetModelIndex() == m_spawnInfo.m_nSkin &&
         g_netGame->GetCustomModels().IsCacheReady())
     {
@@ -1849,7 +1858,6 @@ void CLocalPlayer::Process()
             m_bIsWasted = FALSE;
             m_classSelection.m_bEnableAfterDeath = FALSE;
             g_netGame->SpawnScreen();
-            RequestClass(m_classSelection.m_nSelected);
         }
         return;
     }

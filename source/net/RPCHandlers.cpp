@@ -1666,10 +1666,8 @@ void RPCHandlers::InitGame(RPCParameters* pParams)
     {
         if (auto* local = players->GetLocalPlayer())
         {
-            if (!local->m_bDoesSpectating)
-                g_netGame->SpawnScreen();
             local->m_classSelection.m_nSelected = 0;
-            local->RequestClass(0);
+            local->PrepareForClassSelection();
         }
     }
 }

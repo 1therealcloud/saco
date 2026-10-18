@@ -936,7 +936,6 @@ void CNetGame::SpawnScreen()
     if (auto* pool = GetPlayerPool())
         if (auto* player = pool->GetLocalPlayer())
             player->PrepareForClassSelection();
-    render::ShowClassSelection(true);
 }
 
 // handle RSA public key mismatch
