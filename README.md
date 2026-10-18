@@ -34,6 +34,19 @@ Use `Debug` for development or `RelWithDebInfo` for an optimized build with debu
 
 To enable Tracy, configure with `-DSAMP_TRACY=ON`.
 
+With [NSIS](https://nsis.sourceforge.io/) installed, build the installer with:
+
+```bash
+cmake --build build --config Release --target installer
+```
+
+The installer is written to `build/installer/Release/sa-mp-0.3.DL-R1-install.exe`.
+Resources and the original `samp.saa` come from `assets/payload`, and the separately built launcher comes from `assets/samp.exe`.
+The DLL, BASS runtime, debug launcher, and RCON client are taken from the Release build. `assets/saa` is kept as reference source and isn't repacked.
+
+GitHub Actions builds all three Win32 configurations and the Release installer. Successful builds of `master` update the `nightly` prerelease with the installer, `Release.zip`, `RelWithDebInfo.zip`, and `Debug.zip`. Each ZIP includes resources and tools; Debug and RelWithDebInfo also include symbols. Pull requests build the same files as artifacts without publishing a release.
+
+
 ## TODO
 
 - Implement the `ClientCheck` RPC.

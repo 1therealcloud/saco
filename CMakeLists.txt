@@ -191,10 +191,18 @@ if (MSVC)
     target_link_options(samp PRIVATE "$<$<CONFIG:Release>:/LTCG>" "$<$<CONFIG:Release>:/OPT:REF>" "$<$<CONFIG:Release>:/OPT:ICF>")
 endif()
 
-#add_custom_command(TARGET samp POST_BUILD
-#    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-#        $<TARGET_FILE:bass> $<TARGET_FILE_DIR:samp>/bass.dll
-#)
+set(bass_runtime "${PROJECT_BINARY_DIR}/$<CONFIG>/bass.dll")
+add_custom_command(
+    OUTPUT "${bass_runtime}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_BINARY_DIR}/$<CONFIG>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:bass> "${bass_runtime}"
+    DEPENDS $<TARGET_FILE:bass>
+    VERBATIM
+)
+add_custom_target(bass_runtime ALL DEPENDS "${bass_runtime}")
+add_dependencies(samp bass_runtime)
+
+add_subdirectory(assets)
 
 if(SAMP_TRACY_OBJECTS)
     target_compile_definitions(samp PRIVATE SAMP_TRACY_OBJECTS)
