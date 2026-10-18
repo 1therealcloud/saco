@@ -182,6 +182,8 @@ void Process()
 {
     ZoneScoped;
 
+    game::patch::base::patch_menu();
+
     if (!CGame::IsPlaying())
         return;
 

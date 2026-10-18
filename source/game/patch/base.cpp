@@ -111,6 +111,48 @@ namespace
 
 namespace game::patch::base
 {
+    bool patch_menu()
+    {
+        // mods can relocate aScreens; use the table referenced by the renderer.
+        std::uintptr_t screens = 0;
+        if (!::patch::read(0x579568, &screens, sizeof(screens)) || !screens)
+            return false;
+        static std::uintptr_t patchedScreens = 0;
+        if (screens == patchedScreens)
+            return true;
+
+        constexpr std::size_t entrySize = 0x12;
+        const auto entries = screens + 41 * 0xE2 + 0xA;
+        std::array<std::uint8_t, entrySize * 12> original{}, compact{};
+        if (!::patch::read(entries, original.data(), original.size()))
+            return false;
+        constexpr const char* names[] = {"FEP_RES", "FEH_MAP", "FEP_OPT", "FEP_QUI"};
+        for (std::size_t i = 0; i < std::size(names); ++i)
+        {
+            bool found = false;
+            for (std::size_t j = 0; j < 12; ++j)
+                if (std::memcmp(original.data() + j * entrySize + 1, names[i], 8) == 0)
+                {
+                    std::memcpy(compact.data() + i * entrySize, original.data() + j * entrySize, entrySize);
+                    found = true;
+                    break;
+                }
+            if (!found)
+                return false;
+            const std::uint16_t position[] = {320, static_cast<std::uint16_t>(170 + i * 30)};
+            std::memcpy(compact.data() + i * entrySize + 12, position, sizeof(position));
+        }
+        if (!::patch::write(entries, compact.data(), compact.size()))
+            return false;
+        // parent entry indices for map, options and quit confirmation.
+        if (!::patch::write<std::uint8_t>(screens + 5 * 0xE2 + 9, 1) ||
+            !::patch::write<std::uint8_t>(screens + 33 * 0xE2 + 9, 2) ||
+            !::patch::write<std::uint8_t>(screens + 35 * 0xE2 + 9, 3))
+            return false;
+        patchedScreens = screens;
+        return true;
+    }
+
     bool disable_camera_fade()
     {
         // r5 disables CCamera::Fade after spawning, leaving startup fades intact.
@@ -159,26 +201,7 @@ namespace game::patch::base
         if (!::patch::apply(kMapReveal))
             return false;
 
-        // compact the native pause menu: resume, map, options, quit
-        constexpr std::uintptr_t pauseMenuItems = 0x8D0444;
-        constexpr std::size_t menuItemSize = 0x12;
-        std::array<std::uint8_t, menuItemSize * 12> pauseItems{};
-        constexpr std::size_t keepItems[] = {0, 2, 5, 6};
-        for (std::size_t i = 0; i < std::size(keepItems); ++i)
-        {
-            std::memcpy(pauseItems.data() + i * menuItemSize, reinterpret_cast<const void*>(pauseMenuItems + keepItems[i] * menuItemSize), menuItemSize);
-            const std::uint16_t position[] = {320, static_cast<std::uint16_t>(170 + i * 30)};
-            std::memcpy(pauseItems.data() + i * menuItemSize + 12, position, sizeof(position));
-        }
-        if (!::patch::write(pauseMenuItems, pauseItems.data(), pauseItems.size()))
-            return false;
-        // select the matching compacted item when returning from a submenu
-        const Entry pauseReturnItems[] = {
-            {0x8CE47B, {1}}, // map
-            {0x8CFD33, {2}}, // options
-            {0x8CFEF7, {3}}, // quit confirmation
-        };
-        if (!::patch::apply(pauseReturnItems))
+        if (!patch_menu())
             return false;
 
         // r5 disables CClock::Update and clears the hud clock format
