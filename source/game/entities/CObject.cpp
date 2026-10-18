@@ -200,23 +200,6 @@ namespace
         if (dictionary >= 0)
             g_blankTexture = game::render::textures::read(dictionary, "blanktex").release();
 
-        if (!g_blankTexture)
-        {
-            auto* raster = RwRasterCreate(2, 2, 32, rwRASTERTYPETEXTURE | rwRASTERFORMAT8888);
-            if (raster)
-            {
-                if (auto* pixels = RwRasterLock(raster, 0, rwRASTERLOCKWRITE))
-                {
-                    for (int row = 0; row < raster->height; ++row)
-                        std::memset(pixels + row * raster->stride, 0xFF, raster->width * 4);
-                    RwRasterUnlock(raster);
-                    g_blankTexture = RwTextureCreate(raster);
-                }
-                if (!g_blankTexture)
-                    RwRasterDestroy(raster);
-            }
-        }
-
         return g_blankTexture ? RwTextureAddRef(g_blankTexture) : nullptr;
     }
 
