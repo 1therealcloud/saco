@@ -7,6 +7,7 @@
  */
 
 #include <stdafx.h>
+#include "config/CSettings.h"
 
 #include "InputHandler.h"
 #include "game/patch/hooks.h"
@@ -158,7 +159,7 @@ namespace game::inputhandler
         bool RouteScoreboard(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
         {
             ZoneScoped;
-            if (!g_scoreboard || !g_scoreboard->m_pDialog || IsMenuVisible() || IsInputActive())
+            if (g_settings.m_bDebugMode || !g_scoreboard || !g_scoreboard->m_pDialog || IsMenuVisible() || IsInputActive())
                 return false;
             if (message == WM_KEYUP && wParam == VK_TAB)
             {
