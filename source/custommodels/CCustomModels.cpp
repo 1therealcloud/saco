@@ -11,6 +11,9 @@
 #include "CCustomModels.h"
 
 #include <chrono>
+#include <mutex>
+#include <condition_variable>
+#include <deque>
 #include <cstdlib>
 #include <cerrno>
 #include <LzmaDec.h>
@@ -177,6 +180,87 @@ namespace
         return model.m_nType == CustomModelType::Skin || model.m_nVirtualWorld == -1 || model.m_nVirtualWorld == world;
     }
 }
+
+struct CCustomModels::BinaryDownload
+{
+    struct Chunk
+    {
+        std::vector<Byte> bytes;
+        std::uint32_t decodedSize;
+    };
+    std::mutex mutex;
+    std::condition_variable ready;
+    std::deque<Chunk> chunks;
+    std::size_t queuedBytes{};
+    bool finished{}, failed{};
+    std::atomic<std::uint32_t> progress{};
+
+    void Finish(bool success)
+    {
+        std::lock_guard lock(mutex);
+        finished = true;
+        failed |= !success;
+        ready.notify_one();
+    }
+    bool Run(std::unique_ptr<std::FILE, DownloadedFileCloser> output, std::uint32_t expectedSize, std::uint32_t expectedCrc, const std::filesystem::path& temporary,
+             const std::filesystem::path& destination, const std::atomic<bool>& cancelled)
+    {
+        ZoneScopedN("Binary DL decode and publish");
+        std::uint32_t crc = 0xFFFFFFFFu, downloaded = 0;
+        bool success = true;
+        for (;;)
+        {
+            Chunk chunk;
+            {
+                std::unique_lock lock(mutex);
+                ready.wait(lock, [&] {
+                    return finished || !chunks.empty();
+                });
+                if (failed || cancelled.load(std::memory_order_relaxed))
+                {
+                    success = false;
+                    break;
+                }
+                if (chunks.empty())
+                    break;
+                chunk = std::move(chunks.front());
+                queuedBytes -= chunk.bytes.size();
+                chunks.pop_front();
+            }
+            std::array<Byte, 4096> decoded{};
+            SizeT outputSize = chunk.decodedSize, inputSize = chunk.bytes.size();
+            const Byte properties[] = {0x5D, 0, 0, 1, 0};
+            const ISzAlloc allocator = {[](ISzAllocPtr, size_t bytes) -> void* {
+                                            return std::malloc(bytes);
+                                        },
+                                        [](ISzAllocPtr, void* memory) {
+                                            std::free(memory);
+                                        }};
+            ELzmaStatus status{};
+            const auto result = LzmaDecode(decoded.data(), &outputSize, chunk.bytes.data(), &inputSize, properties, sizeof(properties), LZMA_FINISH_ANY, &status, &allocator);
+            if ((result != SZ_OK && result != SZ_ERROR_INPUT_EOF) || outputSize != chunk.decodedSize || outputSize > expectedSize - downloaded ||
+                std::fwrite(decoded.data(), 1, outputSize, output.get()) != outputSize)
+            {
+                success = false;
+                break;
+            }
+            for (std::size_t i = 0; i < outputSize; ++i)
+                crc = crcTable[(crc ^ decoded[i]) & 255u] ^ (crc >> 8);
+            downloaded += static_cast<std::uint32_t>(outputSize);
+            progress.store(downloaded, std::memory_order_relaxed);
+        }
+        success = success && downloaded == expectedSize && (crc ^ 0xFFFFFFFFu) == expectedCrc;
+        success = std::fflush(output.get()) == 0 && success;
+        success = std::fclose(output.release()) == 0 && success;
+        if (success && !cancelled.load(std::memory_order_relaxed))
+            success = MoveFileExW(temporary.c_str(), destination.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+        else
+            success = false;
+        std::error_code error;
+        std::filesystem::remove(temporary, error);
+        return success;
+    }
+};
 
 CCustomModels::CCustomModels() = default;
 CCustomModels::~CCustomModels()
@@ -635,12 +719,15 @@ void CCustomModels::CancelDownloads()
     m_cancelDownload.store(true, std::memory_order_relaxed);
     if (m_httpClient)
         m_httpClient->Cancel();
+    if (m_binaryDownload)
+        m_binaryDownload->Finish(false);
     if (m_httpDownload.valid())
     {
         m_httpDownload.wait();
         m_httpDownload = {};
     }
     m_httpClient.reset();
+    m_binaryDownload.reset();
     if (m_currentDownload)
     {
         m_currentDownload->m_pFile.reset();
@@ -668,6 +755,22 @@ bool CCustomModels::StartDownload(DownloadedFileType type, std::uint32_t crc)
         PublishDownload(false);
         return false;
     }
+    m_cancelDownload.store(false, std::memory_order_relaxed);
+    try
+    {
+        m_binaryDownload = std::make_shared<BinaryDownload>();
+        m_httpDownload = std::async(std::launch::async, [this, worker = m_binaryDownload, output = std::move(file->m_pFile), size = file->m_nFileSize, crc,
+                                                         temporary = file->m_tempPath, destination = GetCacheFilePath(type, crc)]() mutable {
+            return worker->Run(std::move(output), size, crc, temporary, destination, m_cancelDownload);
+        });
+    }
+    catch (...)
+    {
+        m_binaryDownload.reset();
+        PublishDownload(false);
+        return false;
+    }
+    m_binaryQueuedSize = 0;
     file->m_nRunningCrc = 0xFFFFFFFFu;
     file->m_nDownloadedSize = 0;
     file->m_state = DownloadState::Binary;
@@ -680,9 +783,9 @@ void CCustomModels::ProcessDownloadChunk(std::uint8_t state, std::uint32_t buffe
     auto* file = m_currentDownload;
     if (!file || file->m_state != DownloadState::Binary)
         return;
-    if ((state != 1 && state != 2) || (!bufferSize && file->m_nDownloadedSize != file->m_nFileSize) || bufferSize > 4096 || size > 4096 - m_nDownloadChunkSize || (size && !data))
+    if ((state != 1 && state != 2) || (!bufferSize && m_binaryQueuedSize != file->m_nFileSize) || bufferSize > 4096 || size > 4096 - m_nDownloadChunkSize || (size && !data))
     {
-        PublishDownload(false);
+        FinishCurrentDownload(false);
         return;
     }
     if (size)
@@ -691,43 +794,34 @@ void CCustomModels::ProcessDownloadChunk(std::uint8_t state, std::uint32_t buffe
     m_requestTime = GetTickCount();
     if (state == 1)
         return;
-    std::array<Byte, 4096> decoded{};
-    SizeT outputSize = bufferSize, inputSize = m_nDownloadChunkSize;
-    const Byte properties[] = {0x5D, 0, 0, 1, 0};
-    const ISzAlloc allocator = {[](ISzAllocPtr, size_t bytes) -> void* {
-                                    return std::malloc(bytes);
-                                },
-                                [](ISzAllocPtr, void* memory) {
-                                    std::free(memory);
-                                }};
-    ELzmaStatus status{};
-    const auto result = LzmaDecode(decoded.data(), &outputSize, m_downloadChunkBuffer.data(), &inputSize, properties, sizeof(properties), LZMA_FINISH_ANY, &status, &allocator);
-    m_nDownloadChunkSize = 0;
-    if ((result != SZ_OK && result != SZ_ERROR_INPUT_EOF) || outputSize != bufferSize || outputSize > file->m_nFileSize - file->m_nDownloadedSize ||
-        std::fwrite(decoded.data(), 1, outputSize, file->m_pFile.get()) != outputSize)
+    bool accepted = false;
+    if (m_binaryDownload && bufferSize <= file->m_nFileSize - m_binaryQueuedSize)
     {
-        PublishDownload(false);
-        return;
+        std::lock_guard lock(m_binaryDownload->mutex);
+        if (!m_binaryDownload->finished && m_binaryDownload->chunks.size() < 8192 && m_binaryDownload->queuedBytes + m_nDownloadChunkSize <= 8 * 1024 * 1024)
+        {
+            m_binaryDownload->chunks.push_back({{m_downloadChunkBuffer.begin(), m_downloadChunkBuffer.begin() + m_nDownloadChunkSize}, bufferSize});
+            m_binaryDownload->queuedBytes += m_nDownloadChunkSize;
+            m_binaryQueuedSize += bufferSize;
+            accepted = true;
+        }
     }
-    for (std::size_t i = 0; i < outputSize; ++i)
-        file->m_nRunningCrc = crcTable[(file->m_nRunningCrc ^ decoded[i]) & 255u] ^ (file->m_nRunningCrc >> 8);
-    file->m_nDownloadedSize += static_cast<std::uint32_t>(outputSize);
-    file->m_bProgressDirty = true;
+    m_nDownloadChunkSize = 0;
+    if (accepted)
+        m_binaryDownload->ready.notify_one();
+    else
+        FinishCurrentDownload(false);
 }
 void CCustomModels::FinishCurrentDownload(bool success)
 {
     if (!m_currentDownload || m_currentDownload->m_state == DownloadState::Http)
         return;
-    auto* file = m_currentDownload;
-    success = success && file->m_state == DownloadState::Binary && !m_nDownloadChunkSize && file->m_nDownloadedSize == file->m_nFileSize &&
-              (file->m_nRunningCrc ^ 0xFFFFFFFFu) == file->m_nExpectedCrc;
-    if (file->m_pFile)
-    {
-        success = std::fflush(file->m_pFile.get()) == 0 && success;
-        success = std::fclose(file->m_pFile.release()) == 0 && success;
-    }
-    PublishDownload(success);
+    if (m_binaryDownload)
+        m_binaryDownload->Finish(success && !m_nDownloadChunkSize && m_binaryQueuedSize == m_currentDownload->m_nFileSize);
+    else
+        PublishDownload(false);
 }
+
 void CCustomModels::PublishDownload(bool success)
 {
     auto* file = m_currentDownload;
@@ -735,7 +829,7 @@ void CCustomModels::PublishDownload(bool success)
         return;
     file->m_pFile.reset();
     success = success && IsCacheReady();
-    if (success)
+    if (success && !m_binaryDownload)
         success = MoveFileExW(file->m_tempPath.c_str(), GetCacheFilePath(file->m_nType, file->m_nExpectedCrc).c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
     std::error_code error;
     if (!file->m_tempPath.empty())
@@ -810,6 +904,14 @@ void CCustomModels::ProcessTransfer()
 {
     if (m_httpDownload.valid())
     {
+        if (m_currentDownload && m_binaryDownload)
+        {
+            const auto bytes = m_binaryDownload->progress.load(std::memory_order_relaxed);
+            m_currentDownload->m_bProgressDirty |= bytes != m_currentDownload->m_nDownloadedSize;
+            m_currentDownload->m_nDownloadedSize = bytes;
+            if (GetTickCount() - m_requestTime > 30000)
+                m_binaryDownload->Finish(false);
+        }
         if (m_currentDownload && m_httpClient)
         {
             const auto bytes = static_cast<std::uint32_t>(m_httpClient->GetTransferredBytes());
@@ -830,6 +932,7 @@ void CCustomModels::ProcessTransfer()
             {}
             m_httpClient.reset();
             PublishDownload(success);
+            m_binaryDownload.reset();
         }
     }
     else if (m_currentDownload && GetTickCount() - m_requestTime > 30000)

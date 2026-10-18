@@ -11,6 +11,7 @@
 #include <Windows.h>
 
 #include <array>
+#include <set>
 #include <cstdint>
 
 #include "game/entities/CVehicle.h"
@@ -119,5 +120,6 @@ public:
     BOOL DoesExist(ID id);
 
 private:
+    std::set<unsigned> m_pendingSlots;
     std::array<TICK, MAX_VEHICLES> m_lastUnoccupiedCheck{};
 };

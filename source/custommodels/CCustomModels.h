@@ -141,6 +141,8 @@ private:
     std::int32_t m_nVirtualWorld{};
     std::uint32_t m_nExpectedModelsCount{};
 
+    struct BinaryDownload;
+    std::shared_ptr<BinaryDownload> m_binaryDownload;
     DownloadedFileInfo* m_currentDownload{};
     std::shared_ptr<CHttpClient> m_httpClient;
     std::future<bool> m_httpDownload;
@@ -150,4 +152,5 @@ private:
     bool m_downloadConfirmed{};
     std::array<std::uint8_t, 4096> m_downloadChunkBuffer{};
     std::size_t m_nDownloadChunkSize{};
+    std::uint32_t m_binaryQueuedSize{};
 };

@@ -19,6 +19,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(SAMP_TRACY "Enable Tracy profiling" OFF)
+option(SAMP_TRACY_OBJECTS "Enable per-object Tracy zones" OFF)
 
 include(CheckIPOSupported)
 check_ipo_supported(RESULT SAMP_IPO_SUPPORTED OUTPUT SAMP_IPO_ERROR LANGUAGES C CXX)
@@ -194,3 +195,7 @@ endif()
 #    COMMAND ${CMAKE_COMMAND} -E copy_if_different
 #        $<TARGET_FILE:bass> $<TARGET_FILE_DIR:samp>/bass.dll
 #)
+
+if(SAMP_TRACY_OBJECTS)
+    target_compile_definitions(samp PRIVATE SAMP_TRACY_OBJECTS)
+endif()

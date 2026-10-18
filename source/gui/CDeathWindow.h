@@ -13,6 +13,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 class CFont;
 
@@ -69,6 +70,11 @@ public:
     void OnResetDevice();
     void Draw();
 
+private:
+    int m_fontHeight{}, m_fontWeight{};
+    std::string m_fontFace;
+
+public:
     void AddEntry(const char* killer, const char* victim, D3DCOLOR killerColor, D3DCOLOR victimColor, char weapon);
     void AddMessage(const char* killer, const char* victim, D3DCOLOR killerColor, D3DCOLOR victimColor, char weapon);
 };

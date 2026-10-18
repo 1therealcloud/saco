@@ -436,7 +436,9 @@ namespace game::objects::detail
     }
     void RenderNativeObject(void* entity, game::hooks::ObjectRenderFn draw)
     {
+#if defined(SAMP_TRACY_OBJECTS)
         ZoneScoped;
+#endif
         const auto found = g_nativeObjects.find(entity);
         if (found != g_nativeObjects.end())
         {

@@ -169,6 +169,7 @@ BOOL CVehiclePool::Delete(ID id)
         if (m_waitingList.m_bNotEmpty[slot] && m_waitingList.m_entry[slot].m_nId == id)
         {
             m_waitingList.m_bNotEmpty[slot] = FALSE;
+            m_pendingSlots.erase(slot);
             if (auto attempts = g_failedSpawnAttempts.find(this); attempts != g_failedSpawnAttempts.end())
                 attempts->second[slot] = 0;
             pending = true;
@@ -553,6 +554,7 @@ void CVehiclePool::AddToWaitingList(const VehicleInfo* info)
     }
 
     m_waitingList.m_bNotEmpty[slot] = TRUE;
+    m_pendingSlots.insert(slot);
     m_waitingList.m_entry[slot] = *info;
     g_failedSpawnAttempts[this][slot] = 0;
 
@@ -833,17 +835,23 @@ void CVehiclePool::ProcessWaitingList()
 {
     ZoneScoped;
 
+    if (m_pendingSlots.empty())
+        return;
+
     // samp.dll + 0x1F300
     const DWORD now = ::GetTickCount();
     auto& attempts = g_failedSpawnAttempts[this];
     auto& cursor = g_waitingCursors[this];
     const auto started = std::chrono::steady_clock::now();
-    for (int checked = 0; checked < WAITING_LIST_SIZE; ++checked)
+    for (int checked = 0; checked < static_cast<int>(m_pendingSlots.size()); ++checked)
     {
         if (std::chrono::steady_clock::now() - started >= std::chrono::milliseconds(1))
             break;
-        const unsigned slot = cursor;
-        cursor = (cursor + 1) % WAITING_LIST_SIZE;
+        auto next = m_pendingSlots.lower_bound(cursor);
+        if (next == m_pendingSlots.end())
+            next = m_pendingSlots.begin();
+        const unsigned slot = *next;
+        cursor = slot + 1;
         if (!m_waitingList.m_bNotEmpty[slot])
             continue;
         if (attempts[slot] && now - attempts[slot] < 250)
@@ -880,6 +888,7 @@ void CVehiclePool::ProcessWaitingList()
         if (CreateWithTrainConsist(info))
         {
             attempts[slot] = 0;
+            m_pendingSlots.erase(slot);
         }
         else
         {

@@ -296,10 +296,6 @@ void CDeathWindow::ResetFonts()
     if (!m_pDevice || !g_weaponFontLoaded)
         return;
 
-    DeleteObject(m_pFont);
-    DeleteObject(m_pWeaponFont1);
-    DeleteObject(m_pWeaponFont2);
-
     int screenWidth = 0;
     int screenHeight = 0;
 
@@ -317,9 +313,20 @@ void CDeathWindow::ResetFonts()
     const int baseHeight = screenWidth >= 1024 ? 14 : 12;
     const int textHeight = std::max(baseHeight, baseHeight + sizeOffset * 2);
 
+    if (m_pFont && m_pWeaponFont1 && m_pWeaponFont2 && m_fontHeight == textHeight && m_fontWeight == weight && m_fontFace == face)
+        return;
+    DeleteObject(m_pFont);
+    DeleteObject(m_pWeaponFont1);
+    DeleteObject(m_pWeaponFont2);
+    m_fontHeight = textHeight;
+    m_fontWeight = weight;
+    m_fontFace = face;
+    std::string weaponGlyphs;
+    for (unsigned i = 0; i < 256; ++i)
+        weaponGlyphs += GetWeaponSpriteId(static_cast<char>(i));
     m_pFont = new CFont(m_pDevice, textHeight, 0, weight, face.c_str());
-    m_pWeaponFont1 = new CFont(m_pDevice, textHeight + 8, 0, FW_NORMAL, kWeaponFontFace, CP_ACP, SYMBOL_CHARSET);
-    m_pWeaponFont2 = new CFont(m_pDevice, textHeight + 12, 0, FW_NORMAL, kWeaponFontFace, CP_ACP, SYMBOL_CHARSET);
+    m_pWeaponFont1 = new CFont(m_pDevice, textHeight + 8, 0, FW_NORMAL, kWeaponFontFace, CP_ACP, SYMBOL_CHARSET, ANTIALIASED_QUALITY, weaponGlyphs.c_str());
+    m_pWeaponFont2 = new CFont(m_pDevice, textHeight + 12, 0, FW_NORMAL, kWeaponFontFace, CP_ACP, SYMBOL_CHARSET, ANTIALIASED_QUALITY, "G");
 
     if (!m_pFont->IsValid() || !m_pWeaponFont1->IsValid() || !m_pWeaponFont2->IsValid())
     {
@@ -354,7 +361,7 @@ void CDeathWindow::OnLostDevice()
 void CDeathWindow::OnResetDevice()
 {
     ResetFonts();
-    for (CFont* font : {m_pAuxFont1, m_pAuxFont2})
+    for (CFont* font : {m_pFont, m_pWeaponFont1, m_pWeaponFont2, m_pAuxFont1, m_pAuxFont2})
         if (font)
             font->OnResetDevice();
 }

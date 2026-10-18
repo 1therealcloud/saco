@@ -774,7 +774,9 @@ void __cdecl PoolsShutdownHook()
 
 void __cdecl RenderObjectHook(void* entity)
 {
+#if defined(SAMP_TRACY_OBJECTS)
     ZoneScoped;
+#endif
     game::objects::detail::RenderNativeObject(entity, game::hooks::g_originalRender);
 }
 
