@@ -251,6 +251,14 @@ void CLocalPlayer::ResetData()
     std::memset(&m_onfootData, 0, sizeof(m_onfootData));
     std::memset(&m_passengerData, 0, sizeof(m_passengerData));
 
+    m_bIsActive = FALSE;
+    m_bIsWasted = FALSE;
+    m_bDoesSpectating = FALSE;
+    m_spectating = {};
+    m_spectating.m_nType = SPEC_TYPE_NONE;
+    m_spectating.m_nObject = -1;
+    m_spawnInfo = {};
+    m_nTeam = 0xFF;
     m_bHasSpawnInfo = FALSE;
     m_classSelection.m_bEnableAfterDeath = FALSE;
     m_classSelection.m_bIsActive = FALSE;
@@ -263,6 +271,7 @@ void CLocalPlayer::ResetData()
     m_vehicleEntryPending = false;
     m_vehicleExitPending = false;
     m_vehicleTransitionStarted = 0;
+    m_passengerKeyDown = false;
     m_driveByKeyDown = false;
     m_bPassengerDriveBy = FALSE;
     m_bClearedToSpawn = FALSE;
@@ -629,6 +638,11 @@ BOOL CLocalPlayer::Spawn()
     g_game->RefreshRenderer(position.x, position.y);
     ped->SetSpawnInfo(&position, rotation);
     ped->SetSkin(m_spawnInfo.m_nSkin, m_spawnInfo.m_nCustomSkin);
+    ped->ClearWeapons();
+    // r5 gives slots in reverse order, leaving the first valid weapon selected.
+    for (int slot = 2; slot >= 0; --slot)
+        if (m_spawnInfo.m_spawnWeapons[slot] >= 0 && m_spawnInfo.m_spawnWeapons[slot] <= 46 && m_spawnInfo.m_spawnAmmo[slot] >= 0)
+            ped->GiveWeapon(m_spawnInfo.m_spawnWeapons[slot], m_spawnInfo.m_spawnAmmo[slot]);
     ped->ResetDamageEntity();
     SetSpecialAction(SPECIAL_ACTION_NONE);
 
@@ -763,6 +777,7 @@ void CLocalPlayer::PrepareForClassSelection_Outcome(BOOL outcome)
     m_nTeam = m_spawnInfo.m_nTeam;
     m_pPed->SetControllable(FALSE);
     m_pPed->SetSpawnInfo(&m_spawnInfo.m_position, m_spawnInfo.m_fRotation);
+    m_pPed->ClearWeapons();
     m_pPed->SetSkin(m_spawnInfo.m_nSkin, m_spawnInfo.m_nCustomSkin);
     m_pPed->ForceRotation(m_spawnInfo.m_fRotation);
     m_pPed->SetHealth(100.0f);
@@ -795,7 +810,7 @@ void CLocalPlayer::EnableSpectating(BOOL enable)
 
     if (!enable)
     {
-        if (!m_bIsActive && g_netGame)
+        if (!m_bIsActive && g_netGame && g_netGame->GetState() == CNetGame::GAME_MODE_CONNECTED)
         {
             m_classSelection.m_bEnableAfterDeath = FALSE;
             g_netGame->SpawnScreen();

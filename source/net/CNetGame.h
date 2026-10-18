@@ -40,6 +40,7 @@ public:
 
     enum GameMode
     {
+        GAME_MODE_DISCONNECTED = 0,
         GAME_MODE_WAITCONNECT = 1,
         GAME_MODE_CONNECTING = 2,
         GAME_MODE_CONNECTED = 5,

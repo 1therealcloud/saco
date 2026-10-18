@@ -11,6 +11,7 @@
 #include <Windows.h>
 #include <d3d9.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 
@@ -71,13 +72,14 @@ public:
 
     struct SpawnInfo
     {
-        NUMBER m_nTeam;                   // 0x00
-        int m_nSkin;                      // 0x01
-        char field_5;                     // 0x05
-        CVector m_position;               // 0x06
-        float m_fRotation;                // 0x12
-        std::uint32_t m_nCustomSkin{};    // 0x16, DL runtime data
-        std::uint8_t m_opaqueLoadout[24]; // 0x1A, kept opaque in this port
+        NUMBER m_nTeam;                // 0x00
+        int m_nSkin;                   // 0x01
+        char field_5;                  // 0x05
+        CVector m_position;            // 0x06
+        float m_fRotation;             // 0x12
+        std::uint32_t m_nCustomSkin{}; // 0x16, DL runtime data
+        std::array<std::int32_t, 3> m_spawnWeapons{-1, -1, -1};
+        std::array<std::int32_t, 3> m_spawnAmmo{};
     };
 
     struct OpaqueCombatState

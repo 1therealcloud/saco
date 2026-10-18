@@ -1790,8 +1790,8 @@ void RPCHandlers::RequestClass(RPCParameters* pParams)
     spawnInfo.field_5 = static_cast<char>(unused);
     spawnInfo.m_position = position;
     spawnInfo.m_fRotation = rotation;
-    std::memcpy(spawnInfo.m_opaqueLoadout, weapons.data(), sizeof(weapons));
-    std::memcpy(spawnInfo.m_opaqueLoadout + sizeof(weapons), ammo.data(), sizeof(ammo));
+    std::memcpy(spawnInfo.m_spawnWeapons.data(), weapons.data(), sizeof(weapons));
+    std::memcpy(spawnInfo.m_spawnAmmo.data(), ammo.data(), sizeof(ammo));
 
     localPlayer->m_nTeam = team;
     localPlayer->SetSpawnInfo(&spawnInfo);
@@ -3543,8 +3543,8 @@ void RPCHandlers::SetSpawnInfo(RPCParameters* pParams)
     spawnInfo.field_5 = static_cast<char>(unused);
     spawnInfo.m_position = CVector{x, y, z};
     spawnInfo.m_fRotation = rotation;
-    std::memcpy(spawnInfo.m_opaqueLoadout, weapons.data(), sizeof(weapons));
-    std::memcpy(spawnInfo.m_opaqueLoadout + sizeof(weapons), ammo.data(), sizeof(ammo));
+    std::memcpy(spawnInfo.m_spawnWeapons.data(), weapons.data(), sizeof(weapons));
+    std::memcpy(spawnInfo.m_spawnAmmo.data(), ammo.data(), sizeof(ammo));
 
     local->SetSpawnInfo(&spawnInfo);
 }

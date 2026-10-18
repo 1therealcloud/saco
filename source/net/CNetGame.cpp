@@ -38,6 +38,7 @@
 #include "render/render.h"
 
 #include "sync/KeyStuff.h"
+#include "sync/SpecialAction.h"
 #include "sync/AimStuff.h"
 
 // RakNet
@@ -803,7 +804,8 @@ CNetGame::~CNetGame()
 void CNetGame::SetState(int value)
 {
     ZoneScoped;
-    const bool resetSession = value == GAME_MODE_WAITCONNECT && (m_nGameState == GAME_MODE_CONNECTED || m_nGameState == GAME_MODE_WAITJOIN || m_nGameState == GAME_MODE_RESTARTING);
+    const bool resetSession = (value == GAME_MODE_WAITCONNECT || value == GAME_MODE_DISCONNECTED) &&
+                              (m_nGameState == GAME_MODE_CONNECTED || m_nGameState == GAME_MODE_WAITJOIN || m_nGameState == GAME_MODE_RESTARTING);
 
     if (resetSession || (m_nGameState == GAME_MODE_CONNECTED && value != GAME_MODE_CONNECTED))
     {
@@ -972,8 +974,14 @@ void CNetGame::Packet_NoFreeIncomingConnections(Packet*)
 void CNetGame::Packet_DisconnectionNotification(Packet*)
 {
     ZoneScoped;
-    g_chat->PrintDebug("Server closed the connection.");
-    SetState(GAME_MODE_WAITCONNECT);
+    if (m_nGameState == GAME_MODE_DISCONNECTED)
+        return;
+    if (g_chat)
+        g_chat->PrintDebug("Server closed the connection.");
+    if (m_pRakClient)
+        m_pRakClient->Disconnect(2000);
+    ShutdownForRestart();
+    SetState(GAME_MODE_DISCONNECTED);
 }
 
 // when password is invalid
@@ -1314,7 +1322,17 @@ void CNetGame::ShutdownForRestart()
     if (auto* playerPool = GetPlayerPool())
     {
         if (auto* local = playerPool->GetLocalPlayer())
+        {
             local->EnableSpectating(FALSE);
+            local->SetSpecialAction(SPECIAL_ACTION_NONE);
+            if (auto* ped = local->GetPed())
+            {
+                ped->StopPassengerDriveBy();
+                ped->ClearTasks();
+                ped->ClearWeapons();
+            }
+            local->ResetData();
+        }
         playerPool->Deactivate();
         playerPool->Process();
     }
@@ -1380,7 +1398,14 @@ void CNetGame::Packet_VehicleSync(Packet* packet)
 void CNetGame::Packet_ConnectionLost(Packet*)
 {
     ZoneScoped;
-    g_chat->PrintDebug("Connection to the server was lost. Reconnecting...");
+    if (m_nGameState == GAME_MODE_DISCONNECTED)
+        return;
+    if (g_chat)
+        g_chat->PrintDebug("Connection to the server was lost. Reconnecting...");
+    if (m_pRakClient)
+        m_pRakClient->Disconnect(0);
+    ShutdownForRestart();
+    m_lastConnectAttempt = GetTimeNow();
     SetState(GAME_MODE_WAITCONNECT);
 }
 
