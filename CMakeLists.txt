@@ -180,7 +180,7 @@ target_link_libraries(samp PRIVATE
 
 add_subdirectory(tools)
 
-foreach(target samp minhook raknet lzma libcurl_object libcurl_static TracyClient img saa)
+foreach(target samp minhook raknet lzma libcurl_object libcurl_static TracyClient img saa samp_debug rcon)
     set_property(TARGET ${target} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
     if (MSVC)
         target_compile_options(${target} PRIVATE "$<$<CONFIG:Release>:/Gw>" "$<$<CONFIG:Release>:/Oy->")

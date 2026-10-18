@@ -5,4 +5,6 @@
 # The original code is copyright (c) 2026, 1therealcloud.
 
 add_subdirectory(img)
+add_subdirectory(launcher)
+add_subdirectory(rcon)
 add_subdirectory(saa)

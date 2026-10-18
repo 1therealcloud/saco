@@ -1,0 +1,17 @@
+#include <windows.h>
+#include "resource.h"
+
+// dialog and icon values recovered from the original executable.
+IDI_SAMP ICON "icon.ico"
+
+IDD_DEBUG_LAUNCHER DIALOGEX 0, 0, 135, 90
+STYLE WS_VISIBLE | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | DS_MODALFRAME | DS_SETFONT
+EXSTYLE WS_EX_APPWINDOW
+CAPTION "SA:MP Debug Launcher"
+FONT 8, "MS Sans Serif", 0, 0, 1
+BEGIN
+    GROUPBOX    "Debug SA:MP", -1, 7, 7, 121, 73
+    PUSHBUTTON  "Launch Debug", IDC_LAUNCH_DEBUG, 27, 20, 84, 15, WS_TABSTOP
+    PUSHBUTTON  "Exit", IDC_EXIT, 27, 59, 84, 14, WS_TABSTOP
+    PUSHBUTTON  "Connect localhost", IDC_LOCALHOST, 27, 39, 84, 16, WS_TABSTOP
+END
