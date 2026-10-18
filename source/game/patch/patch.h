@@ -19,6 +19,7 @@ namespace game::patch
     namespace base
     {
         bool install();
+        bool disable_camera_fade();
     }
 
     // modelinfo.cpp

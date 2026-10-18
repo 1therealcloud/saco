@@ -155,9 +155,9 @@ void CLabelPool::Draw()
                 ped = player->m_pPed;
             if (!ped || !ped->DoesExist())
                 continue;
-            CMatrix matrix = CMatrix::Unity();
-            ped->GetMatrix(&matrix);
-            worldPosition = matrix.TransformPoint(label.m_position);
+            ped->GetBonePosition(8, &worldPosition);
+            worldPosition += label.m_position;
+            worldPosition.z += ped->GetDistanceToCamera() * 0.05f;
             distance = ped->GetDistanceToLocalPlayer();
             if (distance > label.m_fDrawDistance)
                 continue;

@@ -111,6 +111,13 @@ namespace
 
 namespace game::patch::base
 {
+    bool disable_camera_fade()
+    {
+        // r5 disables CCamera::Fade after spawning, leaving startup fades intact.
+        constexpr std::uint8_t disabled[] = {0xC2, 0x08, 0x00};
+        return ::patch::write(0x50AC20, disabled, sizeof(disabled));
+    }
+
     bool install()
     {
         ZoneScoped;

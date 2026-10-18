@@ -178,7 +178,7 @@ namespace
 
         for (int i = 0; i < dialog->m_nColumns; ++i)
         {
-            const std::string cell = i < static_cast<int>(columns.size()) ? StripColors(columns[i].c_str()) : "";
+            const std::string cell = i < static_cast<int>(columns.size()) ? columns[i] : "";
             result += cell;
 
             if (i + 1 >= dialog->m_nColumns)
@@ -773,7 +773,7 @@ bool CDialog::BuildList(const char* text, SIZE* size)
 
         state.rows.push_back(line);
         std::string visible = StripColors(line.c_str());
-        state.listRows.push_back(visible);
+        state.listRows.push_back(line);
         maxWidth = std::max(maxWidth, GetTextScreenLength(visible.c_str()));
         height += rowHeight;
     }

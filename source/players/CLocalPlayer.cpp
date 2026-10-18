@@ -8,6 +8,7 @@
 
 #include <stdafx.h>
 #include "main.h"
+#include "game/patch/patch.h"
 #include "net/CNetGame.h"
 #include "players/PlayerColors.h"
 
@@ -640,6 +641,9 @@ BOOL CLocalPlayer::Spawn()
     m_surfing.m_nMode = SURFING_MODE_NONE;
     m_surfing.m_lastUpdate = GetTickCount();
     m_surfing.field_1e = 0;
+
+    if (!game::patch::base::disable_camera_fade())
+        return FALSE;
 
     g_game->DisableTrainTraffic();
     ped->LinkToInterior(m_nCurrentInterior, TRUE);
