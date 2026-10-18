@@ -67,10 +67,11 @@ namespace game::bullets
         auto* weapon = native + 0x5A0 + ped.GetWeaponSlot() * 0x1C;
         CVector origin = shot.origin;
         CVector target = shot.target;
-        if (ped.GetCurrentWeapon() == 34)
-            detail::sniper(weapon, native, nullptr, nullptr);
-        else
-            detail::instant(weapon, native, &origin, &origin, nullptr, &target, nullptr, false, 1);
+        const bool fired = ped.GetCurrentWeapon() == 34 ? detail::sniper(weapon, native, nullptr, nullptr)
+                                                        : detail::instant(weapon, native, &origin, &origin, nullptr, &target, nullptr, false, 1);
+        // CWeapon::Fire normally reports this; synced shots call its lower-level methods.
+        if (fired)
+            reinterpret_cast<void(__thiscall*)(void*, int)>(0x4E69F0)(native + 0x394, 145); // AE_WEAPON_FIRE
         detail::shooter = savedShooter;
         detail::remoteShot = savedShot;
         detail::lagCompMode = savedLag;

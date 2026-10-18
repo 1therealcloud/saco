@@ -60,7 +60,7 @@ CConfig g_config;
 CSettings g_settings;
 std::string g_sampUserDirectory;
 
-bool g_DLClient = true;
+bool g_DLClient = false;
 
 std::unique_ptr<CNetGame> g_netGame;   // net game
 CAudioStream* g_audioStream = nullptr; // audiostream
