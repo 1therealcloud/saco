@@ -240,8 +240,15 @@ void Process()
             CGame::SetRadarState(1);
 
             auto* ped = g_game->GetPlayerPed();
-            if (!ped || !ped->HasNativePed() || (local && local->m_bIsWasted) || ped->IsDead())
+            if (!ped || !ped->HasNativePed())
                 lockedLocalPed = nullptr;
+            else if ((local && local->m_bIsWasted) || ped->IsDead())
+            {
+                // block input without locking the actor's death task.
+                if (auto* pad = KeyStuff::GetInternalKeys())
+                    pad->DisablePlayerControls |= 1;
+                lockedLocalPed = nullptr;
+            }
             else
             {
                 // gta scripts can restore controls before the server allows spawning

@@ -244,7 +244,7 @@ public:
     void LoadShoppingDataSubsection(const char* name);
 
     void CreateArrow(int color);
-    void SetSkin(int base, std::uint32_t custom);
+    void SetSkin(int base, std::uint32_t custom, bool force = false);
     void SetModelIndex(int model); // 0xAFF50
     void Destroy();
 

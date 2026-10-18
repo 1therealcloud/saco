@@ -3248,7 +3248,13 @@ void RPCHandlers::ClearPlayerAnimation(RPCParameters* pParams)
         remote->m_bPerformingCustomAnimation = FALSE;
     }
     if (ped && ped->IsValid())
+    {
+        CMatrix matrix = CMatrix::Unity();
+        ped->GetMatrix(&matrix);
+        // cancel queued animation loading before resetting the native ped.
         ped->ClearTasks();
+        ped->Teleport(matrix.GetPosition());
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -3821,13 +3827,7 @@ void RPCHandlers::RemovePlayerFromVehicle(RPCParameters* pParams)
     if (!ped || !ped->HasNativePed() || !ped->GetVehicle())
         return;
 
-    CMatrix matrix = CMatrix::Unity();
-    ped->GetMatrix(&matrix);
-    ped->WarpFromVehicle(matrix.GetPosition() + matrix.GetRight() * 2.0f);
-    if (!ped->GetVehicle())
-        if (auto* players = g_netGame ? g_netGame->GetPlayerPool() : nullptr)
-            if (auto* local = players->GetLocalPlayer())
-                local->OnServerVehicleWarp(CLocalPlayer::INVALID_ID);
+    ped->ExitVehicle();
 }
 
 // -----------------------------------------------------------------------------

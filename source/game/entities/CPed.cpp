@@ -518,6 +518,13 @@ void CPed::PutIntoVehicle(std::uint32_t vehicleRef, int seat)
         return;
 
     if (seat == 0)
+        if (auto* driver = Read<void*>(vehicle, 0x460); driver && InVehicle(driver))
+            return;
+
+    if (GetCurrentWeapon() == 46)
+        SetArmedWeapon(0);
+
+    if (seat == 0)
         scm::ProcessCommand(&WARP_ACTOR_INTO_CAR, m_handle, vehicleRef);
     else
         scm::ProcessCommand(&WARP_ACTOR_INTO_CAR_AS_PASSENGER, m_handle, vehicleRef, seat - 1);
@@ -1509,10 +1516,10 @@ void CPed::CreateArrow(int color)
     scm::ProcessCommand(&SET_MARKER_MODE, m_arrow, 2);
 }
 
-void CPed::SetSkin(int base, std::uint32_t custom)
+void CPed::SetSkin(int base, std::uint32_t custom, bool force)
 {
     m_pendingCustomSkin = 0;
-    if (GetModelIndex() != base || m_pendingModel >= 0)
+    if (force || GetModelIndex() != base || m_pendingModel >= 0)
         SetModelIndex(base);
     if (g_DLClient && g_netGame && custom >= 20001 && custom <= 30000 && g_netGame->GetCustomModels().IsSkinModel(static_cast<int>(custom)))
     {
@@ -1870,8 +1877,6 @@ void CPed::ProcessStreaming()
                 if (Read<int>(entry, 0) == command.weapon)
                 {
                     Write(entry, 0x0C, command.ammo);
-                    if (Read<int>(entry, 0x08) > command.ammo)
-                        Write(entry, 0x08, command.ammo);
                     break;
                 }
             }
@@ -1995,8 +2000,6 @@ void CPed::SetWeaponAmmo(int weapon, int ammo)
         if (Read<int>(entry, 0) != weapon)
             continue;
         Write(entry, 0x0C, ammo);
-        if (Read<int>(entry, 0x08) > ammo)
-            Write(entry, 0x08, ammo);
         return;
     }
 }

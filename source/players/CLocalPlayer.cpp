@@ -637,7 +637,7 @@ BOOL CLocalPlayer::Spawn()
 
     g_game->RefreshRenderer(position.x, position.y);
     ped->SetSpawnInfo(&position, rotation);
-    ped->SetSkin(m_spawnInfo.m_nSkin, m_spawnInfo.m_nCustomSkin);
+    ped->SetSkin(m_spawnInfo.m_nSkin, m_spawnInfo.m_nCustomSkin, true);
     ped->ClearWeapons();
     // r5 gives slots in reverse order, leaving the first valid weapon selected.
     for (int slot = 2; slot >= 0; --slot)
@@ -790,6 +790,9 @@ void CLocalPlayer::EnableSpectating(BOOL enable)
     ZoneScoped;
     if (!!enable == !!m_bDoesSpectating)
         return;
+
+    if (!enable && !m_classSelection.m_bEnableAfterDeath && g_netGame && g_netGame->GetState() == CNetGame::GAME_MODE_CONNECTED)
+        Spawn();
 
     if (!enable && m_classSelection.m_bEnableAfterDeath)
     {

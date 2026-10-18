@@ -20,7 +20,7 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/samp.exe"
         $<TARGET_FILE:samp>
-        "$<TARGET_FILE_DIR:samp>/bass.dll"
+        "${PROJECT_SOURCE_DIR}/third-party/bass/bass.dll"
         $<TARGET_FILE:samp_debug>
         $<TARGET_FILE:rcon>
         "${installer_dir}/payload"
