@@ -1335,7 +1335,7 @@ bool game::hooks::InstallHudHooks()
 bool game::hooks::InstallFrameLimiterHooks()
 {
     ZoneScoped;
-    constexpr std::uintptr_t kIdleDelay = 0x53E923;
+    constexpr std::uintptr_t kIdleDelay = 0x53E92E;
 
     constexpr std::uintptr_t kLimitFlag = 0x748D81;
     constexpr std::uintptr_t kLimitHook = 0x748D83;
@@ -1354,8 +1354,8 @@ bool game::hooks::InstallFrameLimiterHooks()
     const std::uintptr_t handler = kNoLimitFlag + 8 + static_cast<std::uintptr_t>(relative);
     g_idleHandler = handler;
 
-    // remove gta's extra 14 ms idle delay
-    if (!::patch::write<std::uint16_t>(kIdleDelay, 0x43EB))
+    // skip the wait after push esi; the epilogue still pops it.
+    if (!::patch::write<std::uint16_t>(kIdleDelay, 0x38EB))
         return false;
 
     // preserve gta's original menu/replay/audio decision:
