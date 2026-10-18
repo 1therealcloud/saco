@@ -1,6 +1,6 @@
-# SA-MP
+![SA-MP](assets/icons/samp.svg)
 
-An open-source reimplementation of SA-MP 0.3.DL/0.3.7, written from scratch.
+An open-source reimplementation of SA-MP 0.3.7/DL, written from scratch.
 
 There's no TTMath, D3DX9, or DXUT here. Math uses DirectXMath, and rendering and UI go through Direct3D 9 and our own code.
 
